@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "@zandegi/ai",
   "version": "0.0.0",
   "private": true,
@@ -9,6 +9,16 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "spike": "tsx harness/run.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.65.0",
+    "@zandegi/core": "workspace:*",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
   }
 }

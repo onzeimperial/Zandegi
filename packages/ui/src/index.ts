@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @zandegi/ui
  *
  * Shared component library + design tokens. Built in session 5.

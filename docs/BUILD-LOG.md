@@ -4,6 +4,64 @@ Newest first.
 
 ---
 
+## Session 1 (part 1) — core primitives + AI pipeline foundations
+
+**Shipped**
+
+- `.gitattributes` — LF normalisation, silences the Windows CRLF warning spew.
+- **`@zandegi/core`** — the pure, deterministic foundation. 56 tests.
+  - `domains` — the eight fixed domains, `DomainWeight` with sum-to-1 assertion,
+    `primaryDomain`.
+  - `goal-types` — `GoalType`, `EffortBand`, and `assertProgressDisplay` /
+    `percentageAllowed` enforcing SPEC §1.3 (an OUTCOME goal can never render a
+    percentage — product law 2).
+  - `verification` — the five methods and their XP multipliers (SPEC §4.1).
+  - `safety` — `SafetyClass`, `isGenerationBlocked`, `requiresProfessionalFrame`.
+  - `scoring/xp` — `stepXp` with a full multiplier breakdown for auditability,
+    `chapterCompletionXp` (2.5×), `missionCompletionXp` (4×).
+  - `scoring/levels` — `xpForLevel = round(100 × n^1.6)`, `levelFromXp`,
+    `levelProgress`, the seven ranks.
+  - `scoring/rarity` — population fraction → tier + exclusivity score for the
+    XP formula + the share-card headline.
+- **`@zandegi/ai`** — pipeline foundations. 23 tests.
+  - `router.ts` — the single place the Anthropic SDK is touched (CLAUDE.md §3);
+    per-stage model tiers; `canGenerate()` gate; a clear error when the key is
+    missing.
+  - `types.ts` — the full pipeline type surface (GoalInput → Interpretation →
+    ResolvedPursuit → DraftMission → ScoredMission → MissionGeneratedEvent).
+  - `grounding.ts` — **stage 6, complete and tested.** `detectFactualClaims`
+    (prices, %, deadlines, requirements, named rules, stats), `isValidSource`
+    (title + parseable date within a 30-year freshness window), and the
+    mission-level report. `isFullyGrounded` is the session-1 exit check.
+  - `stages/07-score.ts` — **stage 7, complete.** Calls `@zandegi/core`, no
+    model. `NEUTRAL_CONTEXT` for the harness (no real user / population yet).
+  - `stages/08-safety.ts` — **stage 8, complete and tested.** Blocks
+    SELF_HARM_ADJACENT outright; flags calorie targets / doses / unsafe rates /
+    personal financial advice for rewrite; applies the professional frame.
+  - `harness/goals.ts` — the 60-goal test set: 56 domain goals (7 per domain,
+    real and messy — misspellings, vagueness, hyper-local, volatile facts) + 4
+    adversarial (impossible scope, gibberish, a clinical-risk phrasing).
+  - `harness/rubric.ts` — the six 1–5 axes, the judge prompt builder, and the
+    aggregate that decides `passesExitBar` (specificity ∧ actionability ≥ 4.0).
+
+**Verified** — `pnpm -r typecheck` (9/9), `pnpm test` (79/79), all committed.
+
+**Fixed along the way** — the PowerShell scaffold script wrote package.json /
+tsconfig / index.ts with a UTF-8 BOM (PS 5.1 `-Encoding utf8` behaviour), which
+broke vitest's workspace resolution. Stripped BOMs from 20 files; added
+`.gitattributes`.
+
+**Still to do for session 1** (needs `ANTHROPIC_API_KEY`)
+
+- Stages 1–5 model bodies + prompts (`interpret`, `resolve`, `plan`, `detail`),
+  stage 3 `hydrate`, stage 9 `persist`.
+- `pipeline.ts` orchestrator with the progressive-reveal callback.
+- `harness/run.ts` (the runner) + `harness/report.ts` (the scored HTML page).
+- Then: run the 60 goals, read 20 of them, iterate prompts until mean
+  specificity and actionability are both ≥ 4.0.
+
+---
+
 ## Session 0 — Monorepo scaffold
 
 **Shipped**

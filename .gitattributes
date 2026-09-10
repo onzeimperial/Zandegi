@@ -1,0 +1,10 @@
+# Normalise line endings — store LF, check out native. Silences the CRLF
+# warnings on Windows and keeps diffs clean across machines.
+* text=auto eol=lf
+
+# Binary / generated — never touch
+pnpm-lock.yaml text eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary

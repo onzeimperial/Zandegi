@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @zandegi/tools
  *
  * Tool Registry runtimes (TRACKER, TIMER, CHECKLIST, ...). Built in session 4.
