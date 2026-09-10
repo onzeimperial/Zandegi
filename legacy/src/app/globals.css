@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 250 250 252;
+  --surface: 255 255 255;
+  --surface-2: 246 247 250;
+  --border: 226 228 235;
+  --fg: 24 26 32;
+  --muted: 108 114 130;
+  --brand: 79 70 229;
+  --brand-soft: 238 237 255;
+  --success: 22 163 74;
+  --warning: 202 138 4;
+  --danger: 220 38 38;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.dark {
+  --bg: 13 14 18;
+  --surface: 22 24 30;
+  --surface-2: 28 31 39;
+  --border: 42 46 57;
+  --fg: 233 234 240;
+  --muted: 148 155 170;
+  --brand: 129 122 255;
+  --brand-soft: 36 33 66;
+  --success: 45 190 96;
+  --warning: 224 168 40;
+  --danger: 248 92 92;
+}
+
+* {
+  border-color: rgb(var(--border));
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  background: rgb(var(--bg));
+  color: rgb(var(--fg));
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgb(var(--brand) / 0.25);
+}
+
+/* thin, unobtrusive scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--border)) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(var(--border));
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+@layer components {
+  .card {
+    @apply rounded-lg border border-border bg-surface;
+  }
+  .input {
+    @apply w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-muted
+      outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/25 disabled:opacity-60;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium
+      transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 select-none;
+  }
+  .btn-primary {
+    @apply btn bg-brand text-white hover:bg-brand/90 shadow-sm;
+  }
+  .btn-ghost {
+    @apply btn text-fg hover:bg-surface-2;
+  }
+  .btn-outline {
+    @apply btn border border-border bg-surface hover:bg-surface-2;
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-medium text-muted;
+  }
+  .skeleton {
+    @apply relative overflow-hidden rounded-md bg-surface-2;
+  }
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-black/5 to-transparent animate-shimmer;
+  }
+}

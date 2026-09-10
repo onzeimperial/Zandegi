@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+/* SPEC Part VIII — brand palette. Full token layer lands in docs/DESIGN.md (session 5). */
+@theme {
+  --color-void: #0a0714;
+  --color-surface: #150f26;
+  --color-edge: #241a3d;
+  --color-violet: #7c3aed;
+  --color-violet-lo: #4c1d95;
+  --color-violet-hi: #a855f7;
+  --color-gold: #f5c451;
+  --color-paper: #ffffff;
+  --color-ink: #120c1f;
+}
+
+body {
+  background: var(--color-void);
+  color: var(--color-paper);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}

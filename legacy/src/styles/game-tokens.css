@@ -1,0 +1,78 @@
+/**
+ * Game-shell design tokens. Scoped entirely under .game-shell so importing
+ * this file cannot affect the existing light/dark theme used by every other
+ * page — the two systems are deliberately kept from touching.
+ */
+
+.game-shell {
+  color-scheme: dark;
+
+  --g-void: 8 11 26;
+  --g-surface: 18 23 52;
+  --g-surface-hi: 28 36 80;
+  --g-violet: 123 47 247;
+  --g-cyan: 34 211 238;
+  --g-magenta: 240 57 154;
+  --g-text: 242 244 255;
+  --g-text-dim: 138 147 196;
+
+  /* Percentile rarity ladder — independent of the existing 6-tier cosmetic
+     drop rarity in src/lib/constants.ts (RARITY_COLORS). Different system,
+     different purpose: this one is computed, never authored. */
+  --g-common: 154 164 199;
+  --g-uncommon: 63 209 107;
+  --g-rare: 46 155 255;
+  --g-epic: 168 85 247;
+  --g-legendary: 255 176 32;
+
+  background: rgb(var(--g-void));
+  color: rgb(var(--g-text));
+  min-height: 100dvh;
+}
+
+.game-shell ::selection {
+  background: rgb(var(--g-violet) / 0.35);
+}
+
+/* Chamfered panel: two opposite corners cut at 45°. Built from two nested
+   clip-paths so a crisp border survives the clip (a plain `border` on a
+   clip-path element gets clipped away with it). */
+.game-panel {
+  --chamfer: 14px;
+  position: relative;
+  clip-path: polygon(
+    var(--chamfer) 0,
+    100% 0,
+    100% calc(100% - var(--chamfer)),
+    calc(100% - var(--chamfer)) 100%,
+    0 100%,
+    0 var(--chamfer)
+  );
+  background: rgb(var(--g-surface-hi));
+}
+.game-panel > .game-panel-fill {
+  position: absolute;
+  inset: 1.5px;
+  clip-path: polygon(
+    calc(var(--chamfer) - 1px) 0,
+    100% 0,
+    100% calc(100% - var(--chamfer) + 1px),
+    calc(100% - var(--chamfer) + 1px) 100%,
+    0 100%,
+    0 calc(var(--chamfer) - 1px)
+  );
+  background: rgb(var(--g-surface));
+}
+.game-panel > .game-panel-content {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-shell * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

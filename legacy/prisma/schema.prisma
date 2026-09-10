@@ -1,0 +1,730 @@
+// ─────────────────────────────────────────────────────────────
+//  ZANDEGI — database schema
+//
+//  Dev provider: SQLite (zero-setup). For production, change
+//  `provider` to "postgresql" and set DATABASE_URL accordingly,
+//  then `npm run db:migrate`. The schema deliberately avoids
+//  Prisma enums / native JSON / scalar lists so the SAME schema
+//  runs on SQLite and Postgres. String "enum" values are
+//  centralised in src/lib/constants.ts. JSON blobs are stored as
+//  TEXT and parsed via helpers in src/lib/json.ts.
+// ─────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ── Auth.js core ────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String?
+  image         String?
+  emailVerified DateTime?
+  role          String    @default("user") // user | admin
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  profile            Profile?
+  accounts           Account[]
+  sessions           Session[]
+  goals              Goal[]
+  taskCompletions    TaskCompletion[]
+  xpEvents           XpEvent[]
+  coinEvents         CoinEvent[]
+  cosmetics          UserCosmetic[]
+  subscription       Subscription?
+  dailyQuests        DailyQuest[]
+  leagueEntries      LeagueMember[]
+  activityEvents     ActivityEvent[]
+  userAchievements   UserAchievement[]
+  progressSnapshots  ProgressSnapshot[]
+  streak             Streak?
+  aiConversations    AiConversation[]
+  aiRecommendations  AiRecommendation[]
+  notifications      Notification[]
+  sentFriendReqs     Friendship[]           @relation("requester")
+  recvFriendReqs     Friendship[]           @relation("addressee")
+  createdChallenges  Challenge[]
+  challengeEntries   ChallengeParticipant[]
+
+  @@index([email])
+}
+
+model Profile {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName   String
+  bio           String?
+  avatarColor   String   @default("#6366f1")
+  timezone      String   @default("UTC")
+  dailyMinutes  Int      @default(45) // minutes/day the user can commit
+  weeklyDays    Int      @default(5)
+  onboardedAt   DateTime?
+  // privacy — nothing personal is public by default
+  publicProfile Boolean  @default(false)
+  showXp        Boolean  @default(true)
+  showGoals     Boolean  @default(false)
+  showStreak    Boolean  @default(true)
+  allowChallenges Boolean @default(true)
+  totalXp       Int      @default(0)
+  level         Int      @default(1)
+
+  // Daily XP target, the Duolingo-style commitment device.
+  dailyXpGoal   Int      @default(50)
+  // Opt-in reminder nudges.
+  remindersOn   Boolean  @default(true)
+  reminderHour  Int      @default(19) // 0..23, local to Profile.timezone
+
+  // ── Avatar ────────────────────────────────────────────────
+  // Equipped cosmetic slots. Values are CosmeticItem.key strings
+  // rendered by the SVG part registry in src/components/avatar.
+  // Defaults are the starter set every user owns.
+  avatarBase      String @default("base_default")
+  avatarFace      String @default("face_default")
+  avatarHair      String @default("hair_default")
+  avatarOutfit    String @default("outfit_default")
+  avatarAccessory String @default("none")
+  avatarAura      String @default("none")
+  avatarFrame     String @default("frame_default")
+  avatarSkinTone  String @default("#e8b89b")
+  avatarHairColor String @default("#2d2418")
+
+  // Spendable currency, distinct from totalXp (which never decreases).
+  coins         Int      @default(0)
+
+  // Last time the Path screen was viewed — drives the honest "what changed
+  // since you were last here" panel. Null means never viewed.
+  lastSeenAt    DateTime?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ── Goal engine ────────────────────────────────────────────
+
+model Goal {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title         String
+  rawInput      String   // the exact text the user typed
+  summary       String?  // AI one-paragraph interpretation
+  category      String   @default("general") // see GOAL_CATEGORIES
+  templateKey   String?  // set when started from the catalog — see GoalTemplate
+  difficulty    Int      @default(3) // 1..5
+  status        String   @default("active") // active | paused | completed | archived
+  visibility    String   @default("private") // private | friends | public
+
+  startLevel    Int      @default(1)
+  targetLevel   Int      @default(10)
+  currentLevel  Int      @default(1)
+
+  xp            Int      @default(0)
+  level         Int      @default(1)
+  progressPct   Float    @default(0)
+
+  timelineWeeks Int?
+  targetDate    DateTime?
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  lastActivityAt DateTime @default(now())
+
+  // AI decomposition metadata
+  decompositionStatus String  @default("pending") // pending | generating | ready | failed | manual
+  aiModel             String?
+  confidence          Int      @default(0) // 0..100 — AI's self-rated confidence
+  planVersion         Int      @default(1)
+  metricName          String?  // e.g. "UCAT score", "ATAR", "songs learned"
+  metricStart         Float?
+  metricTarget        Float?
+  metricCurrent       Float?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  milestones        Milestone[]
+  skills            Skill[]
+  tasks             Task[]
+  xpEvents          XpEvent[]
+  coinEvents        CoinEvent[]
+  resources         Resource[]
+  aiConversations   AiConversation[]
+  aiRecommendations AiRecommendation[]
+  progressSnapshots ProgressSnapshot[]
+  userAchievements  UserAchievement[]
+
+  @@index([userId, status])
+  @@index([category])
+}
+
+model Milestone {
+  id          String   @id @default(cuid())
+  goalId      String
+  goal        Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  orderIndex  Int      @default(0)
+  targetLevel Int      @default(0)
+  status      String   @default("locked") // locked | active | done
+  dueDate     DateTime?
+  completedAt DateTime?
+  xpReward    Int      @default(200)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tasks Task[]
+
+  @@index([goalId, orderIndex])
+}
+
+model Skill {
+  id             String   @id @default(cuid())
+  goalId         String
+  goal           Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  parentId       String?
+  parent         Skill?   @relation("SkillTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children       Skill[]  @relation("SkillTree")
+
+  name           String
+  description    String?
+  category       String?
+  orderIndex     Int      @default(0)
+
+  level          Int      @default(1)
+  xp             Int      @default(0)
+  mastery        Float    @default(0)  // 0..100 rolling estimate
+  confidence     Float    @default(50) // 0..100 self/AI assessed
+  recentPerf     Float?   // 0..100 last few tasks
+  lastPracticedAt DateTime?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tasks             Task[]
+  xpEvents          XpEvent[]
+  resources         Resource[]
+  prerequisites     SkillPrerequisite[] @relation("skill")
+  requiredBy        SkillPrerequisite[] @relation("prerequisite")
+
+  @@index([goalId, orderIndex])
+  @@index([parentId])
+}
+
+model SkillPrerequisite {
+  id             String @id @default(cuid())
+  skillId        String
+  skill          Skill  @relation("skill", fields: [skillId], references: [id], onDelete: Cascade)
+  prerequisiteId String
+  prerequisite   Skill  @relation("prerequisite", fields: [prerequisiteId], references: [id], onDelete: Cascade)
+
+  @@unique([skillId, prerequisiteId])
+  @@index([skillId])
+}
+
+model Task {
+  id              String   @id @default(cuid())
+  goalId          String
+  goal            Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  milestoneId     String?
+  milestone       Milestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  skillId         String?
+  skill           Skill?   @relation(fields: [skillId], references: [id], onDelete: SetNull)
+
+  title           String
+  description     String?
+  type            String   @default("once") // once | daily | weekly | project | milestone
+  difficulty      Int      @default(2) // 1..5
+  estimatedMinutes Int     @default(30)
+  priority        String   @default("medium") // low | medium | high | critical
+  status          String   @default("todo") // todo | in_progress | done | skipped
+  orderIndex      Int      @default(0)
+
+  dueDate         DateTime?
+  scheduledFor    DateTime?
+  recurrenceRule  String?  // simple RRULE-ish string, e.g. "FREQ=DAILY"
+  recurrenceUntil DateTime?
+
+  xpReward        Int      @default(50)
+  aiGenerated     Boolean  @default(false)
+  aiFeedback      String?
+  notes           String?
+
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  completions TaskCompletion[]
+  xpEvents    XpEvent[]
+
+  @@index([goalId, status])
+  @@index([skillId])
+  @@index([dueDate])
+  @@index([scheduledFor])
+}
+
+model TaskCompletion {
+  id           String   @id @default(cuid())
+  taskId       String
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  completedAt  DateTime @default(now())
+  minutesSpent Int?
+  performance  Float?   // 0..100 optional self-rating
+  note         String?
+  xpAwarded    Int      @default(0)
+
+  @@index([userId, completedAt])
+  @@index([taskId])
+}
+
+// ── Progression ────────────────────────────────────────────
+
+model XpEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goalId    String?
+  goal      Goal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  skillId   String?
+  skill     Skill?   @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  taskId    String?
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  source    String   // task_complete | milestone | streak | achievement | assessment | manual
+  amount    Int
+  meta      String?  // JSON
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([goalId])
+}
+
+/// Signed ledger of the spendable Coins currency. Positive = earned,
+/// negative = spent. Mirrors XpEvent so the balance on Profile.coins is
+/// always reconstructable and never silently drifts.
+model CoinEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goalId    String?
+  goal      Goal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  source    String   // see COIN_SOURCES in src/lib/constants.ts
+  amount    Int      // signed
+  balance   Int      @default(0) // balance after this event, for auditing
+  meta      String?  // JSON
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+/// Catalogue of avatar cosmetics. Definitions live in
+/// src/server/cosmetics/definitions.ts and are synced here by seed,
+/// exactly as Achievement rows are synced from achievements/definitions.ts.
+model CosmeticItem {
+  id                   String  @id @default(cuid())
+  key                  String  @unique // e.g. "hair_flame_crown"
+  name                 String
+  description          String
+  slot                 String  // see COSMETIC_SLOTS
+  rarity               String  // see RARITIES
+  price                Int?    // null = not purchasable (drop / unlock only)
+  unlockAchievementKey String? // gated behind an Achievement.key
+  palette              String? // JSON — per-part colour overrides
+  sortIndex            Int     @default(0)
+  isDefault            Boolean @default(false) // granted to every new user
+  secret               Boolean @default(false)
+  createdAt            DateTime @default(now())
+
+  owners UserCosmetic[]
+
+  @@index([slot, rarity])
+}
+
+/// A cosmetic owned by a user. Mirrors UserAchievement's ownership pattern.
+model UserCosmetic {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemKey    String
+  item       CosmeticItem @relation(fields: [itemKey], references: [key], onDelete: Cascade)
+  source     String   // default | purchase | drop | achievement | grant
+  goalId     String?  // which goal earned it, when source = drop
+  acquiredAt DateTime @default(now())
+  seenAt     DateTime? // null = show a "new!" badge
+
+  @@unique([userId, itemKey])
+  @@index([userId])
+}
+
+/// Global catalogue of life goals. Seeded from src/server/catalog/templates.
+/// skillsJson / milestonesJson let a template produce a far better plan than
+/// the keyword classifier in src/ai/heuristic.ts.
+model GoalTemplate {
+  id             String  @id @default(cuid())
+  key            String  @unique
+  title          String
+  description    String
+  category       String  // see GOAL_CATEGORIES
+  domain         String  // browse grouping, e.g. "health", "career"
+  difficulty     Int     @default(3) // 1..5
+  typicalWeeks   Int     @default(12)
+  tags           String  @default("") // comma-separated, for search
+  metricName     String?
+  metricTarget   Float?
+  skillsJson     String  // JSON array of skill templates
+  milestonesJson String  // JSON array of milestone templates
+  popularity     Int     @default(0)
+  isGlobal       Boolean @default(true)
+  createdAt      DateTime @default(now())
+
+  @@index([domain])
+  @@index([category])
+}
+
+/// Zandegi Pro. There is no payment provider wired up: a trial is started
+/// locally and simply expires, so nothing here charges anyone. Swapping in a
+/// real provider means filling `externalCustomerId` and driving `status` from
+/// its webhooks.
+model Subscription {
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan               String    @default("free")     // see PLANS
+  status             String    @default("none")     // see SUBSCRIPTION_STATUSES
+  trialStartedAt     DateTime?
+  trialEndsAt        DateTime?
+  currentPeriodEnd   DateTime?
+  cancelledAt        DateTime?
+  externalCustomerId String?   // reserved for a real billing provider
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([status])
+}
+
+/// Three rotating daily objectives, generated per user per day.
+model DailyQuest {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime // truncated to day
+  key         String   // see src/server/engagement/quests.ts
+  target      Int
+  progress    Int      @default(0)
+  claimed     Boolean  @default(false)
+  rewardCoins Int      @default(0)
+  rewardXp    Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, date, key])
+  @@index([userId, date])
+}
+
+/// A weekly leaderboard season. Everyone competes inside a division.
+model LeagueSeason {
+  id       String   @id @default(cuid())
+  index    Int      @unique // weeks since epoch, so seasons are deterministic
+  startsAt DateTime
+  endsAt   DateTime
+
+  members LeagueMember[]
+}
+
+model LeagueMember {
+  id        String   @id @default(cuid())
+  seasonId  String
+  season    LeagueSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  division  String   @default("bronze") // see DIVISIONS
+  xp        Int      @default(0)        // XP earned during this season only
+  /// Set when the season is settled.
+  finalRank Int?
+  outcome   String?  // promoted | held | relegated
+  joinedAt  DateTime @default(now())
+
+  @@unique([seasonId, userId])
+  @@index([seasonId, division, xp])
+}
+
+/// A meaningful moment worth showing to friends — not every task completion,
+/// only milestone/goal completions, level-ups, achievement unlocks and
+/// cosmetic drops. Written by src/server/activity/service.ts and read back
+/// only for accepted friends, filtered per-event by the same Profile privacy
+/// flags (showGoals/showXp/showStreak) that already gate this data
+/// elsewhere in the app.
+model ActivityEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String   // see ACTIVITY_KINDS in src/lib/constants.ts
+  title     String
+  rarity    String?  // set only for cosmetic_drop — see RARITIES in src/lib/constants.ts
+  meta      String?  // JSON
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model Achievement {
+  id          String @id @default(cuid())
+  key         String @unique // stable identifier, e.g. "streak_7"
+  name        String
+  description String
+  icon        String @default("trophy")
+  category    String @default("general") // consistency | mastery | milestone | social | meta
+  tier        String @default("bronze") // bronze | silver | gold | platinum
+  xpReward    Int    @default(100)
+  criteria    String // JSON — evaluated by src/server/achievements/evaluate.ts
+  secret      Boolean @default(false)
+  createdAt   DateTime @default(now())
+
+  users UserAchievement[]
+}
+
+model UserAchievement {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievementKey String
+  achievement    Achievement @relation(fields: [achievementKey], references: [key], onDelete: Cascade)
+  goalId         String?
+  goal           Goal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  progress       Float    @default(0) // 0..100 toward unlock
+  unlockedAt     DateTime?
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, achievementKey, goalId])
+  @@index([userId])
+}
+
+model ProgressSnapshot {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goalId         String?
+  goal           Goal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  date           DateTime // truncated to day
+  xp             Int      @default(0)
+  level          Int      @default(1)
+  tasksCompleted Int      @default(0)
+  minutesSpent   Int      @default(0)
+  streakDays     Int      @default(0)
+  progressPct    Float    @default(0)
+  velocity       Float    @default(0) // xp/day trailing average
+  meta           String?  // JSON
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, goalId, date])
+  @@index([userId, date])
+}
+
+model Streak {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  current        Int      @default(0)
+  longest        Int      @default(0)
+  lastActiveDate DateTime?
+  freezes        Int      @default(0) // "streak freeze" tokens earned
+  updatedAt      DateTime @updatedAt
+}
+
+// ── AI ─────────────────────────────────────────────────────
+
+model AiConversation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goalId    String?
+  goal      Goal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  title     String   @default("New conversation")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages AiMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+model AiMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String   // user | assistant | system | tool
+  content        String
+  toolName       String?
+  meta           String?  // JSON — token usage, tool args/results, model
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model AiRecommendation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goalId    String?
+  goal      Goal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  kind      String   // focus | revise | plan_change | resource | pace | wellbeing
+  title     String
+  body      String
+  rationale String?
+  priority  Int      @default(3) // 1 (highest) .. 5
+  status    String   @default("new") // new | seen | accepted | dismissed
+  meta      String?  // JSON — structured payload (e.g. proposed task diffs)
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+
+  @@index([userId, status])
+}
+
+model Resource {
+  id        String   @id @default(cuid())
+  goalId    String?
+  goal      Goal?    @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  skillId   String?
+  skill     Skill?   @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  title     String
+  url       String?
+  type      String   @default("article") // video | book | course | article | tool | practice | community
+  source    String?
+  notes     String?
+  addedBy   String   @default("ai") // ai | user
+  rating    Int?     // 1..5
+  createdAt DateTime @default(now())
+
+  @@index([goalId])
+  @@index([skillId])
+}
+
+// ── Versioned knowledge ───────────────────────────────────
+
+model KnowledgeEntry {
+  id             String   @id @default(cuid())
+  slug           String   // stable topic key, e.g. "ucat-structure"
+  domain         String   // e.g. "exams", "sports", "music"
+  title          String
+  body           String   // markdown
+  version        Int      @default(1)
+  effectiveFrom  DateTime @default(now())
+  source         String?
+  sourceUrl      String?
+  confidence     Int      @default(70) // 0..100
+  isCurrent      Boolean  @default(true)
+  supersededById String?
+  createdAt      DateTime @default(now())
+
+  @@unique([slug, version])
+  @@index([slug, isCurrent])
+  @@index([domain])
+}
+
+// ── Social ─────────────────────────────────────────────────
+
+model Friendship {
+  id          String   @id @default(cuid())
+  requesterId String
+  requester   User     @relation("requester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addresseeId String
+  addressee   User     @relation("addressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+  status      String   @default("pending") // pending | accepted | blocked
+  createdAt   DateTime @default(now())
+  respondedAt DateTime?
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+}
+
+model Challenge {
+  id          String   @id @default(cuid())
+  creatorId   String
+  creator     User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  metric      String   @default("xp") // xp | tasks | minutes | streak
+  target      Int      @default(1000)
+  startsAt    DateTime @default(now())
+  endsAt      DateTime
+  visibility  String   @default("friends") // friends | private | public
+  createdAt   DateTime @default(now())
+
+  participants ChallengeParticipant[]
+
+  @@index([endsAt])
+}
+
+model ChallengeParticipant {
+  id          String   @id @default(cuid())
+  challengeId String
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  progress    Int      @default(0)
+  joinedAt    DateTime @default(now())
+
+  @@unique([challengeId, userId])
+  @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // deadline | missed_task | daily_plan | achievement | challenge | milestone | ai_reco | friend
+  title     String
+  body      String?
+  href      String?
+  read      Boolean  @default(false)
+  meta      String?  // JSON
+  createdAt DateTime @default(now())
+
+  @@index([userId, read, createdAt])
+}

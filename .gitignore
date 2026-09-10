@@ -1,0 +1,42 @@
+# dependencies
+**/node_modules
+.pnp
+.pnp.js
+.pnpm-store
+
+# builds
+**/.next/
+**/out/
+**/build/
+**/dist/
+*.tsbuildinfo
+
+# next-env (regenerated)
+**/next-env.d.ts
+
+# env — never commit real secrets
+.env
+.env*.local
+.env.production
+
+# local sqlite (legacy prototype only)
+legacy/prisma/*.db
+legacy/prisma/*.db-journal
+
+# testing
+**/coverage
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# logs
+npm-debug.log*
+pnpm-debug.log*
+
+# personal working files (not part of the codebase)
+/Zandegi.xls*
+/Zandegi.xs

@@ -1,0 +1,8 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# esbuild (pulled in transitively by vitest) needs its postinstall to fetch a
+# platform binary. It is a trusted, widely-used package.
+allowBuilds:
+  esbuild: true
