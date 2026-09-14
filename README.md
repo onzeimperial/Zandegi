@@ -1,9 +1,12 @@
 # Zandegi
 
-A life RPG. State any ambition — "get into medicine", "bench 100kg", "learn Farsi",
-"save a house deposit" — and Zandegi turns it into a structured mission with chapters,
-steps, scheduled time blocks, real tools, and XP. Your character levels up across eight
-life domains.
+A LifeMaxxing application designed to track achievements, fulfil goals, and build
+discipline to level up your character in game and in real life.
+
+State any ambition — "get into medicine", "bench 100kg", "learn Farsi", "save a house
+deposit" — and Zandegi turns it into a structured mission with chapters, steps,
+scheduled time blocks, real tools, and XP. Your character levels up across eight life
+domains.
 
 ## Governing documents
 
