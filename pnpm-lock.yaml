@@ -180,6 +180,12 @@ importers:
 
   packages/api: {}
 
+  packages/celebrations:
+    dependencies:
+      '@zandegi/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/core:
     dependencies:
       zod:

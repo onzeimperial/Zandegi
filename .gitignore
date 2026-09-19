@@ -19,6 +19,9 @@
 .env*.local
 .env.production
 
+# MCP server config — holds a live AceDataCloud API token once filled in
+.mcp.json
+
 # local sqlite (legacy prototype only)
 legacy/prisma/*.db
 legacy/prisma/*.db-journal
