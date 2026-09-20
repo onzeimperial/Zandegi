@@ -4,6 +4,85 @@ Newest first.
 
 ---
 
+## Session 1 (part 2) — celebrations pilot, then the real generation pipeline + web wiring
+
+Two pieces of work, done out of the documented BUILD-PROMPTS order at the user's explicit
+direction after they asked "is there integrated AI in the website/app?" and the answer was no.
+
+**Shipped — `packages/celebrations`**
+
+- Curated celebration-video content pipeline backed by Seedance (via the `seedance` MCP server
+  in `.mcp.json`). Pure, deterministic `selectCelebrationClip` (seeded hash, no `Math.random`) and
+  `buildCelebrationPrompt`, matching CLAUDE.md §2.5 — no live model call sits on the completion
+  path, only pre-generated, reviewed clips.
+- `library/manifest.json` has 3 real clips (`"Universal"` domain, one per event type:
+  step/chapter/level-up), committed to `library/generated/*.mp4` rather than left on the
+  ephemeral Seedance CDN.
+- **Lesson learned, documented in `GENERATING.md`:** the character reference image alone did not
+  reliably hold the design across generations — the first pilot batch drifted badly off-brand on
+  2 of 3 clips with a random seed. Fixed by adding `CHARACTER_DESCRIPTION` text to every prompt,
+  restating colors/emblem/proportions in words rather than relying on image-reference adherence.
+- Not wired to any live event — `packages/economy`/`db`/`api` don't exist yet.
+
+**Shipped — the real mission generation pipeline (`packages/ai`) + `apps/web` wiring**
+
+- Discovered `packages/ai`'s own doc comment was wrong: it claimed stages 1–5, 9, and the
+  orchestrator were "scaffolded." They didn't exist as files at all — only stages 6 (ground), 7
+  (score), 8 (safety) did, and the `spike` npm script pointed at a `harness/run.ts` that also
+  doesn't exist. Flagged to the user before proceeding; they said build it for real.
+- Built all remaining stages (`src/stages/01-interpret.ts` through `05-detail.ts`), Zod schemas
+  for parsing model JSON (`src/schemas.ts`), and the orchestrator (`src/pipeline.ts`,
+  `generateMission`). 44 tests, all model calls mocked so they run without a live key.
+- Forced design decisions from the current repo state, documented at each source:
+  - Stage 2 (resolve) always uses the generic scaffold — no Pursuit catalog exists (session 2).
+    It still does real work: classifying domains/effortBand/**safetyClass** via a model call.
+  - Stage 3 (hydrate) is a documented no-op — no knowledge layer exists (sessions 2 + 3).
+  - Stage 9 (persist) constructs the `MissionGenerated` event but writes nothing — no database
+    exists (session 3).
+  - Safety gating happens *before* generation: `SELF_HARM_ADJACENT` short-circuits to
+    `refusal.route: "support"` right after stage 2, never reaching plan/detail. `isImpossibleScope`
+    similarly short-circuits to `refusal.route: "clarify"`.
+  - Grounding (stage 6) and safety (stage 8) rewrite loops are real: flagged step text gets one
+    model rewrite pass, then re-validates; anything still ungrounded after that is dropped
+    outright, never shipped.
+  - Progressive reveal is real: stage 5 (detail) runs once per chapter, each chapter is scored
+    and streamed via `onEvent` as it lands, not held back for one final batch.
+- Wired into `apps/web`: `src/app/api/generate/route.ts` (SSE streaming POST endpoint, no
+  auth/DB — a demo endpoint) and `src/app/generate/page.tsx` (client page: type a goal, watch
+  chapters stream in, see the scored mission). Added `@zandegi/ai` to `apps/web`'s dependencies
+  and `next.config.mjs`'s `transpilePackages`.
+- Rewrote the now-accurate doc comment in `packages/ai/src/index.ts`.
+
+**Verified**
+
+- `pnpm --filter @zandegi/ai typecheck` and `test` — 44 tests pass (orchestration logic, schema
+  parsing, both safety short-circuits, the grounding rewrite loop — all with `router.complete`
+  mocked).
+- `pnpm --filter @zandegi/web typecheck` and `build` — clean; `/generate` and `/api/generate`
+  both compile and appear in the route table.
+- `pnpm -r typecheck` and `pnpm lint` clean (one pre-existing, unrelated lint error in
+  `07-score.ts` predates this session).
+
+**Blocked / deferred**
+
+- **`ANTHROPIC_API_KEY` is still empty in `.env`.** Everything above is typechecked and unit-tested
+  with a mocked model client, but nothing has been run against a live model — the actual
+  generation *quality* is unverified. This is the immediate next blocking step and is the user's
+  to supply, not something addable from this session.
+- No rebuild of the session-1 scored-HTML eval harness (`harness/run.ts`) — still doesn't exist.
+  The `/generate` demo page is the quality check for now.
+- No database, no auth, no persistence — sessions 3/4 territory, untouched.
+
+**Next step**
+
+Get a real `ANTHROPIC_API_KEY` into `.env`, run `pnpm --filter @zandegi/web dev`, open
+`/generate`, and actually read what it produces — including at least one adversarial goal
+("become a billionaire by March") to confirm the clarify-refusal path. Session 1's real exit bar
+(mean specificity/actionability ≥ 4.0 across 60 goals, zero ungrounded claims) still isn't
+formally measured without the harness.
+
+---
+
 ## Session 1 (part 1) — core primitives + AI pipeline foundations
 
 **Shipped**

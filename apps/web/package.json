@@ -12,7 +12,8 @@
     "next": "^15.1.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@zandegi/core": "workspace:*"
+    "@zandegi/core": "workspace:*",
+    "@zandegi/ai": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",

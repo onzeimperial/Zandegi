@@ -133,6 +133,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@zandegi/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@zandegi/core':
         specifier: workspace:*
         version: link:../../packages/core

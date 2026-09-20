@@ -97,3 +97,8 @@ export async function complete(opts: CompleteOptions): Promise<CompleteResult> {
 export function canGenerate(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
+
+/** Which model a stage will use, without making a call — for cost/attribution tracking. */
+export function modelForStage(stage: StageName): string {
+  return MODELS[STAGE_TIER[stage] ?? "standard"];
+}
