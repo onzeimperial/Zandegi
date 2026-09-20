@@ -1,1 +1,44 @@
-[]
+[
+  {
+    "id": "universal-step_complete-1",
+    "domain": "Universal",
+    "eventType": "step_complete",
+    "variant": 1,
+    "videoUrl": "library/generated/universal-step_complete-1.mp4",
+    "durationSec": 4,
+    "hasAudio": true,
+    "prompt": "The character is a chibi-proportioned mascot (large head, compact body, about 2.5 heads tall) with a friendly, determined expression. It wears a fitted purple (#6B2FD9) hoodie and pants with white trim and a small white \"Z\" emblem on the chest, matching the reference image exactly — do not change the character's design, proportions, outfit, or color palette. The character gives a confident nod and a thumbs up, a small white \"Z\" shaped spark flashes above their head and fades. Returns to neutral standing pose. Static camera, plain white background, upbeat short celebratory music synced to the motion.",
+    "referenceImageUrl": "library/reference/mascot-ref.jpg",
+    "model": "doubao-seedance-1-5-pro-251215",
+    "generatedAt": "2026-09-20T07:16:32.000Z",
+    "sourceTaskId": "988f3b00-30f0-46dc-9fc6-d40db710b870"
+  },
+  {
+    "id": "universal-chapter_complete-1",
+    "domain": "Universal",
+    "eventType": "chapter_complete",
+    "variant": 1,
+    "videoUrl": "library/generated/universal-chapter_complete-1.mp4",
+    "durationSec": 5,
+    "hasAudio": true,
+    "prompt": "The character is a chibi-proportioned mascot (large head, compact body, about 2.5 heads tall) with a friendly, determined expression. It wears a fitted purple (#6B2FD9) hoodie and pants with white trim and a small white \"Z\" emblem on the chest, matching the reference image exactly — do not change the character's design, proportions, outfit, or color palette. The character crouches slightly, then jumps up with a fist raised in celebration. A burst of purple and white light rings expands from their feet, sparkles float upward, they land back in their starting pose smiling. Static camera, plain white background, upbeat celebratory music synced to the motion.",
+    "referenceImageUrl": "library/reference/mascot-ref.jpg",
+    "model": "doubao-seedance-1-5-pro-251215",
+    "generatedAt": "2026-09-20T07:50:52.000Z",
+    "sourceTaskId": "e87625f7-49cd-4d6c-bf75-8db43cd85b86"
+  },
+  {
+    "id": "universal-level_up-1",
+    "domain": "Universal",
+    "eventType": "level_up",
+    "variant": 1,
+    "videoUrl": "library/generated/universal-level_up-1.mp4",
+    "durationSec": 5,
+    "hasAudio": true,
+    "prompt": "The character is a chibi-proportioned mascot (large head, compact body, about 2.5 heads tall) with a friendly, determined expression. It wears a fitted purple (#6B2FD9) hoodie and pants with white trim and a small white \"Z\" emblem on the chest, matching the reference image exactly — do not change the character's design, proportions, outfit, or color palette. The character spins once in place as a swirl of purple light wraps around them, the light fades to reveal their new outfit, they strike a proud pose. Static camera, plain white background, triumphant celebratory music synced to the motion, the biggest celebration moment of the three.",
+    "referenceImageUrl": "library/reference/mascot-ref.jpg",
+    "model": "doubao-seedance-1-5-pro-251215",
+    "generatedAt": "2026-09-20T07:58:19.000Z",
+    "sourceTaskId": "6d86266f-c926-449f-8a65-4ba4ba9edd60"
+  }
+]
