@@ -27,9 +27,18 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
 
+function assertFinite(name: string, value: number): void {
+  if (!Number.isFinite(value)) throw new RangeError(`${name} must be finite`);
+}
+
+function assertFiniteValues(name: string, values: readonly number[]): void {
+  for (const value of values) assertFinite(name, value);
+}
+
 /** One minute of real effort ≈ one point, bounded (SPEC §4.1). */
 export function stepBaseXp(estimatedMinutes: number): number {
-  return clamp(Math.round(estimatedMinutes), BASE_MINUTES_MIN, BASE_MINUTES_MAX);
+  assertFinite("estimatedMinutes", estimatedMinutes);
+  return clamp(estimatedMinutes, BASE_MINUTES_MIN, BASE_MINUTES_MAX);
 }
 
 /**
@@ -38,11 +47,16 @@ export function stepBaseXp(estimatedMinutes: number): number {
  * userAdaptive comes from the per-user adaptive-difficulty loop (SPEC §2.3).
  */
 export function difficultyMult(difficultyPrior: number, userAdaptive: number): number {
-  return clamp(difficultyPrior * userAdaptive, DIFFICULTY_MULT_MIN, DIFFICULTY_MULT_MAX);
+  assertFinite("difficultyPrior", difficultyPrior);
+  assertFinite("userAdaptive", userAdaptive);
+  const product = difficultyPrior * userAdaptive;
+  assertFinite("difficulty multiplier", product);
+  return clamp(product, DIFFICULTY_MULT_MIN, DIFFICULTY_MULT_MAX);
 }
 
 /** `1 + min(0.25, 0.01 × streakDays)` — caps at a 25% bonus by day 25. */
 export function streakMult(currentStreakDays: number): number {
+  assertFinite("currentStreakDays", currentStreakDays);
   return 1 + Math.min(STREAK_MULT_CAP, STREAK_MULT_PER_DAY * Math.max(0, currentStreakDays));
 }
 
@@ -59,6 +73,7 @@ export function balanceMult(isWeakestDomain: boolean): number {
  * `rarityScoreFromPopulation` from ./rarity to convert.
  */
 export function rarityMult(rarityScore: number): number {
+  assertFinite("rarityScore", rarityScore);
   return 1 + RARITY_MULT_RANGE * clamp(rarityScore, 0, 1);
 }
 
@@ -104,17 +119,29 @@ export function stepXp(input: StepXpInput): StepXpResult {
     multipliers.streak *
     multipliers.balance *
     multipliers.rarity;
+  assertFinite("step XP aggregate", raw);
   return { xp: clamp(Math.round(raw), STEP_XP_MIN, STEP_XP_MAX), base, multipliers, raw };
 }
 
 /** Chapter completion = 2.5× the sum of its steps' *base* XP (SPEC §4.1). */
 export function chapterCompletionXp(stepBaseXps: readonly number[]): number {
+  assertFiniteValues("stepBaseXp", stepBaseXps);
   const sum = stepBaseXps.reduce((a, b) => a + b, 0);
-  return Math.round(CHAPTER_XP_FACTOR * sum);
+  assertFinite("chapter XP sum", sum);
+  const award = CHAPTER_XP_FACTOR * sum;
+  assertFinite("chapter XP aggregate", award);
+  return Math.round(award);
 }
 
 /** Mission completion = 4× the largest chapter award (SPEC §4.1). */
 export function missionCompletionXp(chapterAwards: readonly number[]): number {
   if (chapterAwards.length === 0) return 0;
-  return Math.round(MISSION_XP_FACTOR * Math.max(...chapterAwards));
+  assertFiniteValues("chapterAward", chapterAwards);
+  let largest = chapterAwards[0]!;
+  for (let index = 1; index < chapterAwards.length; index++) {
+    largest = Math.max(largest, chapterAwards[index]!);
+  }
+  const award = MISSION_XP_FACTOR * largest;
+  assertFinite("mission XP aggregate", award);
+  return Math.round(award);
 }

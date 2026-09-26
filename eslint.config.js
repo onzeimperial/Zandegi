@@ -9,6 +9,7 @@ export default tseslint.config(
       "**/node_modules/**",
       "**/next-env.d.ts",
       "legacy/**",
+      "_bmad/render/**",
     ],
   },
   js.configs.recommended,

@@ -155,9 +155,32 @@ export type ProgressCallback = (event: StageEvent) => void;
 
 export interface GroundingReport {
   claimsChecked: number;
-  ungroundedClaims: { chapterIndex: number; stepIndex: number; claim: string }[];
+  ungroundedClaims: GroundingFinding[];
   rewritten: number;
   dropped: number;
+}
+
+export type StepTextField =
+  | "title"
+  | "guide.approach"
+  | "guide.materials"
+  | "guide.commonMistakes"
+  | "guide.whatGoodLooksLike";
+
+export interface TextFieldLocation {
+  chapterIndex: number;
+  stepIndex: number;
+  field: StepTextField;
+  itemIndex?: number;
+}
+
+export interface RewriteIssue extends TextFieldLocation {
+  issueId: string;
+  issue: string;
+}
+
+export interface GroundingFinding extends RewriteIssue {
+  claim: string;
 }
 
 export interface SafetyOutcome {

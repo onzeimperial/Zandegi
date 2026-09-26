@@ -8,6 +8,7 @@
  * pipeline makes — not done here.
  */
 
+import { issueId, stepTextFields } from "./rewrite";
 import type { DraftStep, DraftMission, Source, GroundingReport } from "./types";
 
 // Sentence-level heuristics for "this asserts a hard fact". Deliberately
@@ -64,13 +65,7 @@ export interface StepGroundingResult {
  * refinement, tracked in BUILD-LOG.
  */
 export function validateStepGrounding(step: DraftStep, now: Date = new Date()): StepGroundingResult {
-  const guideText = [
-    step.guide.approach,
-    ...step.guide.materials,
-    ...step.guide.commonMistakes,
-    step.guide.whatGoodLooksLike,
-  ].join(". ");
-  const claims = [...detectFactualClaims(step.title), ...detectFactualClaims(guideText)];
+  const claims = stepTextFields(0, 0, step).flatMap((field) => detectFactualClaims(field.text));
 
   if (claims.length === 0) return { claims, ungrounded: [] };
 
@@ -84,10 +79,19 @@ export function validateMissionGrounding(mission: DraftMission, now: Date = new 
 
   for (const chapter of mission.chapters) {
     for (const step of chapter.steps) {
-      const r = validateStepGrounding(step, now);
-      claimsChecked += r.claims.length;
-      for (const claim of r.ungrounded) {
-        ungroundedClaims.push({ chapterIndex: chapter.index, stepIndex: step.index, claim });
+      const hasValidSource = step.sources.some((source) => isValidSource(source, now));
+      for (const field of stepTextFields(chapter.index, step.index, step)) {
+        const claims = detectFactualClaims(field.text);
+        claimsChecked += claims.length;
+        if (claims.length > 0 && !hasValidSource) {
+          const claim = claims.join(" ");
+          ungroundedClaims.push({
+            ...field,
+            issueId: issueId("ground", field),
+            issue: claim,
+            claim,
+          });
+        }
       }
     }
   }

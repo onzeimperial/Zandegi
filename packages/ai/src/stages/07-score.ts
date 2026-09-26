@@ -25,7 +25,7 @@ export const NEUTRAL_CONTEXT: ScoreContext = {
   rarityScore: 0,
 };
 
-export function scoreMission(mission: DraftMission, ctx: ScoreContext): ScoredMission {
+export function scoreMission(mission: DraftMission, _ctx: ScoreContext): ScoredMission {
   const scoredChapters: ScoredChapter[] = mission.chapters.map((chapter) => {
     const scoredSteps: ScoredStep[] = chapter.steps.map((step) => ({
       ...step,

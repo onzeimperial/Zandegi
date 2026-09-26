@@ -88,13 +88,16 @@ describe("generateMission", () => {
     expect(result.event?.payload.generationMeta.modelsUsed.hydrate).toBeUndefined();
   });
 
-  it("emits a StageEvent with a scored chapter for each chapter, progressively", async () => {
+  it("emits scored chapters only after grounding and safety complete", async () => {
     const events: { stage: string; status: string; hasChapter: boolean }[] = [];
     await generateMission({ rawText: "run a half marathon" }, (e) =>
       events.push({ stage: e.stage, status: e.status, hasChapter: Boolean(e.chapter) }),
     );
     const chapterEvents = events.filter((e) => e.hasChapter);
     expect(chapterEvents).toHaveLength(2);
+    const safetyDone = events.findIndex((e) => e.stage === "safety" && e.status === "done");
+    expect(safetyDone).toBeGreaterThan(-1);
+    expect(events.findIndex((e) => e.hasChapter)).toBeGreaterThan(safetyDone);
   });
 
   it("short-circuits to a clarify refusal for impossible scope, without calling resolve", async () => {
@@ -126,7 +129,12 @@ describe("generateMission", () => {
     });
     completeMock.mockResolvedValueOnce({
       text: JSON.stringify({
-        rewrites: [{ chapterIndex: 0, stepIndex: 0, rewrittenApproach: "Budget for this session in advance." }],
+        rewrites: [
+          {
+            issueId: "ground:0:0:guide.approach:scalar",
+            rewrittenText: "Budget for this session in advance.",
+          },
+        ],
       }),
       model: "test-model",
       usage: { inputTokens: 0, outputTokens: 0 },
@@ -146,5 +154,165 @@ describe("generateMission", () => {
       generateMission({ rawText: "x" }, (e) => events.push({ stage: e.stage, status: e.status })),
     ).rejects.toThrow("model unavailable");
     expect(events).toContainEqual({ stage: "interpret", status: "error" });
+  });
+
+  it.each([
+    { label: "missing", rewrites: [] },
+    {
+      label: "duplicate",
+      rewrites: [
+        { issueId: "ground:0:0:guide.approach:scalar", rewrittenText: "Advice." },
+        { issueId: "ground:0:0:guide.approach:scalar", rewrittenText: "Advice." },
+      ],
+    },
+    { label: "unknown", rewrites: [{ issueId: "ground:9:9:title:scalar", rewrittenText: "Advice." }] },
+  ])("fails closed for a $label rewrite ID set", async ({ rewrites }) => {
+    detailChapterMock.mockResolvedValueOnce({
+      steps: [step({ approach: "This costs $500.", sources: [] }), step()],
+    });
+    completeMock.mockResolvedValueOnce({
+      text: JSON.stringify({ rewrites }),
+      model: "test-model",
+      usage: { inputTokens: 0, outputTokens: 0 },
+    });
+    const events: { chapter?: unknown }[] = [];
+    await expect(generateMission({ rawText: "run" }, (event) => events.push(event))).rejects.toThrow();
+    expect(events.some((event) => event.chapter)).toBe(false);
+  });
+
+  it("fails closed when a grounding rewrite remains ungrounded", async () => {
+    detailChapterMock.mockResolvedValueOnce({
+      steps: [step({ approach: "This costs $500.", sources: [] }), step()],
+    });
+    completeMock.mockResolvedValueOnce({
+      text: JSON.stringify({
+        rewrites: [
+          {
+            issueId: "ground:0:0:guide.approach:scalar",
+            rewrittenText: "This still costs $400.",
+          },
+        ],
+      }),
+      model: "test-model",
+      usage: { inputTokens: 0, outputTokens: 0 },
+    });
+    const events: { chapter?: unknown }[] = [];
+    await expect(generateMission({ rawText: "run" }, (event) => events.push(event))).rejects.toThrow(
+      "grounding rewrite did not resolve",
+    );
+    expect(events.some((event) => event.chapter)).toBe(false);
+  });
+
+  it("rewrites the exact unsafe field and fails closed if it remains unsafe", async () => {
+    resolveMock.mockResolvedValue({ ...baseResolved, safetyClass: "CLINICAL" });
+    detailChapterMock.mockResolvedValueOnce({
+      steps: [step({ approach: "Eat 1200 kcal each day." }), step()],
+    });
+    detailChapterMock.mockResolvedValue({ steps: [step(), step({ title: "Run 4km easy" })] });
+    completeMock.mockResolvedValue({
+      text: JSON.stringify({
+        rewrites: [
+          {
+            issueId: "safety:0:0:guide.approach:scalar",
+            rewrittenText: "Eat 1300 kcal each day.",
+          },
+        ],
+      }),
+      model: "test-model",
+      usage: { inputTokens: 0, outputTokens: 0 },
+    });
+    const events: { chapter?: unknown }[] = [];
+    await expect(generateMission({ rawText: "run" }, (event) => events.push(event))).rejects.toThrow(
+      "safety rewrite did not resolve",
+    );
+    expect(events.some((event) => event.chapter)).toBe(false);
+  });
+
+  it("fails closed when a successful safety rewrite introduces an ungrounded claim", async () => {
+    resolveMock.mockResolvedValue({ ...baseResolved, safetyClass: "CLINICAL" });
+    detailChapterMock.mockResolvedValueOnce({
+      steps: [step({ approach: "Eat 1200 kcal each day." }), step()],
+    });
+    detailChapterMock.mockResolvedValue({ steps: [step(), step({ title: "Run 4km easy" })] });
+    completeMock.mockResolvedValueOnce({
+      text: JSON.stringify({
+        rewrites: [
+          {
+            issueId: "safety:0:0:guide.approach:scalar",
+            rewrittenText: "The consultation costs $500.",
+          },
+        ],
+      }),
+      model: "test-model",
+      usage: { inputTokens: 0, outputTokens: 0 },
+    });
+    const events: { chapter?: unknown }[] = [];
+    await expect(generateMission({ rawText: "run" }, (event) => events.push(event))).rejects.toThrow(
+      "safety rewrite introduced an ungrounded finding",
+    );
+    expect(events.some((event) => event.chapter)).toBe(false);
+  });
+
+  it("preserves initial safety redactions after a successful rewrite", async () => {
+    resolveMock.mockResolvedValue({ ...baseResolved, safetyClass: "CLINICAL" });
+    detailChapterMock.mockResolvedValueOnce({
+      steps: [step({ approach: "Eat 1200 kcal each day." }), step()],
+    });
+    detailChapterMock.mockResolvedValue({ steps: [step(), step({ title: "Run 4km easy" })] });
+    completeMock.mockResolvedValueOnce({
+      text: JSON.stringify({
+        rewrites: [
+          {
+            issueId: "safety:0:0:guide.approach:scalar",
+            rewrittenText: "Bring your nutrition plan to a clinician.",
+          },
+        ],
+      }),
+      model: "test-model",
+      usage: { inputTokens: 0, outputTokens: 0 },
+    });
+    const result = await generateMission({ rawText: "run" });
+    expect(result.event?.payload.safety.redactions).toEqual(["1200 kcal"]);
+  });
+
+  it("forwards the exact AbortSignal through later stages and rewrite model calls", async () => {
+    const controller = new AbortController();
+    detailChapterMock.mockResolvedValueOnce({
+      steps: [step({ approach: "This costs $500.", sources: [] }), step()],
+    });
+    completeMock.mockResolvedValueOnce({
+      text: JSON.stringify({
+        rewrites: [
+          {
+            issueId: "ground:0:0:guide.approach:scalar",
+            rewrittenText: "Plan a suitable budget.",
+          },
+        ],
+      }),
+      model: "test-model",
+      usage: { inputTokens: 0, outputTokens: 0 },
+    });
+    await generateMission({ rawText: "run" }, undefined, { signal: controller.signal });
+    expect(resolveMock).toHaveBeenCalledWith(baseInterpretation, controller.signal);
+    expect(planMock).toHaveBeenCalledWith(baseInterpretation, baseResolved, controller.signal);
+    expect(detailChapterMock).toHaveBeenCalledWith(expect.any(Object), controller.signal);
+    expect(completeMock).toHaveBeenCalledWith(
+      expect.objectContaining({ stage: "ground", signal: controller.signal }),
+    );
+  });
+
+  it("propagates one AbortSignal to active model work and does not run later stages", async () => {
+    const controller = new AbortController();
+    interpretMock.mockImplementation((_input: unknown, signal: AbortSignal) => {
+      expect(signal).toBe(controller.signal);
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    });
+    const pending = generateMission({ rawText: "run" }, undefined, { signal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toThrow();
+    expect(resolveMock).not.toHaveBeenCalled();
+    expect(planMock).not.toHaveBeenCalled();
   });
 });

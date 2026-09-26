@@ -11,10 +11,17 @@ const LEVEL_BASE = 100;
 const LEVEL_EXP = 1.6;
 export const MAX_LEVEL = 500;
 
+function assertFinite(name: string, value: number): void {
+  if (!Number.isFinite(value)) throw new RangeError(`${name} must be finite`);
+}
+
 export function xpForLevel(level: number): number {
+  assertFinite("level", level);
   const n = Math.max(1, Math.floor(level));
   if (n === 1) return 0;
-  return Math.round(LEVEL_BASE * Math.pow(n, LEVEL_EXP));
+  const threshold = Math.round(LEVEL_BASE * Math.pow(n, LEVEL_EXP));
+  assertFinite("level XP aggregate", threshold);
+  return threshold;
 }
 
 // Precomputed cumulative thresholds for a fast, exact levelFromXp.
@@ -25,6 +32,7 @@ const THRESHOLDS: number[] = (() => {
 })();
 
 export function levelFromXp(totalXp: number): number {
+  assertFinite("totalXp", totalXp);
   const xp = Math.max(0, Math.floor(totalXp));
   // THRESHOLDS is ascending; find the highest level whose threshold xp meets.
   let level = 1;
@@ -45,19 +53,21 @@ export interface LevelProgress {
 }
 
 export function levelProgress(totalXp: number): LevelProgress {
+  assertFinite("totalXp", totalXp);
   const xp = Math.max(0, Math.floor(totalXp));
   const level = levelFromXp(xp);
   const floor = xpForLevel(level);
   const ceil = xpForLevel(level + 1);
   const span = Math.max(1, ceil - floor);
-  const into = xp - floor;
+  const isMax = level >= MAX_LEVEL;
+  const into = isMax ? span : xp - floor;
   return {
     level,
     xpIntoLevel: into,
     xpForThisLevel: span,
-    xpToNextLevel: Math.max(0, ceil - xp),
-    progressPct: level >= MAX_LEVEL ? 100 : Math.min(100, Math.round((into / span) * 100)),
-    isMax: level >= MAX_LEVEL,
+    xpToNextLevel: isMax ? 0 : Math.max(0, ceil - xp),
+    progressPct: isMax ? 100 : Math.min(100, Math.round((into / span) * 100)),
+    isMax,
   };
 }
 
@@ -76,6 +86,7 @@ export const RANKS = [
 export type Rank = (typeof RANKS)[number]["name"];
 
 export function rankForLevel(level: number): Rank {
+  assertFinite("level", level);
   const l = Math.max(1, Math.floor(level));
   let rank: Rank = RANKS[0].name;
   for (const r of RANKS) {

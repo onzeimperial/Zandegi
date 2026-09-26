@@ -50,7 +50,7 @@ export interface DetailChapterInput {
   resolved: ResolvedPursuit;
 }
 
-export async function detailChapter(input: DetailChapterInput) {
+export async function detailChapter(input: DetailChapterInput, signal?: AbortSignal) {
   const res = await complete({
     stage: "detail",
     system: SYSTEM,
@@ -64,6 +64,7 @@ export async function detailChapter(input: DetailChapterInput) {
     }),
     maxTokens: 3072,
     temperature: 0.5,
+    signal,
   });
   return parseStageJson("detail", res.text, detailChapterOutputSchema);
 }

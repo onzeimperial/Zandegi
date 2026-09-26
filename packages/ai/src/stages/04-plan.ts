@@ -23,7 +23,11 @@ Output ONLY a JSON object, no prose, no markdown fence:
   ]
 }`;
 
-export async function plan(interpretation: Interpretation, resolved: ResolvedPursuit) {
+export async function plan(
+  interpretation: Interpretation,
+  resolved: ResolvedPursuit,
+  signal?: AbortSignal,
+) {
   const res = await complete({
     stage: "plan",
     system: SYSTEM,
@@ -37,6 +41,7 @@ export async function plan(interpretation: Interpretation, resolved: ResolvedPur
     }),
     maxTokens: 1536,
     temperature: 0.5,
+    signal,
   });
   return parseStageJson("plan", res.text, planOutputSchema);
 }

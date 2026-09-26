@@ -50,7 +50,10 @@ function slugify(text: string): string {
   );
 }
 
-export async function resolve(interpretation: Interpretation): Promise<ResolvedPursuit> {
+export async function resolve(
+  interpretation: Interpretation,
+  signal?: AbortSignal,
+): Promise<ResolvedPursuit> {
   const res = await complete({
     stage: "resolve",
     system: SYSTEM,
@@ -61,6 +64,7 @@ export async function resolve(interpretation: Interpretation): Promise<ResolvedP
     }),
     maxTokens: 512,
     temperature: 0.1,
+    signal,
   });
   const parsed = parseStageJson("resolve", res.text, resolveClassificationSchema);
 

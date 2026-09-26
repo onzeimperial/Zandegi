@@ -14,7 +14,10 @@
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "verify:current": "pnpm lint && pnpm typecheck && pnpm test",
+    "verify:legacy": "npm --prefix legacy run typecheck && npm --prefix legacy test",
+    "verify": "pnpm verify:current && pnpm verify:legacy"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

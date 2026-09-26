@@ -133,7 +133,13 @@ describe("validateMissionGrounding", () => {
     const report = validateMissionGrounding(mission, NOW);
     expect(report.claimsChecked).toBeGreaterThan(0);
     expect(report.ungroundedClaims).toEqual([
-      { chapterIndex: 0, stepIndex: 1, claim: expect.stringContaining("GAMSAT") },
+      expect.objectContaining({
+        issueId: "ground:0:1:guide.approach:scalar",
+        chapterIndex: 0,
+        stepIndex: 1,
+        field: "guide.approach",
+        claim: expect.stringContaining("GAMSAT"),
+      }),
     ]);
     expect(isFullyGrounded(report)).toBe(false);
   });
@@ -155,5 +161,34 @@ describe("validateMissionGrounding", () => {
       ],
     };
     expect(isFullyGrounded(validateMissionGrounding(fixed, NOW))).toBe(true);
+  });
+
+  it("reports one issue per exact field, including array items", () => {
+    const exact: DraftMission = {
+      ...mission,
+      chapters: [
+        {
+          ...mission.chapters[0]!,
+          steps: [
+            step({
+              index: 0,
+              title: "Pay the $100 fee",
+              guide: {
+                approach: "You must register first. You must also bring ID.",
+                materials: ["A $20 workbook"],
+                commonMistakes: [],
+                whatGoodLooksLike: "Ready.",
+              },
+            }),
+          ],
+        },
+      ],
+    };
+    const findings = validateMissionGrounding(exact, NOW).ungroundedClaims;
+    expect(findings.map((finding) => finding.issueId)).toEqual([
+      "ground:0:0:title:scalar",
+      "ground:0:0:guide.approach:scalar",
+      "ground:0:0:guide.materials:0",
+    ]);
   });
 });

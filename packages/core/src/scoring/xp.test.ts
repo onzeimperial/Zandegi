@@ -15,10 +15,16 @@ import {
 describe("stepBaseXp", () => {
   it("is one point per minute, bounded 5..240", () => {
     expect(stepBaseXp(30)).toBe(30);
+    expect(stepBaseXp(30.5)).toBe(30.5);
     expect(stepBaseXp(1)).toBe(5);
     expect(stepBaseXp(0)).toBe(5);
     expect(stepBaseXp(1000)).toBe(240);
   });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    "rejects non-finite minutes (%s)",
+    (value) => expect(() => stepBaseXp(value)).toThrow(RangeError),
+  );
 });
 
 describe("difficultyMult", () => {
@@ -27,6 +33,12 @@ describe("difficultyMult", () => {
     expect(difficultyMult(2, 2)).toBe(2); // clamped down from 4
     expect(difficultyMult(0.5, 0.5)).toBe(0.5); // clamped up from 0.25
     expect(difficultyMult(1.2, 1.3)).toBeCloseTo(1.56);
+  });
+
+  it("rejects non-finite inputs and overflow", () => {
+    expect(() => difficultyMult(Number.NaN, 1)).toThrow(RangeError);
+    expect(() => difficultyMult(1, Number.POSITIVE_INFINITY)).toThrow(RangeError);
+    expect(() => difficultyMult(Number.MAX_VALUE, Number.MAX_VALUE)).toThrow(RangeError);
   });
 });
 
@@ -39,6 +51,9 @@ describe("streakMult", () => {
   });
   it("treats negative streak as zero", () => {
     expect(streakMult(-5)).toBe(1);
+  });
+  it("rejects non-finite streaks", () => {
+    expect(() => streakMult(Number.NEGATIVE_INFINITY)).toThrow(RangeError);
   });
 });
 
@@ -59,6 +74,9 @@ describe("rarityMult", () => {
     expect(rarityMult(-2)).toBe(1);
     expect(rarityMult(9)).toBe(1.5);
   });
+  it("rejects non-finite scores", () => {
+    expect(() => rarityMult(Number.NaN)).toThrow(RangeError);
+  });
 });
 
 describe("stepXp", () => {
@@ -73,6 +91,13 @@ describe("stepXp", () => {
 
   it("with all-neutral inputs, equals the base", () => {
     expect(stepXp(baseInput).xp).toBe(60);
+  });
+
+  it("keeps fractional minutes until the final award is rounded", () => {
+    const result = stepXp({ ...baseInput, estimatedMinutes: 30.5, verification: "TIMER" });
+    expect(result.base).toBe(30.5);
+    expect(result.raw).toBeCloseTo(35.075);
+    expect(result.xp).toBe(35);
   });
 
   it("stacks multipliers", () => {
@@ -134,5 +159,16 @@ describe("chapter and mission awards", () => {
   it("mission = 4× the largest chapter award", () => {
     expect(missionCompletionXp([250, 400, 300])).toBe(1600);
     expect(missionCompletionXp([])).toBe(0);
+  });
+
+  it("handles large finite chapter arrays without spreading them as arguments", () => {
+    expect(missionCompletionXp(new Array<number>(200_000).fill(2))).toBe(8);
+  });
+
+  it("rejects non-finite values and overflowed aggregates", () => {
+    expect(() => chapterCompletionXp([10, Number.POSITIVE_INFINITY])).toThrow(RangeError);
+    expect(() => chapterCompletionXp([Number.MAX_VALUE, Number.MAX_VALUE])).toThrow(RangeError);
+    expect(() => missionCompletionXp([Number.NaN])).toThrow(RangeError);
+    expect(() => missionCompletionXp([Number.MAX_VALUE])).toThrow(RangeError);
   });
 });

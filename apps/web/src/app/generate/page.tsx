@@ -2,11 +2,7 @@
 
 import { useState } from "react";
 import type { PipelineResult, ScoredChapter, StageEvent } from "@zandegi/ai";
-
-type SseMessage =
-  | { type: "progress"; event: StageEvent }
-  | { type: "result"; result: PipelineResult }
-  | { type: "error"; message: string };
+import { consumeGenerationStream } from "./sse";
 
 const STAGE_LABELS: Record<StageEvent["stage"], string> = {
   interpret: "Reading your goal",
@@ -45,39 +41,17 @@ export default function GeneratePage() {
         body: JSON.stringify({ rawText }),
       });
       if (!res.ok || !res.body) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? `Request failed (${res.status})`);
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: { message?: string };
+        };
+        throw new Error(body.error?.message ?? `Request failed (${res.status})`);
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-        for (const part of parts) {
-          const line = part.trim();
-          if (!line.startsWith("data:")) continue;
-          const msg = JSON.parse(line.slice(5).trim()) as SseMessage;
-          if (msg.type === "progress") {
-            setActiveStage(msg.event.stage);
-            if (msg.event.status === "error") {
-              setErrorMessage(msg.event.detail ?? "Generation failed");
-            }
-            if (msg.event.chapter) {
-              setChapters((prev) => [...prev, msg.event.chapter!]);
-            }
-          } else if (msg.type === "result") {
-            setResult(msg.result);
-          } else if (msg.type === "error") {
-            setErrorMessage(msg.message);
-          }
-        }
-      }
+      const terminalResult = await consumeGenerationStream(res.body, (event) => {
+        setActiveStage(event.stage);
+        if (event.chapter) setChapters((previous) => [...previous, event.chapter!]);
+      });
+      setResult(terminalResult);
       setStatus("done");
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Something went wrong");

@@ -6,7 +6,8 @@
  */
 
 import { isGenerationBlocked, requiresProfessionalFrame, type SafetyClass } from "@zandegi/core";
-import type { ScoredMission, SafetyOutcome } from "../types";
+import { issueId, stepTextFields } from "../rewrite";
+import type { RewriteIssue, ScoredMission, SafetyOutcome } from "../types";
 
 // Phrases a CLINICAL / FINANCIAL / LEGAL mission must not contain. Redacted
 // (the step is softened by a model rewrite the pipeline triggers) rather
@@ -32,8 +33,8 @@ function bannedFor(safetyClass: SafetyClass): RegExp[] {
 
 export interface SafetyPassResult {
   outcome: SafetyOutcome;
-  /** Chapter/step locations whose text tripped a banned pattern and needs a rewrite. */
-  needsRewrite: { chapterIndex: number; stepIndex: number; pattern: string }[];
+  /** Exact text fields whose content tripped one or more banned patterns. */
+  needsRewrite: RewriteIssue[];
 }
 
 export function safetyPass(mission: ScoredMission, safetyClass: SafetyClass): SafetyPassResult {
@@ -56,18 +57,18 @@ export function safetyPass(mission: ScoredMission, safetyClass: SafetyClass): Sa
   if (patterns.length > 0) {
     for (const chapter of mission.chapters) {
       for (const step of chapter.steps) {
-        const text = [
-          step.title,
-          step.guide.approach,
-          ...step.guide.materials,
-          ...step.guide.commonMistakes,
-          step.guide.whatGoodLooksLike,
-        ].join(" ");
-        for (const re of patterns) {
-          const m = text.match(re);
-          if (m) {
-            needsRewrite.push({ chapterIndex: chapter.index, stepIndex: step.index, pattern: re.source });
-            redactions.push(m[0]);
+        for (const field of stepTextFields(chapter.index, step.index, step)) {
+          const matches = patterns.flatMap((pattern) => {
+            const match = field.text.match(pattern);
+            return match ? [{ pattern: pattern.source, text: match[0] }] : [];
+          });
+          if (matches.length > 0) {
+            needsRewrite.push({
+              ...field,
+              issueId: issueId("safety", field),
+              issue: `Contains disallowed content: ${matches.map((match) => match.pattern).join(", ")}`,
+            });
+            redactions.push(...matches.map((match) => match.text));
           }
         }
       }

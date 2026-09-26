@@ -4,6 +4,40 @@ Newest first.
 
 ---
 
+## 2026-09-25 - current generation foundations repair
+
+**Shipped**
+
+- Added separate `verify:current`, `verify:legacy`, and aggregate `verify` commands plus independent
+  Node 22 CI jobs. The pnpm workspace and `legacy/` npm lockfile remain independent.
+- Hardened every public scoring input and aggregate against `NaN` and infinities without changing
+  finite scoring behavior, including the existing fractional-minute, max-level, and rarity-headline
+  corrections.
+- Reworked generation rewrites around server-owned issue IDs and exact text-field locations. Missing,
+  duplicate, unknown, or residual grounding/safety findings now fail closed, and chapter content is
+  released only after both validators pass.
+- Threaded one `AbortSignal` through the pipeline and every paid model call. The web route now enforces
+  a 25-second deadline, aborts on disconnect, validates strict bounded JSON, hides internal failures,
+  attaches request IDs, and is disabled in production unless
+  `ENABLE_UNAUTHENTICATED_GENERATION=true`.
+- Extracted a tested SSE consumer that requires exactly one terminal result and treats error messages,
+  malformed streams, duplicate terminals, and premature EOF as failures.
+
+**Verified**
+
+- Canonical: lint clean; all 10 TypeScript configs pass; 148/148 tests pass.
+- Legacy: typecheck passes and 194/194 tests pass after generating its locked Prisma client.
+- `apps/web`: production build succeeds and emits `/generate` plus `/api/generate`.
+- Both lockfiles remained unchanged.
+
+**Known risk / next step**
+
+- Live Anthropic behavior remains unverified because no API key was used; all model interactions are
+  deterministic mocks. The production demo remains off by default until authentication and rate
+  limiting exist.
+
+---
+
 ## Session 1 (part 2) — celebrations pilot, then the real generation pipeline + web wiring
 
 Two pieces of work, done out of the documented BUILD-PROMPTS order at the user's explicit

@@ -32,14 +32,21 @@ Goal type guide (SPEC §1.3) — pick honestly, never force a metric onto someth
 - PROJECT: finite defined scope ("ship my app")
 - EXPERIENCE: a one-off ("see the northern lights")`;
 
-export async function interpret(input: GoalInput): Promise<Interpretation> {
+export async function interpret(input: GoalInput, signal?: AbortSignal): Promise<Interpretation> {
   const user = JSON.stringify({
     rawText: input.rawText,
     timezone: input.timezone,
     location: input.location,
     weeklyTimeBudgetMinutes: input.weeklyTimeBudgetMinutes,
   });
-  const res = await complete({ stage: "interpret", system: SYSTEM, user, maxTokens: 1024, temperature: 0.2 });
+  const res = await complete({
+    stage: "interpret",
+    system: SYSTEM,
+    user,
+    maxTokens: 1024,
+    temperature: 0.2,
+    signal,
+  });
   const parsed = parseStageJson("interpret", res.text, interpretationOutputSchema);
   return {
     ...parsed,

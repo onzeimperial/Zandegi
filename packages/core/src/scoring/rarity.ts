@@ -26,6 +26,10 @@ export const RARITY_COLOR: Record<RarityTier, string> = {
   Mythic: "prismatic",
 };
 
+function assertFinite(name: string, value: number): void {
+  if (!Number.isFinite(value)) throw new RangeError(`${name} must be finite`);
+}
+
 /**
  * `fraction` is the share of the cohort that has done it, in [0, 1].
  * Boundaries follow SPEC §4.3 (upper bound inclusive going down the table):
@@ -37,6 +41,7 @@ export const RARITY_COLOR: Record<RarityTier, string> = {
  *   Mythic     < 0.001
  */
 export function rarityTierFromPopulation(fraction: number): RarityTier {
+  assertFinite("fraction", fraction);
   const f = Math.min(1, Math.max(0, fraction));
   if (f > 0.4) return "Common";
   if (f > 0.15) return "Uncommon";
@@ -51,12 +56,17 @@ export function rarityTierFromPopulation(fraction: number): RarityTier {
  * done by 0.7% of users scores 0.993 and pays close to the full rarity bonus.
  */
 export function rarityScoreFromPopulation(fraction: number): number {
+  assertFinite("fraction", fraction);
   return 1 - Math.min(1, Math.max(0, fraction));
 }
 
 /** The share-card line: "Only 0.7% of Zandegi have finished a marathon." */
 export function rarityHeadline(fraction: number, achievementPhrase: string): string {
+  assertFinite("fraction", fraction);
   const pct = Math.min(1, Math.max(0, fraction)) * 100;
+  if (pct > 0 && pct < 0.01) {
+    return `Less than 0.01% of Zandegi have ${achievementPhrase}.`;
+  }
   const shown = pct >= 1 ? pct.toFixed(0) : pct >= 0.1 ? pct.toFixed(1) : pct.toFixed(2);
   return `Only ${shown}% of Zandegi have ${achievementPhrase}.`;
 }

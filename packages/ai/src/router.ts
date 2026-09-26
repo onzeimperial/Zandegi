@@ -55,6 +55,7 @@ export interface CompleteOptions {
   tier?: ModelTier;
   maxTokens?: number;
   temperature?: number;
+  signal?: AbortSignal;
 }
 
 export interface CompleteResult {
@@ -70,13 +71,16 @@ export interface CompleteResult {
 export async function complete(opts: CompleteOptions): Promise<CompleteResult> {
   const tier = opts.tier ?? STAGE_TIER[opts.stage] ?? "standard";
   const model = MODELS[tier];
-  const res = await getClient().messages.create({
-    model,
-    max_tokens: opts.maxTokens ?? 4096,
-    temperature: opts.temperature ?? 0.4,
-    system: opts.system,
-    messages: [{ role: "user", content: opts.user }],
-  });
+  const res = await getClient().messages.create(
+    {
+      model,
+      max_tokens: opts.maxTokens ?? 4096,
+      temperature: opts.temperature ?? 0.4,
+      system: opts.system,
+      messages: [{ role: "user", content: opts.user }],
+    },
+    { signal: opts.signal },
+  );
 
   const text = res.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")

@@ -28,6 +28,15 @@ describe("xpForLevel", () => {
       expect(xpForLevel(l + 1)).toBeGreaterThan(xpForLevel(l));
     }
   });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    "rejects a non-finite level (%s)",
+    (value) => expect(() => xpForLevel(value)).toThrow(RangeError),
+  );
+
+  it("rejects an overflowed level threshold", () => {
+    expect(() => xpForLevel(Number.MAX_VALUE)).toThrow(RangeError);
+  });
 });
 
 describe("levelFromXp", () => {
@@ -45,6 +54,10 @@ describe("levelFromXp", () => {
 
   it("never exceeds MAX_LEVEL", () => {
     expect(levelFromXp(Number.MAX_SAFE_INTEGER)).toBe(MAX_LEVEL);
+  });
+
+  it("rejects non-finite XP", () => {
+    expect(() => levelFromXp(Number.NaN)).toThrow(RangeError);
   });
 });
 
@@ -64,6 +77,21 @@ describe("levelProgress", () => {
 
   it("is 0% exactly at a level floor", () => {
     expect(levelProgress(xpForLevel(20)).progressPct).toBe(0);
+  });
+
+  it("reports coherent, capped progress at the maximum level", () => {
+    for (const xp of [xpForLevel(MAX_LEVEL), Number.MAX_SAFE_INTEGER]) {
+      const progress = levelProgress(xp);
+      expect(progress.level).toBe(MAX_LEVEL);
+      expect(progress.xpIntoLevel).toBe(progress.xpForThisLevel);
+      expect(progress.xpToNextLevel).toBe(0);
+      expect(progress.progressPct).toBe(100);
+      expect(progress.isMax).toBe(true);
+    }
+  });
+
+  it("rejects non-finite XP", () => {
+    expect(() => levelProgress(Number.POSITIVE_INFINITY)).toThrow(RangeError);
   });
 });
 
@@ -89,5 +117,9 @@ describe("rankForLevel", () => {
       expect(idx).toBeGreaterThanOrEqual(prevIdx);
       prevIdx = idx;
     }
+  });
+
+  it("rejects non-finite levels", () => {
+    expect(() => rankForLevel(Number.NEGATIVE_INFINITY)).toThrow(RangeError);
   });
 });

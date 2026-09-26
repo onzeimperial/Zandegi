@@ -93,12 +93,11 @@ export type DetailChapterOutput = z.infer<typeof detailChapterOutputSchema>;
 export const rewriteOutputSchema = z.object({
   rewrites: z.array(
     z.object({
-      chapterIndex: z.number().int(),
-      stepIndex: z.number().int(),
-      rewrittenApproach: z.string().min(1),
-    }),
+      issueId: z.string().min(1),
+      rewrittenText: z.string().trim().min(1),
+    }).strict(),
   ),
-});
+}).strict();
 export type RewriteOutput = z.infer<typeof rewriteOutputSchema>;
 
 // ── Shared parsing ──────────────────────────────────────────
