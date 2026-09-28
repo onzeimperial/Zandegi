@@ -1,0 +1,5 @@
+import { AppShell } from "@/components/app-shell";
+import { StatusRail } from "@/components/status-rail";
+import { demoLeague } from "@/lib/demo-data";
+
+export default function CrewPage(){return <AppShell current="Crew" aside={<StatusRail/>}><div className="page-column stack"><div><h1>Dawn Lifters</h1><p className="muted">5 members · crew streak 21 days</p></div><section className="card crew-quest stack"><div className="row-between"><h2>This week: everyone trains 3×</h2><b className="violet">4 of 5 done</b></div><div className="progress-wide" aria-label="Crew quest 80 percent complete"><i/></div><p className="preview-note">Crew activity is preview data. Social actions are not connected yet.</p></section><section className="card compact-card"><div className="row-between"><h2>Amethyst League</h2><span className="muted">Top 5 move up · ends in 2d 14h</span></div><ol className="league-list">{demoLeague.map((person)=><li key={person.rank} className={person.name==="You"?"you":""}><b>{person.rank}</b><span className="avatar">{person.initials}</span><strong>{person.name}</strong><span>{person.xp} XP</span></li>)}</ol></section></div></AppShell>}

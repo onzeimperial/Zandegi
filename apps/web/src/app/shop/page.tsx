@@ -1,0 +1,5 @@
+import { AppShell } from "@/components/app-shell";
+import { StatusRail } from "@/components/status-rail";
+import { shopItems } from "@/lib/demo-data";
+
+export default function ShopPage(){return <AppShell current="Shop" aside={<StatusRail/>}><div className="page-column stack"><div className="row-between"><div><h1>Shop</h1><p className="muted">Cosmetics only</p></div><span className="pill">◆ 340</span></div><p className="preview-note">Preview catalogue — purchases are disabled. Shards buy looks only, never XP, levels, streaks or rank.</p><section><div className="row-between"><h2>Daily drop</h2><span className="muted">Rotation preview</span></div><div className="shop-grid">{shopItems.map((item)=><article className="card shop-item" key={item.name}><span className={`item-orb ${item.swatch}`}>Z</span><div><span className="pill">{item.kind}</span><h3>{item.name}</h3><p className="violet"><b>{item.price} Shards</b></p><button className="button button-secondary" disabled>Preview only</button></div></article>)}</div></section></div></AppShell>}

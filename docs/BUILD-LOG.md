@@ -231,3 +231,30 @@ built as part of it (the spec assumed a prior codebase that isn't this one):
    `packages/ai/router.ts`, grounding validator.
 
 Session 1 explicitly builds no UI, DB, or infra.
+## Website design integration — 28 September 2026
+
+**Shipped**
+
+- Rebuilt the supplied 12-board prototype as responsive Next.js routes and generator states.
+- Added the light violet Zandegi token layer, reusable shell/navigation/status components, accessible controls, mobile navigation, visible focus, and reduced-motion handling.
+- Integrated the existing `/api/generate` SSE contract into ambition, live build, review, refusal, error, abort, and retry states without changing the API or AI/core packages.
+- Added typed UI-only fixtures for Path, Profile, Crew, Shop, Step, completion, and Customise previews. Backendless mutations are disabled or explicitly local-only.
+- Added generator state/request tests and server-rendered mission review tests, including qualitative OUTCOME progress.
+
+**Verified**
+
+- Strict web TypeScript and ESLint pass.
+- Repository Vitest: 192 tests across 29 files pass, including existing API/SSE suites and auth, local builder/customiser, generation orchestration, submission guard, and preview-boundary coverage.
+- All 10 current TypeScript projects and repository ESLint pass.
+- Next production build compiles and pre-renders all 11 UI routes plus the API route.
+
+**Deferred / risk**
+
+- The prototype's embedded mascot/font binaries were intentionally not copied because provenance is unverified; the UI uses robust font fallbacks and a code-safe Zandegi mark.
+- Auth, persistence, purchases, social actions, scheduling, evidence upload, and rewards remain honest previews until their backends exist.
+- Manual screenshot comparison at 1440×900, 768×1024, and 375×812 still needs a browser pass.
+
+**Next step**
+
+Run the app with a configured generation provider, intercept a representative SSE stream, and complete the visual/keyboard/screen-reader browser pass across the target viewport sizes.
+
