@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>Zandegi web · Building your mission</title>
+<script src="435dcd7f-d3bf-49aa-a4c5-1518389a9d0c"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>/* devanagari */
+@font-face {
+  font-family: 'Baloo 2';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("338a5ed8-7be0-4723-a09c-ef50b4adb198") format('woff2');
+  unicode-range: U+0900-097F, U+1CD0-1CF9, U+200C-200D, U+20A8, U+20B9, U+20F0, U+25CC, U+A830-A839, U+A8E0-A8FF, U+11B00-11B09;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Baloo 2';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("615ed885-950a-4094-b1cb-fb44e38aadd5") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Baloo 2';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("f7bcd7bf-1495-4cbe-a1e5-5f6a3bb755dc") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Baloo 2';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("e90f477e-572a-4d04-9c52-7ded49fcb67c") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* devanagari */
+@font-face {
+  font-family: 'Baloo 2';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("338a5ed8-7be0-4723-a09c-ef50b4adb198") format('woff2');
+  unicode-range: U+0900-097F, U+1CD0-1CF9, U+200C-200D, U+20A8, U+20B9, U+20F0, U+25CC, U+A830-A839, U+A8E0-A8FF, U+11B00-11B09;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Baloo 2';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("615ed885-950a-4094-b1cb-fb44e38aadd5") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Baloo 2';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("f7bcd7bf-1495-4cbe-a1e5-5f6a3bb755dc") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Baloo 2';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("e90f477e-572a-4d04-9c52-7ded49fcb67c") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* devanagari */
+@font-face {
+  font-family: 'Baloo 2';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("338a5ed8-7be0-4723-a09c-ef50b4adb198") format('woff2');
+  unicode-range: U+0900-097F, U+1CD0-1CF9, U+200C-200D, U+20A8, U+20B9, U+20F0, U+25CC, U+A830-A839, U+A8E0-A8FF, U+11B00-11B09;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Baloo 2';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("615ed885-950a-4094-b1cb-fb44e38aadd5") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Baloo 2';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("f7bcd7bf-1495-4cbe-a1e5-5f6a3bb755dc") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Baloo 2';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("e90f477e-572a-4d04-9c52-7ded49fcb67c") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("a594d117-4ab7-46a2-97fb-596bebfccab0") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("a98b033c-6c19-4ff1-8d55-e5b097abd295") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("6142d8f2-9ba9-41a4-8ebf-f851ba930665") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("f929ef89-1245-4b85-8b6a-84018dd4b157") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("0e474545-101e-4979-a867-a53c21493e31") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("a594d117-4ab7-46a2-97fb-596bebfccab0") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("a98b033c-6c19-4ff1-8d55-e5b097abd295") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("6142d8f2-9ba9-41a4-8ebf-f851ba930665") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("f929ef89-1245-4b85-8b6a-84018dd4b157") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("0e474545-101e-4979-a867-a53c21493e31") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("a594d117-4ab7-46a2-97fb-596bebfccab0") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("a98b033c-6c19-4ff1-8d55-e5b097abd295") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("6142d8f2-9ba9-41a4-8ebf-f851ba930665") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("f929ef89-1245-4b85-8b6a-84018dd4b157") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("0e474545-101e-4979-a867-a53c21493e31") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("a594d117-4ab7-46a2-97fb-596bebfccab0") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("a98b033c-6c19-4ff1-8d55-e5b097abd295") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("6142d8f2-9ba9-41a4-8ebf-f851ba930665") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("f929ef89-1245-4b85-8b6a-84018dd4b157") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("0e474545-101e-4979-a867-a53c21493e31") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+</style>
+<style>
+body{margin:0;font-family:'Nunito',ui-rounded,system-ui,sans-serif;background:#F4F0FF;color:#241257}
+a{color:#6F42E8;text-decoration:none}a:hover{color:#5227C9}
+.d{font-family:'Baloo 2',ui-rounded,system-ui,sans-serif}
+input,textarea{font-family:inherit}
+@keyframes zspin{to{transform:rotate(360deg)}}
+@keyframes zbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes zidle{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; background: #F4F0FF; display: flex; flex-direction: column; overflow: hidden">
+<header style="height: 76px; flex-shrink: 0; box-sizing: border-box; padding: 0 32px; display: flex; align-items: center; gap: 20px; background: #FFFFFF; border-bottom: 2px solid #E6DEFF">
+<div style="width: 260px; display: flex; align-items: center; gap: 12px"><a href="WebMain.dc.html" aria-label="Zandegi home" style="display: flex; align-items: center; gap: 10px; color: #6F42E8">
+<img src="0e871cad-1117-4d25-a4d7-5f5252e009d4" alt="" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; object-position: 50% 18%; border: 3px solid #EDE6FF">
+<span class="d" style="font-size: 30px; font-weight: 800; line-height: 1">zandegi</span>
+</a></div>
+<div style="flex-grow: 1; display: flex; justify-content: center"><div style="width: 520px; display: flex; align-items: center; gap: 14px"><div style="flex-grow: 1; height: 14px; border-radius: 99px; background: #E3DCF7; overflow: hidden"><div style="width: 66%; height: 100%; border-radius: 99px; background: #6F42E8"></div></div><span style="font-size: 14px; font-weight: 800; color: #6B6390">2 of 3</span></div></div>
+<div style="width: 260px; display: flex; justify-content: flex-end; align-items: center; gap: 12px"></div>
+</header>
+<div style="flex-grow: 1; display: flex; justify-content: center; align-items: center">
+<div style="width: 1040px; display: flex; gap: 56px; align-items: center">
+<div style="width: 400px; flex-shrink: 0; display: flex; flex-direction: column; gap: 22px">
+<img src="0e871cad-1117-4d25-a4d7-5f5252e009d4" alt="Zandegi mascot thinking" style="width: 220px; height: 220px; border-radius: 40px; object-fit: cover; object-position: 50% 15%; border: 5px solid #FFFFFF; box-shadow: 0 8px 0 #DCCFFF; animation: zbob 2.4s ease-in-out infinite">
+<div style="background: #FFFFFF; border: 2px solid #E6DEFF; border-radius: 4px 22px 22px 22px; padding: 16px 20px"><div class="d" style="font-size: 26px; font-weight: 800; line-height: 1.2">{{bubble}}</div></div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: #6F42E8; box-shadow: 0 5px 0 #4F25C4; color: #FFFFFF">
+<div style="width: 40px; height: 40px; border-radius: 12px; background: #8A66F2; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+<svg width="22" height="22" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22V4"></path><path d="M4 4h13l-2 4 2 4H4"></path></svg>
+</div>
+<div style="display: flex; flex-direction: column">
+<span style="font-size: 12px; font-weight: 800; letter-spacing: 0.08em; color: #E2D8FF">YOUR AMBITION</span>
+<span class="d" style="font-size: 19px; font-weight: 800; line-height: 1.15">Bench 100 kg by March</span>
+</div>
+</div>
+</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; gap: 20px">
+<ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px">
+<sc-for list="{{stages}}" as="s" hint-placeholder-count="5">
+<li style="{{s.rowStyle}}">
+<sc-if value="{{s.done}}" hint-placeholder-val="{{ true }}">
+<div style="width: 32px; height: 32px; border-radius: 50%; background: #6F42E8; color: #FFFFFF; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+<svg width="18" height="18" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+</div>
+</sc-if>
+<sc-if value="{{s.active}}" hint-placeholder-val="{{ false }}">
+<div style="width: 32px; height: 32px; box-sizing: border-box; border-radius: 50%; border: 4px solid #DCCFFF; border-top-color: #6F42E8; flex-shrink: 0; animation: zspin 0.8s linear infinite"></div>
+</sc-if>
+<sc-if value="{{s.pending}}" hint-placeholder-val="{{ false }}">
+<div style="width: 32px; height: 32px; border-radius: 50%; background: #E3DCF7; color: #6B6390; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 15px; font-weight: 800">{{s.n}}</div>
+</sc-if>
+<div style="display: flex; flex-direction: column; gap: 1px; flex-grow: 1">
+<span style="font-size: 15px; font-weight: 800; color: #241257">{{s.title}}</span>
+<sc-if value="{{s.showDetail}}" hint-placeholder-val="{{ true }}">
+<span style="font-size: 13px; font-weight: 700; color: #6B6390; text-wrap: pretty">{{s.detail}}</span>
+</sc-if>
+</div>
+</li>
+</sc-for>
+</ol>
+<sc-if value="{{finished}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<a href="WebPlan.dc.html" class="d" style="height: 56px; border-radius: 16px; background: #6F42E8; box-shadow: 0 5px 0 #4F25C4; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; letter-spacing: 0.06em">SEE MY MISSION</a>
+<button sc-camel-on-click="{{replay}}" style="height: 44px; border: 0; background: transparent; color: #5227C9; font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer">Replay the build</button>
+</div>
+</sc-if>
+<sc-if value="{{working}}" hint-placeholder-val="{{ false }}">
+<div class="d" style="height: 56px; border-radius: 16px; background: #E3DCF7; color: #5227C9; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 800; letter-spacing: 0.04em">BUILDING · {{doneCount}} OF 5</div>
+</sc-if>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900}}">
+class Component extends DCLogic {
+componentDidMount() {
+this.start();
+}
+componentWillUnmount() {
+clearInterval(this.timer);
+}
+start() {
+clearInterval(this.timer);
+this.setState({ stage: 0 });
+this.timer = setInterval(() => {
+const s = (this.state && this.state.stage) || 0;
+if (s >= 5) { clearInterval(this.timer); return; }
+this.setState({ stage: s + 1 });
+}, 1300);
+}
+renderVals() {
+const stage = (this.state && typeof this.state.stage === 'number') ? this.state.stage : 5;
+const list = [
+{ title: 'Reading your ambition', detail: 'Metric goal: bench press one-rep max, target 100 kg.' },
+{ title: 'Finding your starting point', detail: 'Best lift 72.5 kg. 4 evenings a week free in your calendar.' },
+{ title: 'Splitting it into chapters', detail: '5 chapters. Each one ends in a mini-goal you can prove.' },
+{ title: 'Booking time blocks', detail: '3 sessions a week, added to your calendar.' },
+{ title: 'Checking facts and scoring', detail: 'Rules are sourced or marked as advice. XP is set by fixed formulas, not the AI.' }
+];
+const bubbles = ['Give me a sec. I’m planning your mission.', 'Got it. Let’s see where you’re starting.', 'Breaking it into mini-goals…', 'Finding time in your week…', 'Double-checking everything…', 'Done! Your mission is ready.'];
+return {
+bubble: bubbles[Math.min(stage, 5)],
+finished: stage >= 5,
+working: stage < 5,
+doneCount: stage,
+replay: () => this.start(),
+stages: list.map((x, i) => {
+const done = i < stage, active = i === stage;
+return {
+n: i + 1, title: x.title, detail: x.detail,
+done: done, active: active, pending: !done && !active, showDetail: done,
+rowStyle: 'min-height: 52px; box-sizing: border-box; padding: 10px 12px; border-radius: 14px; display: flex; align-items: center; gap: 12px; ' + (active ? 'background: #FFFFFF; border: 2px solid #8A66F2; box-shadow: 0 3px 0 #CFC0FF' : done ? 'background: #FFFFFF; border: 2px solid #E6DEFF' : 'background: transparent; border: 2px dashed #DCD2FA')
+};
+})
+};
+}
+}
+</script>
+
+
+</body></html>

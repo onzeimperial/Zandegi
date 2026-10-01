@@ -1,25 +1,98 @@
+"use client";
+
 import Link from "next/link";
-import React from "react";
+import React, { useState } from "react";
+import type { PipelineResult, ScoredChapter } from "@zandegi/ai";
 import { percentageAllowed } from "@zandegi/core";
-import type { PipelineResult } from "@zandegi/ai";
+import { FlowHeader } from "./flow-header";
+
+function Chapter({ chapter, index, open, onToggle }: { chapter: ScoredChapter; index: number; open: boolean; onToggle: () => void }) {
+  const minutes = chapter.steps.reduce((total, step) => total + step.estimatedMinutes, 0);
+  return (
+    <li className="chapter-card">
+      <button type="button" aria-expanded={open} onClick={onToggle}>
+        <span className="d chapter-number">{index + 1}</span>
+        <span className="chapter-head">
+          <span className="name">{chapter.title}</span>
+          <span className="goal">Mini-goal: {chapter.exitCondition}</span>
+        </span>
+        <span className="weeks">{Math.max(1, Math.round(minutes / 60))} h</span>
+      </button>
+      {open && (
+        <div className="chapter-steps">
+          {chapter.steps.map((step) => (
+            <div className="step" key={step.index}>
+              <div>
+                <span className="what">{step.title}</span>
+                <span className="when">{step.estimatedMinutes} min · {step.verification}</span>
+              </div>
+              <span className="d xp">+{step.baseXp} XP</span>
+            </div>
+          ))}
+          <p className="advice">{chapter.steps[0]?.guide.approach}</p>
+        </div>
+      )}
+    </li>
+  );
+}
 
 export function MissionReview({ result }: { result: PipelineResult }) {
   const mission = result.event?.payload.mission;
+  const [openChapter, setOpenChapter] = useState(0);
   if (!mission) return null;
   const metric = percentageAllowed(mission.goalType);
-  return <main className="review">
-    <section className="review-summary">
-      <div className="stack"><div><span className="pill">{mission.goalType} goal</span> <span className="pill">{mission.primaryDomain}</span></div>
-      <h1>Your mission: {mission.title}</h1>
-      <p className="muted">{mission.chapters.length} chapters · built from your real ambition</p>
-      {metric ? <div className="card compact-card"><b>Measurable progress</b><p className="muted small">Your real current and target values will drive this after setup.</p></div> : <div className="card compact-card"><b>Honest progress</b><p className="muted small">Track chapters, evidence and the next action — never a made-up percentage.</p></div>}
-      {result.event?.payload.safety.professionalFrameApplied && <div className="preview-note" role="note"><b>Professional guidance applies.</b><br/>Use this mission to prepare for a qualified professional, not as medical, financial, or legal advice.</div>}
-      <p className="muted small">Planned by Zandegi AI. XP and difficulty come from fixed rules.</p>
-      <p className="preview-note">This generated result is not saved. The example Path screen uses separate demo data, so this mission will not carry over.</p>
-      <div className="row-between"><Link href="/builder" className="button button-secondary">Open local example editor</Link><Link href="/path" className="button button-primary">View example path</Link></div></div>
-    </section>
-    <section className="review-chapters" aria-label="Mission chapters">
-      {mission.chapters.map((chapter, index) => <details className="card" key={chapter.index} open={index === 0}><summary><span className="chapter-number">{index + 1}</span><span><b>{chapter.title}</b><br/><span className="muted small">Mini-goal: {chapter.exitCondition}</span></span></summary><ul>{chapter.steps.map((step) => <li key={step.index}><div className="row-between"><b>{step.title}</b><span className="pill">+{step.baseXp} XP</span></div><span className="muted small">{step.estimatedMinutes} min · {step.verification}</span><p className="small">{step.guide.approach}</p></li>)}</ul></details>)}
-    </section>
-  </main>;
+
+  return (
+    <main className="flow-page">
+      <FlowHeader percent={100} label="3 of 3" />
+
+      <div className="flow-body scroller">
+        <div className="review">
+          <section className="review-summary">
+            <div className="tag-row">
+              <span className="goal-tag metric">{mission.goalType} GOAL</span>
+              <span className="goal-tag metric">{mission.primaryDomain}</span>
+            </div>
+            <h1 className="d">Your mission: {mission.title}</h1>
+            <span className="shape">{mission.chapters.length} chapters · built from your real ambition</span>
+            <p className="sr-only">
+              {metric
+                ? "Measurable progress uses your real current and target values."
+                : "Honest progress tracks chapters, evidence and the next action without a made-up percentage."}
+            </p>
+
+            {result.event?.payload.safety.professionalFrameApplied && (
+              <div className="preview-note" role="note">
+                <b>Professional guidance applies.</b><br />
+                Use this mission to prepare for a qualified professional, not as medical, financial, or legal advice.
+              </div>
+            )}
+
+            <div className="review-actions">
+              <p>Planned by Zandegi AI. XP and difficulty come from fixed rules.</p>
+              <p className="preview-note">This result is not saved and will not carry over. Tweak and Start open clearly labelled local examples.</p>
+              <div className="row">
+                <Link href="/builder" className="d button-tweak">Tweak</Link>
+                <Link href="/path" className="d button-start">Start chapter 1</Link>
+              </div>
+            </div>
+          </section>
+
+          <section className="review-chapters" aria-label="Mission chapters">
+            <ol>
+              {mission.chapters.map((chapter, index) => (
+                <Chapter
+                  key={chapter.index}
+                  chapter={chapter}
+                  index={index}
+                  open={openChapter === index}
+                  onToggle={() => setOpenChapter(openChapter === index ? -1 : index)}
+                />
+              ))}
+            </ol>
+          </section>
+        </div>
+      </div>
+    </main>
+  );
 }

@@ -14,18 +14,23 @@ export function AppShell({ current, children, aside }: { current: string; childr
     <div className="app-shell">
       <aside className="side-nav">
         <Brand />
-        <nav aria-label="Main navigation">
+        <nav aria-label="Main">
           {navigation.map((item) => (
             <Link key={item.href} href={item.href} aria-current={current === item.label ? "page" : undefined}>
               <Icon name={item.icon} /><span>{item.label}</span>
             </Link>
           ))}
         </nav>
-        <Link className="button button-primary new-mission" href="/generate"><Icon name="plus" /> New mission</Link>
+        <Link className="d new-mission" href="/generate">+ New mission</Link>
       </aside>
-      <main className="app-main">{children}</main>
+
+      <main className="app-main">
+        <div className="page-column">{children}</div>
+      </main>
+
       {aside && <aside className="status-aside">{aside}</aside>}
-      <nav className="mobile-nav" aria-label="Main navigation">
+
+      <nav className="mobile-nav" aria-label="Main">
         {navigation.map((item) => (
           <Link key={item.href} href={item.href} aria-current={current === item.label ? "page" : undefined}>
             <Icon name={item.icon} /><span>{item.label}</span>

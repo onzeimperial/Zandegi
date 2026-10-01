@@ -43,3 +43,14 @@ pnpm-debug.log*
 # personal working files (not part of the codebase)
 /Zandegi.xls*
 /Zandegi.xs
+
+# installed agent skills — reproducible from skills-lock.json
+/.agents/skills/
+
+# visual review output — regenerate with scripts/capture-claude-screenshots.cjs,
+# compare-claude-design.cjs and side-by-side.cjs
+/_bmad-output/implementation-artifacts/visual-diffs/
+
+# review scratch from earlier sessions
+/_bmad-output/implementation-artifacts/.review-index-*
+/_bmad-output/implementation-artifacts/*.patch
