@@ -4,6 +4,51 @@ Newest first.
 
 ---
 
+## 2026-10-03 - reproducible supported workspace
+
+**Shipped**
+
+- Aligned the current workspace and CI on Node >=24.15.0 <25, Corepack 0.36.0-selected pnpm
+  12.8.2, and exact direct dependency pins. The material delta is pnpm 12.3.4 -> 12.8.2,
+  TypeScript 5.9.3 ->
+  6.0.3, Next 15.5.25 -> 15.5.27, React/DOM 19.2.8 -> 19.3.0, Anthropic SDK 0.65.0 ->
+  0.131.0, and the previous Zod 3.25.76/4.5.4 split -> one Zod 4.6.5 line.
+- Added the reviewed foundation pins in their owning packages: tRPC 11.19.0 and Inngest 4.21.0
+  in `@zandegi/api`, plus Prisma Client/CLI 7.10.0 in `@zandegi/db`. No routes, jobs, schema, or
+  persistence behavior were added.
+- Replaced the concatenated lockfile with one workspace YAML document. Corepack remains
+  responsible for package-manager selection; `pmOnFail: ignore` prevents pnpm self-management
+  from appending a separate package-manager lock document. Approved only the lifecycle scripts
+  required by the reviewed graph: esbuild, Prisma/engines, and protobufjs.
+- Added the minimal TypeScript 6 CSS-module declaration and changed the AI domain-weight schema
+  to Zod 4's `partialRecord`, preserving the existing sparse-domain behavior.
+
+**Verified**
+
+- A temporary Corepack 0.36.0 installation with an empty `COREPACK_HOME` reported `0.36.0`,
+  prepared pnpm 12.8.2, reported `12.8.2` through `corepack pnpm --version`, and completed
+  `corepack pnpm install --frozen-lockfile` successfully. The local Node 24.11.0 engine warning
+  confirms why supported bootstrap and CI begin at Node 24.15.0.
+- Two clean `pnpm 12.8.2 install --frozen-lockfile` runs succeeded with 515 packages. The
+  lockfile SHA-256 remained
+  `AAE96CF669A7877DACAADEFDFCC974492EF0BB326D6060DEAFC99222B6717358` across the repeat.
+- `pnpm -r typecheck` passes all 10 TypeScript projects under TypeScript 6.0.3.
+- `pnpm test` passes 30 files and 197/197 deterministic tests.
+- `pnpm --filter @zandegi/web build` succeeds on Next 15.5.27 and emits all expected routes.
+- Every external direct dependency is exact, the workspace lock contains one Zod version, and
+  `legacy/package.json` plus `legacy/package-lock.json` remain unchanged and absent from the pnpm
+  graph.
+
+**Known risk / remaining evidence**
+
+- Node 24.11.0's bundled Corepack 0.34.0 cannot launch pnpm 12 because it still expects
+  `bin/pnpm.cjs`. Bootstrap therefore installs the reviewed Corepack 0.36.0 explicitly and the
+  Node engine/CI pin starts at 24.15.0, Corepack 0.36.0's supported Node 24 floor. On machines
+  where Node is installed under a protected system directory, the documented global Corepack
+  installation and shim enablement may require an elevated shell.
+
+---
+
 ## 2026-09-25 - current generation foundations repair
 
 **Shipped**

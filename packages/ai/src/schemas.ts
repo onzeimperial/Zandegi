@@ -36,7 +36,7 @@ export type InterpretationOutput = z.infer<typeof interpretationOutputSchema>;
 // ── Stage 2: Resolve ───────────────────────────────────────
 
 export const resolveClassificationSchema = z.object({
-  domains: z.record(domainEnum, z.number().min(0).max(1)),
+  domains: z.partialRecord(domainEnum, z.number().min(0).max(1)),
   effortBand: effortBandEnum,
   safetyClass: safetyClassEnum,
 });

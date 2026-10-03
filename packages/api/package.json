@@ -10,5 +10,9 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@trpc/server": "11.19.0",
+    "inngest": "4.21.0"
   }
 }

@@ -2,7 +2,14 @@ packages:
   - "apps/*"
   - "packages/*"
 
+# Corepack selects the exact package manager from package.json. Do not let pnpm
+# self-manage that pin, which would add a separate package-manager lock document.
+pmOnFail: ignore
+
 # esbuild (pulled in transitively by vitest) needs its postinstall to fetch a
 # platform binary. It is a trusted, widely-used package.
 allowBuilds:
+  "@prisma/engines": true
   esbuild: true
+  prisma: true
+  protobufjs: true

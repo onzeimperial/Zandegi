@@ -38,11 +38,18 @@ legacy/         The pre-monorepo prototype, kept for reference. Not part of the 
 
 ```powershell
 # from repo root
+node --version                    # Node >=24.15.0 and <25
+npm install --global corepack@0.36.0
+corepack enable
+corepack prepare pnpm@12.8.2 --activate
 pnpm install
 pnpm --filter @zandegi/web dev    # http://localhost:3000
 pnpm -r typecheck
 pnpm test
 ```
+
+The current pnpm workspace contains only `apps/*` and `packages/*`. The `legacy/`
+directory is an independent npm project and is not installed or modified by these commands.
 
 ## Status
 
