@@ -1,0 +1,109 @@
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created, ready for development
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when its first story starts (via build's sprint sync)
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates the next story after the previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; the status view surfaces open ones
+generated: 10-03-2026 22:03
+last_updated: 10-03-2026 22:03
+project: Zandegi
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+development_status:
+  epic-1: in-progress
+  1-1-establish-a-reproducible-supported-workspace: in-progress
+  1-2-add-verification-and-repository-guardrails: backlog
+  1-3-put-mission-generation-behind-the-api-boundary: backlog
+  1-4-define-goal-pursuit-mission-and-stream-contracts: backlog
+  1-5-create-the-pursuit-authoring-and-validation-framework: backlog
+  1-6-author-the-mind-pursuit-catalog: backlog
+  1-7-author-the-edge-pursuit-catalog: backlog
+  1-8-author-the-coin-pursuit-catalog: backlog
+  1-9-author-the-body-pursuit-catalog: backlog
+  1-10-author-the-grit-pursuit-catalog: backlog
+  1-11-author-the-craft-pursuit-catalog: backlog
+  1-12-author-the-bond-pursuit-catalog: backlog
+  1-13-author-the-world-pursuit-catalog: backlog
+  1-14-version-and-operate-the-pursuit-catalog: backlog
+  1-15-resolve-goals-to-pursuits-or-a-safe-generic-scaffold: backlog
+  1-16-create-a-secure-guest-and-persist-their-goal: backlog
+  1-17-enforce-knowledge-freshness-and-generation-safety: backlog
+  1-18-generate-a-complete-validated-mission-draft: backlog
+  1-19-stream-and-persist-one-accepted-mission: backlog
+  epic-1-retrospective: optional
+
+  epic-2: backlog
+  2-1-publish-the-versioned-progression-and-ledger-contracts: backlog
+  2-2-persist-atomic-ledger-state-through-a-unit-of-work: backlog
+  2-3-execute-registered-tool-state-transitions: backlog
+  2-4-store-and-verify-private-evidence: backlog
+  2-5-complete-a-step-and-receive-an-atomic-award: backlog
+  2-6-promote-reverse-and-correct-progression-safely: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-schedule-mission-steps-into-internal-blocks: backlog
+  3-2-recover-missed-work-and-adapt-future-step-size: backlog
+  epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-claim-guest-progress-into-a-clerk-account: backlog
+  4-2-export-personal-account-data: backlog
+  4-3-delete-personal-data-without-breaking-ledger-integrity: backlog
+  epic-4-retrospective: optional
+
+  epic-5: backlog
+  5-1-deliver-outbox-messages-reliably-through-inngest: backlog
+  5-2-review-content-safety-evidence-and-delivery-failures: backlog
+  5-3-rebuild-projections-and-quarantine-corrupt-streams: backlog
+  5-4-establish-the-production-operations-envelope: backlog
+  epic-5-retrospective: optional
+
+  epic-6: backlog
+  6-1-implement-the-accessible-web-design-foundation: backlog
+  6-2-deliver-guest-goal-intake-and-validated-mission-reveal: backlog
+  6-3-deliver-mission-schedule-tool-and-evidence-workflows: backlog
+  6-4-deliver-progression-account-claim-export-and-deletion-contro: backlog
+  6-5-prove-the-complete-web-mvp-journey: backlog
+  epic-6-retrospective: optional
+
+# Readiness concerns accepted during sprint planning. Resolve each gate before its
+# named story begins; earlier backlog work may proceed.
+action_items:
+  - epic: 1
+    action: "Approve guest-retention duration, renewal activity, warning timing, and evidence-cleanup rules before Story 1.16"
+    owner: "Product"
+    status: open
+  - epic: 2
+    action: "Approve neutral rewards, authored reward bands, caps, level curve, and provisional-review thresholds before Story 2.1"
+    owner: "Product"
+    status: open
+  - epic: 6
+    action: "Create and approve the BMad DESIGN.md and EXPERIENCE.md UX contract before Story 6.1"
+    owner: "UX"
+    status: open

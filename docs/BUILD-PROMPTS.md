@@ -1,335 +1,267 @@
-# Zandegi — Claude Code build prompts
+# Zandegi MVP Build Prompts
 
-Ten sessions. Run them in order. Each block between the `---PROMPT---` markers is copied verbatim into
-Claude Code. Do not start a session until the previous session's exit criteria are all true.
+These prompts implement the reconciled MVP in dependency order. Run one phase at a time and do not begin the next phase until every exit criterion is satisfied.
 
-**Before session 1:** copy `CLAUDE.md` to your repo root and `SPEC.md` to `docs/SPEC.md`. Commit both.
+## Source-of-truth order
 
----
+Every implementation phase must read these sources in this order:
 
-## Session 1 — Prove the generation is good
+1. `_bmad-output/specs/spec-zandegi/SPEC.md` and every listed companion.
+2. `_bmad-output/planning-artifacts/architecture/architecture-Zandegi-2026-09-25/ARCHITECTURE-SPINE.md`.
+3. `_bmad-output/planning-artifacts/architecture/architecture-Zandegi-2026-09-25/LEGACY-EXTRACTION-AND-REPAIR-PLAN.md`.
+4. `CLAUDE.md` for repository working rules.
+5. The current phase below.
 
-**Why first:** everything else is worthless if the missions are generic. This is the only unknown risk
-that can kill the product, and it is cheap to test.
+If an older document, current implementation, or legacy file conflicts with those sources, stop relying on it. Record the discrepancy in `docs/BUILD-LOG.md`. Never import from `legacy/`.
 
-```
----PROMPT---
-Read CLAUDE.md and docs/SPEC.md in full before doing anything. Then read the existing
-packages/core exports and the zandegi-spike harness.
+The canonical spec controls product scope and observable behaviour. The architecture spine controls technical structure and wins any technical incompatibility.
 
-Goal this session: prove Zandegi can generate genuinely good missions across the full
-breadth of human goals, or find out exactly where it fails.
+## Phase 0 — Repair the foundation
 
-1. Extend the existing spike harness to run 60 goals: 8 per domain plus 4 adversarial.
-   Use real goals a real person would type, not clean ones. Include misspellings,
-   vagueness ("be less of a mess"), impossible scope ("become a billionaire by March"),
-   hyper-local specificity ("get into Melbourne High"), and volatile fact dependence
-   ("apply for a 2027 Commonwealth Supported Place").
-2. Implement the full 9-stage pipeline from SPEC Part II §2.2 in packages/ai. Stages 1-6
-   and 8 use the model; stage 7 calls packages/core and must not touch the model.
-3. Score every output against a rubric I can inspect. Score these axes 1-5:
-   specificity (could this only be for this goal?), actionability (can a step be done
-   today without further research?), grounding (are facts sourced and dated?),
-   sequencing (do chapters build?), tool fit (are attached tools actually the right
-   ones?), and honesty (does it avoid fake precision?).
-4. Output a scored HTML review page grouped by domain, with the failures at the top,
-   the prompt that produced each output, and the rubric scores visible.
-5. Do not build any UI, database work, or infrastructure this session.
+```text
+Read the canonical spec, all companions, the finalized architecture spine, the repair
+plan, CLAUDE.md, and the existing BUILD-LOG.md before editing.
 
-Exit criteria: I can open the HTML page and read 60 missions. Mean specificity and
-actionability are both ≥ 4.0. Zero ungrounded hard factual claims survive the validator.
-Write docs/BUILD-LOG.md with the failure patterns you found and your proposed prompt fixes.
----PROMPT---
-```
+Goal: make a fresh checkout reproducible and establish one honest verification command.
 
-**Do not proceed to session 2 until you have personally read 20 of those missions and would use them.**
-If they're mediocre, iterate on session 1. This is the whole product.
+1. Repair Corepack and pin pnpm 12.8.2. Replace the malformed multi-document lockfile
+   with one reviewed lockfile; report the dependency delta.
+2. Align engines, CI, and local tooling on Node 24 LTS.
+3. Reconcile exact package versions with the architecture target: Next 15.5.27,
+   React/DOM 19.3.0, TypeScript 6.0.3 plus compatible typescript-eslint v8,
+   Tailwind 4.3.3, Zod 4.6.5 workspace-wide, Prisma 7.10.x, tRPC 11.19.0,
+   Anthropic SDK 0.131.0, and Inngest 4.21.0. Pin exact reviewed installs.
+4. Replace legacy SQLite and NextAuth variables in .env.example. Leave every secret
+   example blank and document local, preview, and production variables.
+5. Remove web imports of AI pipeline types and direct web-to-AI orchestration. Introduce
+   the API use-case/client seam without implementing the full feature.
+6. Remove model-authored XP fields and fake persisted events/dates from current AI and
+   web contracts. Do not invent the replacement policy in this phase.
+7. Add an import-boundary check that rejects current imports from legacy/.
+8. Make one root verification command run lint, all type checks, unit tests, and
+   production builds without global tools.
+9. Correct BUILD-LOG.md so scaffolded code is not described as production-ready.
 
----
-
-## Session 2 — Seed the goal universe
-
-```
----PROMPT---
-Read CLAUDE.md, docs/SPEC.md Part I, and docs/BUILD-LOG.md.
-
-Goal: author the full Pursuit catalog — all 140 slugs listed in SPEC §1.2.
-
-1. Define the Pursuit type in packages/core exactly as specified in SPEC §1.2, with
-   Zod schemas and full type tests.
-2. Author every one of the 140 Pursuits as seed data in packages/db/seed/pursuits/,
-   one TypeScript file per domain. Each Pursuit needs: real domain weights summing to 1,
-   the correct goalType, 3-7 default chapter templates with real exit conditions, a
-   populated toolKit, verification methods, knowledgeSlots for anything time-sensitive,
-   a seeded difficultyPrior, and at least 3 antiPatterns. Set safetyClass correctly —
-   check SPEC Part X for which pursuits are CLINICAL.
-3. A Pursuit with an empty toolKit or a placeholder chapter fails review. Write a
-   validation script `pnpm validate:pursuits` that fails CI on stubs, missing exit
-   conditions, or domain weights that don't sum to 1.
-4. Implement the resolver: free text → Pursuit match with confidence. Below 0.62,
-   fall through to the generic scaffold and create a PursuitCandidate.
-5. Write a test suite of 200 goal strings mapped to expected Pursuits. Target ≥ 85%
-   top-1 accuracy, ≥ 95% top-3.
-
-Exit criteria: `pnpm validate:pursuits` passes on all 140. Resolver accuracy hits target.
-Update BUILD-LOG.md.
----PROMPT---
+Exit criteria: clean install from the committed lockfile; canonical verification passes;
+production builds pass on Node 24; no nonblank example secret; no current-to-legacy
+import; web no longer imports AI types or orchestrates AI directly.
 ```
 
----
+## Phase 1 — Freeze pure contracts and progression rules
 
-## Session 3 — The unbreakable ledger
+```text
+Prerequisite: Phase 0 is green.
 
-```
----PROMPT---
-Read CLAUDE.md and docs/SPEC.md Parts IV and IX.
+Goal: publish the pure, versioned contracts every later package implements.
 
-Goal: the event ledger, projections, and economy must be provably correct. This is the
-foundation everything stands on and it must never need rewriting.
+1. In core, define exact Zod 4 schemas for ActorContext, IdempotentCommand,
+   LedgerEnvelopeV1, event payloads, aggregate sequence, typed compensation,
+   OutboxMessageV1, VerifiedFact, evidence lifecycle, Pursuit, Mission, generation
+   stream frames, KnowledgeSnapshot, FreshnessDecision, and safe client wire types.
+2. Define AwardEvidenceKind exhaustively as SELF | TIMER | ARTIFACT | METRIC |
+   INTEGRATION. Map every UI/tool action to exactly one kind.
+3. Implement the approved versioned progression policy only after the two product
+   questions in SPEC.md are answered. Model estimates cannot enter its inputs.
+4. Implement pure folds, pure shape-only upcasters, quarantine behaviour, and typed
+   promotion/reversal for provisional awards.
+5. Publish canonical JSON fixtures for N and N-1. Dates are ISO UTC strings, numbers
+   are safe integers, and absent versus null is explicit.
 
-1. Full Prisma schema per SPEC Part IX. Migrations named descriptively.
-2. Implement every event type. Event is strictly append-only — enforce with a Postgres
-   trigger rejecting UPDATE and DELETE on that table, not just application code.
-3. Implement projections: Character, DomainStat, Streak, Wallet. Each is a pure fold
-   over events in packages/core.
-4. Build `pnpm rebuild:projections --user <id>` and `--all`. Write a property test:
-   for a random event sequence, incremental projection and full replay produce byte-identical
-   state. This test is non-negotiable.
-5. Implement packages/economy exactly per SPEC §4.1-4.4: XP formula with every multiplier,
-   daily soft cap and per-pursuit cap, minimum-interval enforcement, level curve, rank
-   thresholds, rarity percentile job, both currencies. Every tunable constant lives in
-   packages/economy/tuning.ts with a comment explaining its intent.
-6. Implement the trust score and the provisional-XP path.
-7. Tests: at least 60 covering cap boundaries, streak edges (timezone rollover at 04:00
-   local, DST, travel across timezones), the balance multiplier picking the correct weakest
-   domain, rarity at tier boundaries, and compensating-event corrections.
-
-Exit criteria: replay-equivalence property test passes over 1,000 random sequences. The
-append-only trigger is verified by a test that tries to UPDATE and expects a failure.
-Update BUILD-LOG.md.
----PROMPT---
+Exit criteria: golden fixtures validate; replay order uses aggregate sequence rather
+than time; upcasters are deterministic and side-effect-free; duplicate correction,
+changed-payload idempotency, and unknown-version tests pass; no AI or economy module
+owns progression logic.
 ```
 
----
+## Phase 2 — Economy policy and Pursuit catalog
 
-## Session 4 — The loop
+```text
+Prerequisite: Phase 1 contracts are accepted.
 
-```
----PROMPT---
-Read CLAUDE.md and docs/SPEC.md Parts II, III, VII.
+Goal: implement economy boundaries and validate the complete seed catalog.
 
-Goal: a person can state a goal, get a mission, schedule it, do a step, and earn XP.
-End to end. Ugly is fine this session — working is not optional.
+1. In economy, implement Shards, Crowns, commerce, entitlement, and economy-tuning
+   policy only. Add invariant tests proving money, subscriptions, entitlements,
+   purchased currency, and future boosts cannot alter XP, streaks, rank, or competition.
+2. Author all 140 Pursuits listed in pursuit-catalog.md against the current schemas.
+   Every Pursuit needs meaningful Chapters and exits, domain weights, goal type,
+   effort band, applicable tools, evidence kinds, knowledge slots, safety class, and
+   at least three anti-patterns.
+3. Implement validate:pursuits for schema, uniqueness, weight sum, coverage, source,
+   safety, exit-condition, and placeholder checks.
+4. Implement resolver tests with messy, vague, impossible, local, safety-sensitive,
+   and time-sensitive goals. Below the approved threshold, return the generic scaffold
+   and a candidate; do not weaken safety or grounding.
 
-1. tRPC routers in packages/api: goals, missions, steps, tools, blocks, character,
-   events. Auth via Clerk on every procedure. One happy-path and one auth-failure test each.
-2. Wire the session-1 pipeline behind `missions.generate`, streaming so the client
-   receives chapters as they land.
-3. Implement the Tool Registry runtimes in packages/tools for the first six kinds:
-   TRACKER, TIMER, CHECKLIST, TEMPLATE, CALCULATOR, CAPTURE. Each emits ledger events.
-4. Implement the scheduler per SPEC Part VII: steps to blocks, availability windows,
-   energy profile, recovery gaps for Body pursuits, deadline pressure. Missed blocks
-   auto-offer a new slot within 48 hours — never a penalty.
-5. Google Calendar two-way sync plus ICS export for Apple and Outlook.
-6. Minimal unstyled Next.js screens to exercise all of it. Do not spend time on design
-   this session; that is session 5.
-
-Exit criteria: from a clean database I can sign up, type "run a half marathon in April",
-get a real mission, see blocks land in Google Calendar, complete a timed session, and
-watch my Body XP and level change. Update BUILD-LOG.md.
----PROMPT---
+Exit criteria: economy isolation tests pass; all 140 Pursuits pass validation with no
+stubs; resolver quality is reported by domain and failure class; every legacy catalog
+item used is recorded in the legacy inventory as extracted or rewritten.
 ```
 
----
+## Phase 3 — PostgreSQL, ledger, Unit of Work, and outbox
 
-## Session 5 — Make it beautiful
+```text
+Prerequisites: Phases 1 and 2 are green, and the guest-retention question in SPEC.md is resolved.
 
-```
----PROMPT---
-Read CLAUDE.md, docs/SPEC.md Part VIII, and the frontend-design guidance.
+Goal: make trusted progression atomic, replayable, and safe under concurrency.
 
-Goal: Zandegi should look like a game people want to be seen using, not a productivity app.
+1. Configure Prisma 7 using prisma.config.ts, explicit generated-client output,
+   @prisma/adapter-pg and pg. Use Neon's pooled runtime URL with bounded pool size,
+   idle timeout, and connection timeout. Migrations never run in request handlers.
+2. Model relational content separately from the progression/economy ledger. Include
+   principal aliases, command idempotency records, award records, immediate projections,
+   evidence metadata, deletion tombstones, and the outbox.
+3. Implement db.UnitOfWork.run with transaction-scoped repositories. Prisma types may
+   not escape db and repositories may not open autonomous nested transactions.
+4. Enforce event ID, aggregate sequence, command uniqueness, request hash, and one-time
+   correction in PostgreSQL. Use explicit locks/version checks and bounded retries.
+5. Atomically append facts, write awards, update allowed projections, and enqueue the
+   outbox. Provisional awards update pending state only.
+6. Build projection replay with per-aggregate quarantine, checkpoint/catch-up, and an
+   authorized swap path.
+7. Use expand-migrate-contract and test the empty schema plus the previous compatible
+   application version.
 
-1. Write docs/DESIGN.md first: the full token system (colour, type scale, spacing, radii,
-   elevation, motion curves), component inventory, and the voice rules. Show it to me
-   before building.
-2. Build packages/ui on the tokens. Restyle shadcn primitives; do not ship them stock.
-3. Build the eight-pointed life star as the signature component — animated, responsive,
-   shareable as an image, and usable as the loading state. This is the one bold thing;
-   keep everything else disciplined around it.
-4. Screens: Today (mobile home), Character, Mission detail with the guide sections,
-   Mission generation reveal, Calendar, Crew, Shop, Season track, Profile.
-5. The three orchestrated motion moments from SPEC Part VIII and nothing else.
-   prefers-reduced-motion gets still equivalents.
-6. Marketing site at /: hero, live generation demo (type a goal, watch it build — this
-   is the conversion moment), the eight domains, pricing, free trial page, social proof
-   slots. Purple and white. White Z on purple as the mark.
-7. Every screen meets the definition of done in CLAUDE.md §6.
-
-Exit criteria: screenshots of all screens at 375px and 1440px, light and dark. Lighthouse
-accessibility ≥ 95 on the marketing site. Update BUILD-LOG.md.
----PROMPT---
+Exit criteria: real-Postgres tests cover simultaneous completions/spends, rollback,
+changed-payload retry, correction, provisional promotion/reversal, malformed append,
+N/N-1 compatibility, quarantine, and byte-equivalent incremental versus rebuilt state.
 ```
 
----
+## Phase 4 — API, guest identity, and safe Mission generation
 
-## Session 6 — Take money
+```text
+Prerequisite: Phase 3 is green.
 
-```
----PROMPT---
-Read CLAUDE.md and docs/SPEC.md Part V in full.
+Goal: expose the application boundary for value-before-signup Mission generation.
 
-Goal: Zandegi can charge money, and the economy is instrumented well enough to tune.
+1. Implement API use cases for guest creation, goal intake, Mission generation, reads,
+   completion, account claim, export, and deletion. Every use case receives ActorContext.
+2. Implement secure guest tokens and cookies, origin/CSRF checks, rotation, expiry,
+   canonical principal aliases, and an idempotent Clerk claim. Test new-account,
+   existing-account, already-claimed, expired, and in-flight-command races.
+3. Implement the request-scoped AI pipeline from product-rules.md. API supplies identity,
+   clock, knowledge snapshot, safety policy, deadlines, IDs, persistence, and outbox.
+4. Publish @zandegi/api/client and versioned tRPC/SSE contracts. Only individually
+   validated Chapter previews stream; exactly one accepted terminal result persists.
+5. Abort before acceptance starts. Once acceptance begins, finish it and let retry with
+   the same key discover the committed Mission.
+6. Add authorization, rate limits, correlation IDs, safe errors, content redaction, and
+   application deadlines below Vercel limits.
 
-1. Stripe on web: Plus and Prime, monthly and annual, AUD. Customer portal. Webhooks
-   idempotent and replay-safe. Subscription state is a projection like everything else.
-2. Entitlements service in packages/economy — a single `can(user, capability)` function.
-   Every gate in the app calls it. No scattered tier checks.
-3. Implement all five paywall moments from SPEC §5.4 and nothing else. Hard-code the
-   rule that no purchase prompt renders within 60 seconds of a streak loss, mission
-   abandonment, or error state — write a test proving it.
-4. Trial variants behind a feature flag: 7-day card-required annual, 3-day card-less
-   monthly. Wire both for A/B.
-5. Shard packs, Crowns, the daily shop with real 24h Redis-backed rotation, and direct
-   cosmetic purchase. Fixed-value only — no randomised paid rewards anywhere.
-6. Season infrastructure: Season, SeasonProgress, free and premium tracks, tier
-   advancement on seasonal XP, claim flow. Seed Season 1 "First Light" with all 150 tiers.
-7. Crew Boost subscription and gifting.
-8. Analytics per docs/ANALYTICS.md — write that file, covering every metric in SPEC §5.5.
-   Build an internal /admin/economy dashboard showing faucets, sinks, and the
-   Shard-earned-to-Shard-spent ratio.
-
-Exit criteria: I can buy Plus in test mode, my entitlements change, I can buy a skin, and
-the economy dashboard shows the transaction. Webhook replay is proven safe by a test.
-Update BUILD-LOG.md.
----PROMPT---
+Exit criteria: contract fixtures decode in a minimal web client; generation tests cover
+unsafe/stale/ungrounded output, malformed frames, timeout, disconnect, retry, duplicate
+terminal frames, and commit races; guest claim never loses or duplicates progress.
 ```
 
----
+## Phase 5 — Tools, evidence, and internal scheduling
 
-## Session 7 — The social layer
+```text
+Prerequisite: Phase 4 is green.
 
-```
----PROMPT---
-Read CLAUDE.md and docs/SPEC.md Part VI.
+Goal: support trusted action without external integrations.
 
-Goal: crews, feed, duels, leaderboards. Crews are the retention mechanic — treat them as
-core, not a bonus.
+1. Implement the MVP tool transitions selected by approved stories. Tools return state
+   and candidate facts; API loads/saves versioned state and creates server attestations.
+2. Implement private Vercel Blob through the storage port. Use one-time upload authority,
+   authenticated reads or short-lived signed delivery, a narrow allowlist, size limits,
+   MIME sniffing, hash verification, quotas, and ownership checks.
+3. Implement pending, uploaded, scanned/restricted-check, verified/rejected, deleting,
+   and deleted evidence states plus confirmation timeout, orphan sweep, and deletion retry.
+4. Implement the internal scheduler for availability, energy preference, recovery gaps,
+   deadline pressure, and non-punitive rescheduling within 48 hours.
+5. Complete only through the API command path. Opening a tool or uploading a file is not
+   itself rewardable.
 
-1. Crews up to 12, invite links, roles, crew level from member seasonal XP, crew banner.
-2. Weekly crew quests: collective XP target, Shard pot split on success. Generated
-   Monday 04:00 local to the crew's modal timezone, sized to the crew's trailing average
-   so it is achievable but not trivial.
-3. Activity feed with reactions and preset nudges. No free-text comments in v1.
-4. Duels: 1v1, 7-day XP race, mutual opt-in, Shard pot, permanent duel record.
-5. Leaderboards: crew, friends, global-by-rank-tier, per-domain. Weekly competitive board
-   and all-time prestige board. Provisional-XP users excluded. Redis-cached.
-6. Privacy per SPEC Part VI and Part X. Under-18 accounts: crew-only, no global board,
-   no shop. Verify this with tests, not just UI conditionals.
-7. Push and email notifications with real preference granularity and a hard daily ceiling.
-   Notifications about friends outperform notifications about yourself — prioritise those.
-
-Exit criteria: two test accounts can crew up, run a quest, duel, and appear on a board.
-Under-18 restrictions verified by test. Update BUILD-LOG.md.
----PROMPT---
+Exit criteria: ownership, forged fact, replay, concurrent transition, expired token,
+wrong MIME, oversized file, missing/replaced object, quota, orphan cleanup, deletion,
+and log-redaction tests pass; no external calendar or provider code exists.
 ```
 
----
+## Phase 6 — Async reliability, erasure, and operations
 
-## Session 8 — Verification and integrations
+```text
+Prerequisite: Phase 5 is green.
 
-```
----PROMPT---
-Read CLAUDE.md and docs/SPEC.md Part III §3.2 and Part IV anti-farming.
+Goal: make side effects and recovery dependable enough for production.
 
-Goal: XP means something because effort is actually verified.
+1. Build the Inngest cron-triggered outbox relay with leased SKIP LOCKED batches,
+   stable message/dedupe IDs, acknowledge-after-acceptance, retry/backoff, dead-letter,
+   operator replay, and oldest-undelivered-age monitoring.
+2. Verify Inngest signatures and least-privilege system actors. Keep Postgres-backed
+   idempotency beyond provider dedupe windows.
+3. Set the Vercel serve-route maxDuration and Inngest checkpoint runtime to 60-80% of it.
+4. Implement the retryable export/deletion workflow across Clerk, PostgreSQL, Blob,
+   Redis, queued jobs, projections, telemetry, and backup expiry.
+5. Configure Vercel syd1, Neon ap-southeast-2, Upstash Sydney primary, Blob Sydney,
+   and separate environment identities. Refuse preview-to-production combinations.
+6. Define logs, metrics, alerts, budget limits, critical-loop SLOs, RPO/RTO, backup
+   restore, projection rebuild, deployment rollback, and incident replay in RUNBOOK.md.
 
-1. Integration framework in packages/integrations: OAuth, token refresh, scoped
-   permissions, revocation, sync jobs via Inngest, graceful degradation when a provider
-   is down.
-2. Ship: Apple Health, Google Fit, Strava, GitHub, Google Calendar, Screen Time /
-   Digital Wellbeing. Basiq behind a flag.
-3. ARTIFACT verification: photo and file capture with EXIF timestamp checks, stored in
-   R2 or S3, with a review queue for flagged submissions.
-4. Wire the verification multipliers into the XP path and prove each tier pays correctly.
-5. Anti-farming enforcement server-side, all four rules from SPEC §4.1, each with a test
-   that tries to cheat and fails.
-6. Trust score computation and the provisional-XP path end to end.
-7. Health and financial data encrypted at rest with a separate key, excluded from LLM
-   prompts in raw form, independently deletable.
-
-Exit criteria: a Strava run appears as a completed step with 1.4× XP. A scripted farming
-attempt earns nothing. Update BUILD-LOG.md.
----PROMPT---
+Exit criteria: delivery-before-ack failure, lease recovery, duplicate delivery, poison
+message, job-auth failure, deletion retry, backup restore, projection rebuild, and
+environment-isolation drills pass in a production-like environment.
 ```
 
----
+## Phase 7 — Web MVP experience
 
-## Session 9 — Mobile
+```text
+Prerequisite: Phase 6 is green.
 
-```
----PROMPT---
-Read CLAUDE.md and docs/SPEC.md.
+Goal: deliver the complete MVP journey on web without moving rules into the UI.
 
-Goal: an Expo app sharing @zandegi/core and the tRPC client. Mobile is the daily loop;
-web is discovery, planning, and depth.
+1. Use the BMad UX workflow to create DESIGN.md and EXPERIENCE.md before UI construction.
+   Preserve the product-rules presentation commitments.
+2. Build web screens through @zandegi/api/client and client-safe core contracts only:
+   landing/goal intake, validated Mission reveal, Mission detail, Today/schedule,
+   eligible tools/evidence, Character/progression, account claim, export, and deletion.
+3. Show progression as pending until server acceptance. Do not display a generated XP
+   promise or a generic percentage for OUTCOME goals.
+4. Use platform-neutral tokens and web primitives from ui. Keep screens and controls
+   web-native; do not pre-build a mobile abstraction.
+5. Meet keyboard, WCAG AA, reduced-motion, stable loading/error, light/dark, and 375px
+   requirements. Gold appears only on earned value.
 
-1. Expo app with Clerk auth, tRPC client, and the shared token system from packages/ui
-   ported to React Native.
-2. Screens: Today, Mission detail, quick-complete, Character, Crew feed, Shop, Season.
-3. Native: push notifications, camera for ARTIFACT capture, HealthKit and Health Connect,
-   widgets showing streak and today's blocks, Live Activity for an active TIMER session.
-4. RevenueCat wrapping StoreKit and Play Billing. Entitlements reconcile with the web
-   subscription state — one source of truth, not two.
-5. Offline: queue completion events locally, sync on reconnect, resolve conflicts by
-   `occurredAt`.
-6. Under-18 accounts must not see the shop on mobile either — verify.
-
-Exit criteria: TestFlight and internal Play track builds installed and running the full
-loop offline and online. Update BUILD-LOG.md.
----PROMPT---
+Exit criteria: the Postgres-backed guest -> API -> Mission -> completion -> ledger,
+award, projections, outbox -> replay -> web decode slice passes; screenshots and manual
+checks cover 375px and desktop, light/dark, keyboard, reduced motion, and failure states.
 ```
 
----
+## Phase 8 — MVP release gate
 
-## Session 10 — Launch readiness
+```text
+Prerequisite: Phase 7 is green.
 
-```
----PROMPT---
-Read CLAUDE.md, docs/SPEC.md Part X, and docs/BUILD-LOG.md in full.
+Goal: prove the defined MVP is safe, recoverable, affordable, and deployable.
 
-Goal: ship-ready.
+1. Run adversarial safety tests for clinical, eating-risk, self-harm-adjacent,
+   financial, legal, age, guest-claim, evidence, and prompt-injection boundaries.
+2. Run concurrency, idempotency, replay, compensation, rolling-version, deletion,
+   outbox, backup/restore, and environment-isolation suites.
+3. Measure validated Mission p50/p95, critical-loop latency/availability, and inference,
+   database, job, cache, and Blob cost. Configure alerts and budgets from evidence.
+4. Test a clean deploy and rollback using expand-migrate-contract compatibility.
+5. Complete legal/privacy review for the actual MVP data, age handling, export, deletion,
+   evidence, and AI usage. Do not claim regulated or professional services.
+6. Reconcile BUILD-LOG.md, the legacy inventory, the spec, and the architecture so no
+   scaffold, deferred capability, or unresolved blocker is described as shipped.
 
-1. Safety audit: walk every CLINICAL pursuit and every guardrail in SPEC Part X. Write
-   an adversarial test suite that tries to make Zandegi give medical, financial, or
-   legal advice, set a dangerous calorie or weight-loss target, or generate a
-   self-harm-adjacent mission. Every attempt must fail safely.
-2. Load: 10,000 concurrent users, generation queue under burst, leaderboard reads,
-   season tier claims at reset. Fix what breaks.
-3. Cost model: per-user monthly inference cost at each tier. If Free-tier inference cost
-   exceeds A$0.40/user/month, propose caching, model routing, or limit changes — do not
-   silently ship an unprofitable free tier.
-4. Legal surfaces: terms, privacy policy, AU Consumer Law refunds, subscription
-   disclosures for both stores, data export and deletion.
-5. Onboarding polish: measure time-to-first-XP and get p50 under 180 seconds.
-6. Seed the SACify Classroom bundle: teacher dashboard, class crews, safe mode.
-7. Write docs/RUNBOOK.md: deploys, rollbacks, projection rebuild, season rollover,
-   incident response.
-
-Exit criteria: adversarial safety suite fully green, load targets met, cost model
-documented, RUNBOOK complete.
----PROMPT---
+Exit criteria: canonical verification and all production gates pass; both SPEC open
+questions are resolved; RUNBOOK.md is exercised; no MVP flow depends on mobile, billing,
+social features, or an external integration.
 ```
 
----
+## Explicitly deferred
 
-## Standing rules for every session
+Do not add these to an MVP phase without an approved spec update: mobile/offline, billing/subscriptions, shops/currency purchases, seasons, crews, feeds, duels, leaderboards, schools, referrals, health/fitness/GitHub/banking/screen-time/music integrations, or external calendar sync.
 
-Paste this at the end of any session prompt if Claude Code starts drifting:
+## Standing implementation rules
 
-```
-Reminder: read CLAUDE.md. Do not build outside this session's scope. Do not implement
-exam-specific primitives in core. Do not let money buy progression. Do not display a
-percentage for an OUTCOME goal. Do not let the model assign any number that affects XP,
-rarity, or rank. Post your plan and file list before writing code.
+```text
+Read the canonical spec and architecture before editing. Stay inside the current phase.
+Do not import legacy code. Do not let a model, payment, subscription, entitlement,
+purchased currency, or mere tool use influence progression. Do not trust client totals,
+timestamps, facts, ownership, or authorization. Do not expose raw model output. Do not
+store personal content in the immutable ledger. Do not add deferred integrations.
+Post the plan, affected architecture decisions, and file list before writing code; end
+with the canonical verification result and any remaining mismatch in BUILD-LOG.md.
 ```
