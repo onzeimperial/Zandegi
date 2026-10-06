@@ -215,7 +215,8 @@ export async function POST(req: Request) {
         const generation = generateMission(
           input,
           (event) => {
-            if (!abortController.signal.aborted) send({ type: "progress", event: publicProgress(event) });
+            if (!abortController.signal.aborted)
+              send({ type: "progress", event: publicProgress(event) });
           },
           { signal: abortController.signal },
         );

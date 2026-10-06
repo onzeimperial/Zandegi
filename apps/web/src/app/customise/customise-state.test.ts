@@ -10,16 +10,26 @@ describe("local character customiser", () => {
   });
 
   it("refuses locked swatches and out-of-range indexes", () => {
-    expect(customiseReducer(initialCustomiseState, { type: "select", tab: "hoodie", index: 5 })).toBe(initialCustomiseState);
-    expect(customiseReducer(initialCustomiseState, { type: "select", tab: "shoes", index: 3 })).toBe(initialCustomiseState);
-    expect(customiseReducer(initialCustomiseState, { type: "select", tab: "skin", index: 99 })).toBe(initialCustomiseState);
+    expect(
+      customiseReducer(initialCustomiseState, { type: "select", tab: "hoodie", index: 5 }),
+    ).toBe(initialCustomiseState);
+    expect(
+      customiseReducer(initialCustomiseState, { type: "select", tab: "shoes", index: 3 }),
+    ).toBe(initialCustomiseState);
+    expect(
+      customiseReducer(initialCustomiseState, { type: "select", tab: "skin", index: 99 }),
+    ).toBe(initialCustomiseState);
   });
 
   it("toggles an unlocked extra on and off, and never a locked one", () => {
     const on = customiseReducer(initialCustomiseState, { type: "toggle-extra", key: "glasses" });
     expect(on.extras.glasses).toBe(true);
-    expect(customiseReducer(on, { type: "toggle-extra", key: "glasses" }).extras.glasses).toBe(false);
-    expect(customiseReducer(initialCustomiseState, { type: "toggle-extra", key: "crown" })).toBe(initialCustomiseState);
+    expect(customiseReducer(on, { type: "toggle-extra", key: "glasses" }).extras.glasses).toBe(
+      false,
+    );
+    expect(customiseReducer(initialCustomiseState, { type: "toggle-extra", key: "crown" })).toBe(
+      initialCustomiseState,
+    );
   });
 
   it("lets a cap replace the hair silhouette and hide the sweatband", () => {
@@ -33,7 +43,11 @@ describe("local character customiser", () => {
   });
 
   it("resets every local selection", () => {
-    const changed = customiseReducer(initialCustomiseState, { type: "select", tab: "hoodie", index: 2 });
+    const changed = customiseReducer(initialCustomiseState, {
+      type: "select",
+      tab: "hoodie",
+      index: 2,
+    });
     expect(customiseReducer(changed, { type: "reset" })).toBe(initialCustomiseState);
   });
 });

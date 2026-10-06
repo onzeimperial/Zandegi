@@ -11,13 +11,13 @@
   "scripts": {
     "build": "pnpm -r build",
     "dev": "pnpm --filter @zandegi/web dev",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm -r typecheck && tsc -p tsconfig.tooling.json",
     "test": "vitest run",
-    "lint": "eslint .",
-    "format": "prettier --write .",
-    "verify:current": "pnpm lint && pnpm typecheck && pnpm test",
-    "verify:legacy": "npm --prefix legacy run typecheck && npm --prefix legacy test",
-    "verify": "pnpm verify:current && pnpm verify:legacy"
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write . \"!_bmad/**\"",
+    "format:check": "prettier --check . \"!_bmad/**\"",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "verify:legacy": "npm --prefix legacy run typecheck && npm --prefix legacy test"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",

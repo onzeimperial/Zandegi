@@ -6,7 +6,11 @@ vi.mock("../router", () => ({ complete: (...args: unknown[]) => complete(...args
 const { interpret } = await import("./01-interpret");
 
 function mockText(obj: unknown) {
-  complete.mockResolvedValueOnce({ text: JSON.stringify(obj), model: "test", usage: { inputTokens: 0, outputTokens: 0 } });
+  complete.mockResolvedValueOnce({
+    text: JSON.stringify(obj),
+    model: "test",
+    usage: { inputTokens: 0, outputTokens: 0 },
+  });
 }
 
 describe("interpret", () => {
@@ -25,13 +29,16 @@ describe("interpret", () => {
 
   it("strips a markdown fence if the model adds one", async () => {
     complete.mockResolvedValueOnce({
-      text: "```json\n" + JSON.stringify({
-        intent: "x",
-        goalType: "HABIT",
-        constraints: {},
-        timeBudgetMinutesPerWeek: 60,
-        notes: {},
-      }) + "\n```",
+      text:
+        "```json\n" +
+        JSON.stringify({
+          intent: "x",
+          goalType: "HABIT",
+          constraints: {},
+          timeBudgetMinutesPerWeek: 60,
+          notes: {},
+        }) +
+        "\n```",
       model: "test",
       usage: { inputTokens: 0, outputTokens: 0 },
     });
@@ -42,7 +49,11 @@ describe("interpret", () => {
   it("throws a clear error on invalid JSON", async () => {
     mockText("not json");
     complete.mockReset();
-    complete.mockResolvedValueOnce({ text: "not valid json{", model: "test", usage: { inputTokens: 0, outputTokens: 0 } });
+    complete.mockResolvedValueOnce({
+      text: "not valid json{",
+      model: "test",
+      usage: { inputTokens: 0, outputTokens: 0 },
+    });
     await expect(interpret({ rawText: "x" })).rejects.toThrow(/\[interpret\]/);
   });
 

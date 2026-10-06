@@ -103,9 +103,10 @@ export interface RubricSummary {
 }
 
 export function summariseScores(scores: RubricScore[]): RubricSummary {
-  const means = Object.fromEntries(
-    RUBRIC_AXES.map((a) => [a, meanScore(scores, a)]),
-  ) as Record<RubricAxis, number>;
+  const means = Object.fromEntries(RUBRIC_AXES.map((a) => [a, meanScore(scores, a)])) as Record<
+    RubricAxis,
+    number
+  >;
   return {
     n: scores.length,
     means,

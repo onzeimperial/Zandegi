@@ -3,16 +3,7 @@
  * character's stat bars and the axes of the life star.
  */
 
-export const DOMAINS = [
-  "Mind",
-  "Edge",
-  "Coin",
-  "Body",
-  "Grit",
-  "Craft",
-  "Bond",
-  "World",
-] as const;
+export const DOMAINS = ["Mind", "Edge", "Coin", "Body", "Grit", "Craft", "Bond", "World"] as const;
 
 export type Domain = (typeof DOMAINS)[number];
 

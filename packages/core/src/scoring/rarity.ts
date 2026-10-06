@@ -5,14 +5,7 @@
  * to the exclusivity score the XP formula uses.
  */
 
-export const RARITY_TIERS = [
-  "Common",
-  "Uncommon",
-  "Rare",
-  "Epic",
-  "Legendary",
-  "Mythic",
-] as const;
+export const RARITY_TIERS = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"] as const;
 
 export type RarityTier = (typeof RARITY_TIERS)[number];
 

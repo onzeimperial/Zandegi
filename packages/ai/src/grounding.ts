@@ -30,7 +30,10 @@ const CLAIM_PATTERNS: { name: string; re: RegExp }[] = [
     name: "named-rule",
     re: /\b(?:ATAR|GPA|IELTS|TOEFL|SAT|UCAT|GAMSAT|Commonwealth Supported Place|CSP|HECS|visa|subclass \d+|award rate|award wage)\b/i,
   },
-  { name: "stat", re: /\b(?:studies show|research shows|on average|\d+ out of \d+|the average \w+ is)\b/i },
+  {
+    name: "stat",
+    re: /\b(?:studies show|research shows|on average|\d+ out of \d+|the average \w+ is)\b/i,
+  },
 ];
 
 /** Sentences in `text` that read as hard factual assertions. */
@@ -64,7 +67,10 @@ export interface StepGroundingResult {
  * that makes factual assertions is the bar. Per-claim linkage is a later
  * refinement, tracked in BUILD-LOG.
  */
-export function validateStepGrounding(step: DraftStep, now: Date = new Date()): StepGroundingResult {
+export function validateStepGrounding(
+  step: DraftStep,
+  now: Date = new Date(),
+): StepGroundingResult {
   const claims = stepTextFields(0, 0, step).flatMap((field) => detectFactualClaims(field.text));
 
   if (claims.length === 0) return { claims, ungrounded: [] };
@@ -73,7 +79,10 @@ export function validateStepGrounding(step: DraftStep, now: Date = new Date()): 
   return { claims, ungrounded: hasValidSource ? [] : claims };
 }
 
-export function validateMissionGrounding(mission: DraftMission, now: Date = new Date()): GroundingReport {
+export function validateMissionGrounding(
+  mission: DraftMission,
+  now: Date = new Date(),
+): GroundingReport {
   let claimsChecked = 0;
   const ungroundedClaims: GroundingReport["ungroundedClaims"] = [];
 

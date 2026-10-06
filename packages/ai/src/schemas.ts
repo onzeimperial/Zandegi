@@ -5,7 +5,13 @@
  */
 
 import { z } from "zod";
-import { DOMAINS, GOAL_TYPES, EFFORT_BANDS, SAFETY_CLASSES, VERIFICATION_METHODS } from "@zandegi/core";
+import {
+  DOMAINS,
+  GOAL_TYPES,
+  EFFORT_BANDS,
+  SAFETY_CLASSES,
+  VERIFICATION_METHODS,
+} from "@zandegi/core";
 
 export const domainEnum = z.enum(DOMAINS);
 export const goalTypeEnum = z.enum(GOAL_TYPES);
@@ -90,14 +96,18 @@ export type DetailChapterOutput = z.infer<typeof detailChapterOutputSchema>;
 
 // ── Grounding / safety rewrite passes ──────────────────────
 
-export const rewriteOutputSchema = z.object({
-  rewrites: z.array(
-    z.object({
-      issueId: z.string().min(1),
-      rewrittenText: z.string().trim().min(1),
-    }).strict(),
-  ),
-}).strict();
+export const rewriteOutputSchema = z
+  .object({
+    rewrites: z.array(
+      z
+        .object({
+          issueId: z.string().min(1),
+          rewrittenText: z.string().trim().min(1),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
 export type RewriteOutput = z.infer<typeof rewriteOutputSchema>;
 
 // ── Shared parsing ──────────────────────────────────────────
@@ -115,7 +125,9 @@ export function parseStageJson<T>(stage: string, text: string, schema: z.ZodType
   try {
     raw = JSON.parse(stripped);
   } catch (err) {
-    throw new Error(`[${stage}] model did not return valid JSON: ${(err as Error).message}\n---\n${text}`);
+    throw new Error(
+      `[${stage}] model did not return valid JSON: ${(err as Error).message}\n---\n${text}`,
+    );
   }
   const result = schema.safeParse(raw);
   if (!result.success) {

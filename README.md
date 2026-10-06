@@ -44,12 +44,25 @@ corepack enable
 corepack prepare pnpm@12.8.2 --activate
 pnpm install
 pnpm --filter @zandegi/web dev    # http://localhost:3000
-pnpm -r typecheck
-pnpm test
+pnpm verify                       # the canonical check — run this before pushing
 ```
 
-The current pnpm workspace contains only `apps/*` and `packages/*`. The `legacy/`
-directory is an independent npm project and is not installed or modified by these commands.
+`pnpm verify` is the single canonical verification command, used identically in CI and
+locally. It runs, in order and stopping at the first failure: the Prettier format check,
+ESLint with zero tolerated warnings, every package type check plus the repository contract
+files, the unit tests, and the production builds.
+
+If the format check fails, run `pnpm format` and commit the result. Prettier is not always
+idempotent in one pass, so if `pnpm format:check` still fails immediately afterwards, run
+`pnpm format` once more before investigating.
+
+It is scoped to the current pnpm workspace, which contains only `apps/*` and `packages/*`.
+The `legacy/` directory is an independent npm project with its own lockfile: it is never
+installed, entered, or modified by `pnpm verify`. It is verified by its own CI job, which
+runs `npm ci`, `npm run typecheck` and `npm test` directly inside `legacy/`; the root
+`pnpm verify:legacy` script is the local equivalent and also needs `npm ci` there first.
+Current workspace code must never import from `legacy/`; `pnpm lint` fails if it does,
+including through a dynamic `import()`.
 
 ## Status
 

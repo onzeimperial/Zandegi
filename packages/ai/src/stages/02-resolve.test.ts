@@ -7,7 +7,11 @@ vi.mock("../router", () => ({ complete: (...args: unknown[]) => complete(...args
 const { resolve } = await import("./02-resolve");
 
 function mockText(obj: unknown) {
-  complete.mockResolvedValueOnce({ text: JSON.stringify(obj), model: "test", usage: { inputTokens: 0, outputTokens: 0 } });
+  complete.mockResolvedValueOnce({
+    text: JSON.stringify(obj),
+    model: "test",
+    usage: { inputTokens: 0, outputTokens: 0 },
+  });
 }
 
 const interpretation: Interpretation = {

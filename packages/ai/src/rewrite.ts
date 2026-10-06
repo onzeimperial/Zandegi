@@ -90,7 +90,9 @@ export function applyExactRewrites(
     seen.add(rewrite.issueId);
     resolveTarget(chapters, target);
   }
-  if (seen.size !== expected.size) throw new Error("rewrite response did not contain the exact issue set");
+  if (seen.size !== expected.size)
+    throw new Error("rewrite response did not contain the exact issue set");
 
-  for (const rewrite of rewrites) setTarget(chapters, expected.get(rewrite.issueId)!, rewrite.rewrittenText);
+  for (const rewrite of rewrites)
+    setTarget(chapters, expected.get(rewrite.issueId)!, rewrite.rewrittenText);
 }

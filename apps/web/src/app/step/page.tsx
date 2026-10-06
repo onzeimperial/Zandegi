@@ -9,22 +9,31 @@ export const metadata: Metadata = { title: "Step" };
    `checked` attribute when it baked the bundle; the authored source and the
    completed row styling both say otherwise, so the source wins. */
 const sets = [
-  { index: 1, done: true }, { index: 2, done: true }, { index: 3, done: true },
-  { index: 4, done: false }, { index: 5, done: false },
+  { index: 1, done: true },
+  { index: 2, done: true },
+  { index: 3, done: true },
+  { index: 4, done: false },
+  { index: 5, done: false },
 ];
 
 export default function StepPage() {
   return (
     <main className="step-page">
-      <p className="sr-only">Fixture-backed step preview. Set completion, rescheduling and verification are not saved.</p>
+      <p className="sr-only">
+        Fixture-backed step preview. Set completion, rescheduling and verification are not saved.
+      </p>
 
       <header className="step-header">
         <div className="side">
-          <Link href="/path" className="step-close" aria-label="Close step"><Icon name="close" strokeWidth={2.8} /></Link>
+          <Link href="/path" className="step-close" aria-label="Close step">
+            <Icon name="close" strokeWidth={2.8} />
+          </Link>
         </div>
         <div className="step-progress">
           <div>
-            <div className="track" aria-hidden="true"><i style={{ width: "57%" }} /></div>
+            <div className="track" aria-hidden="true">
+              <i style={{ width: "57%" }} />
+            </div>
             <b>5 of 7</b>
           </div>
         </div>
@@ -40,13 +49,17 @@ export default function StepPage() {
             </div>
 
             <div className="media-row">
-              <span className="media-icon"><Icon name="clock" /></span>
+              <span className="media-icon">
+                <Icon name="clock" />
+              </span>
               <span className="media-text">
                 <b>Today · 6:30 – 7:30 pm</b>
                 <span className="sub">Blocked in your calendar · Gym</span>
               </span>
               {/* Inert until scheduling exists; the preview note above says so. */}
-              <button type="button" className="action" disabled>Move</button>
+              <button type="button" className="action" disabled>
+                Move
+              </button>
             </div>
 
             <fieldset className="set-list">
@@ -63,7 +76,9 @@ export default function StepPage() {
 
           <div className="step-aside">
             <div className="media-row plain">
-              <span className="media-icon tinted"><Icon name="shield" /></span>
+              <span className="media-icon tinted">
+                <Icon name="shield" />
+              </span>
               <span className="media-text">
                 <span className="lead">Tier 2 verification</span>
                 <span className="sub">Logged sets + a photo of the loaded bar</span>
@@ -72,11 +87,17 @@ export default function StepPage() {
             </div>
 
             <div className="advice">
-              <div className="advice-head"><span className="advice-tag">ADVICE</span><b>Next session</b></div>
+              <div className="advice-head">
+                <span className="advice-tag">ADVICE</span>
+                <b>Next session</b>
+              </div>
               <p>If all 25 reps are clean, try adding 2.5 kg. If not, repeat 75 kg.</p>
             </div>
 
-            <Link href="/complete" className="d cta"><Icon name="camera" /><span>Log &amp; verify</span></Link>
+            <Link href="/complete" className="d cta">
+              <Icon name="camera" />
+              <span>Log &amp; verify</span>
+            </Link>
           </div>
         </div>
       </div>

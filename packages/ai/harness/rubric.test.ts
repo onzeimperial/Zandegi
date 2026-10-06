@@ -26,7 +26,12 @@ const mission: DraftMission = {
           title: "Easy 3km",
           estimatedMinutes: 25,
           verification: "INTEGRATION",
-          guide: { approach: "Jog slow.", materials: ["shoes"], commonMistakes: ["going too fast"], whatGoodLooksLike: "Conversational." },
+          guide: {
+            approach: "Jog slow.",
+            materials: ["shoes"],
+            commonMistakes: ["going too fast"],
+            whatGoodLooksLike: "Conversational.",
+          },
           sources: [],
           toolKinds: ["TIMER", "TRACKER"],
         },
@@ -75,8 +80,24 @@ describe("buildJudgePrompt", () => {
 
 describe("aggregation", () => {
   const scores: RubricScore[] = [
-    { specificity: 4, actionability: 4, grounding: 5, sequencing: 4, toolFit: 5, honesty: 5, worstFailure: "" },
-    { specificity: 5, actionability: 4, grounding: 4, sequencing: 3, toolFit: 4, honesty: 5, worstFailure: "" },
+    {
+      specificity: 4,
+      actionability: 4,
+      grounding: 5,
+      sequencing: 4,
+      toolFit: 5,
+      honesty: 5,
+      worstFailure: "",
+    },
+    {
+      specificity: 5,
+      actionability: 4,
+      grounding: 4,
+      sequencing: 3,
+      toolFit: 4,
+      honesty: 5,
+      worstFailure: "",
+    },
   ];
 
   it("means an axis correctly", () => {

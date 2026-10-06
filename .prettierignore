@@ -1,0 +1,27 @@
+# Unreadable path. `_bmad/render` contains review worktrees that scandir cannot
+# read, which makes Prettier exit non-zero while reporting "all matched files use
+# Prettier code style". The format scripts also pass `!_bmad/**` on the command
+# line, because .prettierignore filters matched files but does not stop the
+# directory walk that produces the EPERM.
+_bmad/render
+
+# legacy/ is an independent npm project and a read-only extraction source (AD-13).
+legacy
+
+# Build output and vendored trees.
+dist
+.next
+node_modules
+
+# Generated or tool-owned files.
+pnpm-lock.yaml
+*.tsbuildinfo
+
+# Tool-owned content we do not author or reformat: installed skills and plugins,
+# BMAD inputs/outputs (including frozen spec sections), and the imported design
+# reference captures.
+.agents
+.claude
+_bmad
+_bmad-output
+design

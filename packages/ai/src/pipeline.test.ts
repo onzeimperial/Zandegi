@@ -12,7 +12,9 @@ vi.mock("./stages/01-interpret", () => ({ interpret: (...a: unknown[]) => interp
 vi.mock("./stages/02-resolve", () => ({ resolve: (...a: unknown[]) => resolveMock(...a) }));
 vi.mock("./stages/03-hydrate", () => ({ hydrate: (...a: unknown[]) => hydrateMock(...a) }));
 vi.mock("./stages/04-plan", () => ({ plan: (...a: unknown[]) => planMock(...a) }));
-vi.mock("./stages/05-detail", () => ({ detailChapter: (...a: unknown[]) => detailChapterMock(...a) }));
+vi.mock("./stages/05-detail", () => ({
+  detailChapter: (...a: unknown[]) => detailChapterMock(...a),
+}));
 vi.mock("./router", async () => {
   const actual = await vi.importActual<typeof import("./router")>("./router");
   return { ...actual, complete: (...a: unknown[]) => completeMock(...a) };
@@ -165,7 +167,10 @@ describe("generateMission", () => {
         { issueId: "ground:0:0:guide.approach:scalar", rewrittenText: "Advice." },
       ],
     },
-    { label: "unknown", rewrites: [{ issueId: "ground:9:9:title:scalar", rewrittenText: "Advice." }] },
+    {
+      label: "unknown",
+      rewrites: [{ issueId: "ground:9:9:title:scalar", rewrittenText: "Advice." }],
+    },
   ])("fails closed for a $label rewrite ID set", async ({ rewrites }) => {
     detailChapterMock.mockResolvedValueOnce({
       steps: [step({ approach: "This costs $500.", sources: [] }), step()],
@@ -176,7 +181,9 @@ describe("generateMission", () => {
       usage: { inputTokens: 0, outputTokens: 0 },
     });
     const events: { chapter?: unknown }[] = [];
-    await expect(generateMission({ rawText: "run" }, (event) => events.push(event))).rejects.toThrow();
+    await expect(
+      generateMission({ rawText: "run" }, (event) => events.push(event)),
+    ).rejects.toThrow();
     expect(events.some((event) => event.chapter)).toBe(false);
   });
 
@@ -197,9 +204,9 @@ describe("generateMission", () => {
       usage: { inputTokens: 0, outputTokens: 0 },
     });
     const events: { chapter?: unknown }[] = [];
-    await expect(generateMission({ rawText: "run" }, (event) => events.push(event))).rejects.toThrow(
-      "grounding rewrite did not resolve",
-    );
+    await expect(
+      generateMission({ rawText: "run" }, (event) => events.push(event)),
+    ).rejects.toThrow("grounding rewrite did not resolve");
     expect(events.some((event) => event.chapter)).toBe(false);
   });
 
@@ -222,9 +229,9 @@ describe("generateMission", () => {
       usage: { inputTokens: 0, outputTokens: 0 },
     });
     const events: { chapter?: unknown }[] = [];
-    await expect(generateMission({ rawText: "run" }, (event) => events.push(event))).rejects.toThrow(
-      "safety rewrite did not resolve",
-    );
+    await expect(
+      generateMission({ rawText: "run" }, (event) => events.push(event)),
+    ).rejects.toThrow("safety rewrite did not resolve");
     expect(events.some((event) => event.chapter)).toBe(false);
   });
 
@@ -247,9 +254,9 @@ describe("generateMission", () => {
       usage: { inputTokens: 0, outputTokens: 0 },
     });
     const events: { chapter?: unknown }[] = [];
-    await expect(generateMission({ rawText: "run" }, (event) => events.push(event))).rejects.toThrow(
-      "safety rewrite introduced an ungrounded finding",
-    );
+    await expect(
+      generateMission({ rawText: "run" }, (event) => events.push(event)),
+    ).rejects.toThrow("safety rewrite introduced an ungrounded finding");
     expect(events.some((event) => event.chapter)).toBe(false);
   });
 

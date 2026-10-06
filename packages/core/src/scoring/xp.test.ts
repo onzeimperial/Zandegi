@@ -116,7 +116,12 @@ describe("stepXp", () => {
   });
 
   it("never returns less than 5 or more than 900", () => {
-    const low = stepXp({ ...baseInput, estimatedMinutes: 5, difficultyPrior: 0.5, userAdaptive: 1 });
+    const low = stepXp({
+      ...baseInput,
+      estimatedMinutes: 5,
+      difficultyPrior: 0.5,
+      userAdaptive: 1,
+    });
     expect(low.xp).toBeGreaterThanOrEqual(STEP_XP_MIN);
     const high = stepXp({
       ...baseInput,

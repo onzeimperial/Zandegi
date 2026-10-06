@@ -5,10 +5,14 @@ import { Brand } from "./brand";
 export function FlowHeader({ percent, label }: { percent: number; label: string }) {
   return (
     <header className="step-header">
-      <div className="side"><Brand /></div>
+      <div className="side">
+        <Brand />
+      </div>
       <div className="step-progress">
         <div>
-          <div className="track" aria-hidden="true"><i style={{ width: `${percent}%` }} /></div>
+          <div className="track" aria-hidden="true">
+            <i style={{ width: `${percent}%` }} />
+          </div>
           <b>{label}</b>
         </div>
       </div>

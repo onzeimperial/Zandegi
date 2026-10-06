@@ -31,9 +31,7 @@ describe("domain weights", () => {
   it("accepts weights that sum to 1", () => {
     expect(() => assertDomainWeights({ Body: 0.8, Grit: 0.2 })).not.toThrow();
     expect(() => assertDomainWeights({ Mind: 1 })).not.toThrow();
-    expect(() =>
-      assertDomainWeights({ Mind: 0.34, Edge: 0.33, Coin: 0.33 }),
-    ).not.toThrow(); // within epsilon
+    expect(() => assertDomainWeights({ Mind: 0.34, Edge: 0.33, Coin: 0.33 })).not.toThrow(); // within epsilon
   });
 
   it("rejects weights that don't sum to 1", () => {
@@ -52,7 +50,9 @@ describe("domain weights", () => {
   });
 
   it("rejects an unknown domain key", () => {
-    expect(() => assertDomainWeights({ Money: 1 } as unknown as DomainWeight)).toThrow(/unknown domain/);
+    expect(() => assertDomainWeights({ Money: 1 } as unknown as DomainWeight)).toThrow(
+      /unknown domain/,
+    );
   });
 });
 

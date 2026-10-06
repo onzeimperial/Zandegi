@@ -18,7 +18,7 @@ describe("consumeGenerationStream", () => {
       stream(
         'data: {"type":"progress","event":{"stage":"plan",',
         '"status":"done"}}\r',
-        '\n\r',
+        "\n\r",
         '\ndata: {"type":"result","result":{"event":null,',
         '"refusal":{"reason":"narrow it","route":"clarify"}},"requestId":"r1"}\n\n',
       ),
@@ -63,7 +63,7 @@ describe("consumeGenerationStream", () => {
   });
 
   it.each([
-    '{}',
+    "{}",
     '{"type":"progress","event":{"stage":"unknown","status":"done"}}',
     '{"type":"result","result":{"event":null}}',
     '{"type":"result","result":{"event":"wrong"},"requestId":"r"}',

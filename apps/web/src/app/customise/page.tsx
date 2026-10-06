@@ -5,8 +5,12 @@ import { useReducer } from "react";
 import { CharacterArt } from "@/components/character-art";
 import { Icon } from "@/components/icons";
 import {
-  EXTRAS, SWATCHES, TABS,
-  characterLook, customiseReducer, initialCustomiseState,
+  EXTRAS,
+  SWATCHES,
+  TABS,
+  characterLook,
+  customiseReducer,
+  initialCustomiseState,
   type SwatchTab,
 } from "./customise-state";
 
@@ -17,7 +21,9 @@ export default function CustomisePage() {
 
   return (
     <main className="customise-page">
-      <p className="sr-only">Local character preview. Your look is not saved and nothing here can be purchased.</p>
+      <p className="sr-only">
+        Local character preview. Your look is not saved and nothing here can be purchased.
+      </p>
 
       <header className="step-header customise-header">
         <div className="side">
@@ -28,14 +34,21 @@ export default function CustomisePage() {
         </div>
         <div className="step-progress" />
         <div className="side end">
-          <div className="d wallet"><Icon name="shard" tone="shard" /><span>340</span></div>
-          <button type="button" className="d save-look" disabled>Save look</button>
+          <div className="d wallet">
+            <Icon name="shard" tone="shard" />
+            <span>340</span>
+          </div>
+          <button type="button" className="d save-look" disabled>
+            Save look
+          </button>
         </div>
       </header>
 
       <div className="customise-body">
         <div className="customise-grid">
-          <div className="character-stage"><CharacterArt look={look} /></div>
+          <div className="character-stage">
+            <CharacterArt look={look} />
+          </div>
 
           <div className="customise-panel">
             <div className="customise-tabs" role="group" aria-label="Category">
@@ -60,11 +73,22 @@ export default function CustomisePage() {
                       type="button"
                       className="option"
                       aria-pressed={Boolean(state.extras[extra.key])}
-                      aria-label={extra.lock ? `${extra.label}, locked: ${extra.lock}` : extra.label}
+                      aria-label={
+                        extra.lock ? `${extra.label}, locked: ${extra.lock}` : extra.label
+                      }
                       disabled={Boolean(extra.lock)}
                       onClick={() => dispatch({ type: "toggle-extra", key: extra.key })}
                     >
-                      <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="#6F42E8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <svg
+                        className="icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#6F42E8"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
                         <path d={extra.p1} />
                         {extra.p2 && <path d={extra.p2} />}
                       </svg>
@@ -78,9 +102,13 @@ export default function CustomisePage() {
                       type="button"
                       className="option"
                       aria-pressed={state.selected[state.tab as SwatchTab] === index}
-                      aria-label={swatch.lock ? `${swatch.label}, locked: ${swatch.lock}` : swatch.label}
+                      aria-label={
+                        swatch.lock ? `${swatch.label}, locked: ${swatch.lock}` : swatch.label
+                      }
                       disabled={Boolean(swatch.lock)}
-                      onClick={() => dispatch({ type: "select", tab: state.tab as SwatchTab, index })}
+                      onClick={() =>
+                        dispatch({ type: "select", tab: state.tab as SwatchTab, index })
+                      }
                     >
                       <span className="swatch" style={{ background: swatch.value }} />
                       <span className="label">{swatch.label}</span>
@@ -89,7 +117,9 @@ export default function CustomisePage() {
                   ))}
             </div>
 
-            <p className="customise-note">Locked looks unlock with levels, chests or Shards. Looks never change your stats.</p>
+            <p className="customise-note">
+              Locked looks unlock with levels, chests or Shards. Looks never change your stats.
+            </p>
           </div>
         </div>
       </div>

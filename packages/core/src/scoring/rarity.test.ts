@@ -67,9 +67,7 @@ describe("rarityHeadline", () => {
       "Only 42% of Zandegi have kept a 30-day streak.",
     );
     expect(rarityHeadline(0.0004, "done this")).toBe("Only 0.04% of Zandegi have done this.");
-    expect(rarityHeadline(0.00001, "done this")).toBe(
-      "Less than 0.01% of Zandegi have done this.",
-    );
+    expect(rarityHeadline(0.00001, "done this")).toBe("Less than 0.01% of Zandegi have done this.");
   });
 
   it("rejects non-finite fractions", () => {

@@ -17,21 +17,38 @@ const UNREACHABLE = new Set([2, 3]);
 /* Where the implementation deliberately departs from the mock, the allowance
    records why. Anything above these bounds is a regression. */
 const ALLOWANCES = {
-  1: { changedPercent: 2.6, meanDelta: 2.3, why: "the mock pre-highlights a chip while leaving the ambition empty, which would enable Build my mission with nothing typed" },
-  4: { changedPercent: 1.5, meanDelta: 2.0, why: "step XP comes from core's verification multipliers rather than the mock's 20/40/60, core has no peer-confirmation method, and the draft pill says local-only instead of saved" },
-  8: { changedPercent: 0.5, meanDelta: 0.5, why: "the eight domains use the names fixed by SPEC 1.1 rather than the mock's placeholders" },
+  1: {
+    changedPercent: 2.6,
+    meanDelta: 2.3,
+    why: "the mock pre-highlights a chip while leaving the ambition empty, which would enable Build my mission with nothing typed",
+  },
+  4: {
+    changedPercent: 1.5,
+    meanDelta: 2.0,
+    why: "step XP comes from core's verification multipliers rather than the mock's 20/40/60, core has no peer-confirmation method, and the draft pill says local-only instead of saved",
+  },
+  8: {
+    changedPercent: 0.5,
+    meanDelta: 0.5,
+    why: "the eight domains use the names fixed by SPEC 1.1 rather than the mock's placeholders",
+  },
 };
 const sharpPackage = fs
   .readdirSync(path.join(root, "node_modules", ".pnpm"))
   .find((entry) => entry.startsWith("sharp@"));
 if (!sharpPackage) throw new Error("Sharp is not installed");
-const sharp = require(path.join(root, "node_modules", ".pnpm", sharpPackage, "node_modules", "sharp"));
+const sharp = require(
+  path.join(root, "node_modules", ".pnpm", sharpPackage, "node_modules", "sharp"),
+);
 
 async function compare(index) {
   const name = `board-${String(index).padStart(2, "0")}.png`;
   const referencePath = path.join(captureRoot, "reference", name);
   const appPath = path.join(captureRoot, "app", name);
-  const reference = await sharp(referencePath).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const reference = await sharp(referencePath)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
   const app = await sharp(appPath).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   if (reference.info.width !== app.info.width || reference.info.height !== app.info.height) {
     throw new Error(`${name}: dimensions differ`);
@@ -54,7 +71,9 @@ async function compare(index) {
     output[offset + 3] = 255;
   }
   const pixels = reference.info.width * reference.info.height;
-  await sharp(output, { raw: reference.info }).png().toFile(path.join(captureRoot, "diff", name));
+  await sharp(output, { raw: reference.info })
+    .png()
+    .toFile(path.join(captureRoot, "diff", name));
   return {
     board: index,
     width: reference.info.width,
@@ -68,26 +87,43 @@ async function compare(index) {
 async function main() {
   fs.mkdirSync(path.join(captureRoot, "diff"), { recursive: true });
   const requested = process.argv.slice(2).map(Number);
-  const indexes = (requested.length ? requested : Array.from({ length: 12 }, (_, index) => index)).filter((index) => {
+  const indexes = (
+    requested.length ? requested : Array.from({ length: 12 }, (_, index) => index)
+  ).filter((index) => {
     if (!UNREACHABLE.has(index)) return true;
-    console.log(`board ${String(index).padStart(2, "0")}: skipped, only reachable after a live generation`);
+    console.log(
+      `board ${String(index).padStart(2, "0")}: skipped, only reachable after a live generation`,
+    );
     return false;
   });
   const comparisons = [];
   for (const index of indexes) comparisons.push(await compare(index));
-  for (const row of comparisons) console.log(`board ${String(row.board).padStart(2, "0")}: ${row.changedPercent}% changed, mean delta ${row.meanMaxChannelDelta}`);
+  for (const row of comparisons)
+    console.log(
+      `board ${String(row.board).padStart(2, "0")}: ${row.changedPercent}% changed, mean delta ${row.meanMaxChannelDelta}`,
+    );
   for (const row of comparisons) {
     const allowance = ALLOWANCES[row.board];
-    if (allowance) console.log(`  board ${String(row.board).padStart(2, "0")} allowance ${allowance.changedPercent}%: ${allowance.why}`);
+    if (allowance)
+      console.log(
+        `  board ${String(row.board).padStart(2, "0")} allowance ${allowance.changedPercent}%: ${allowance.why}`,
+      );
   }
   const failures = comparisons.filter((row) => {
     const allowance = ALLOWANCES[row.board];
-    return row.changedPercent > (allowance?.changedPercent ?? maximumChangedPercent)
-      || row.meanMaxChannelDelta > (allowance?.meanDelta ?? maximumMeanDelta);
+    return (
+      row.changedPercent > (allowance?.changedPercent ?? maximumChangedPercent) ||
+      row.meanMaxChannelDelta > (allowance?.meanDelta ?? maximumMeanDelta)
+    );
   });
   if (failures.length) {
-    throw new Error(`visual fidelity limit exceeded for board(s): ${failures.map((row) => String(row.board).padStart(2, "0")).join(", ")}`);
+    throw new Error(
+      `visual fidelity limit exceeded for board(s): ${failures.map((row) => String(row.board).padStart(2, "0")).join(", ")}`,
+    );
   }
 }
 
-main().catch((error) => { console.error(error); process.exitCode = 1; });
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  SAFETY_CLASSES,
-  isGenerationBlocked,
-  requiresProfessionalFrame,
-} from "./safety";
+import { SAFETY_CLASSES, isGenerationBlocked, requiresProfessionalFrame } from "./safety";
 
 describe("safety classes", () => {
   it("has the five spec classes", () => {

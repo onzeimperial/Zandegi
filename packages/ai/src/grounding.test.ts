@@ -16,7 +16,12 @@ function step(overrides: Partial<DraftStep> = {}): DraftStep {
     title: "Warm up",
     estimatedMinutes: 20,
     verification: "SELF",
-    guide: { approach: "Do an easy jog.", materials: [], commonMistakes: [], whatGoodLooksLike: "Loose." },
+    guide: {
+      approach: "Do an easy jog.",
+      materials: [],
+      commonMistakes: [],
+      whatGoodLooksLike: "Loose.",
+    },
     sources: [],
     toolKinds: [],
     ...overrides,

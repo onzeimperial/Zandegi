@@ -7,7 +7,11 @@ vi.mock("../router", () => ({ complete: (...args: unknown[]) => complete(...args
 const { detailChapter } = await import("./05-detail");
 
 function mockText(obj: unknown) {
-  complete.mockResolvedValueOnce({ text: JSON.stringify(obj), model: "test", usage: { inputTokens: 0, outputTokens: 0 } });
+  complete.mockResolvedValueOnce({
+    text: JSON.stringify(obj),
+    model: "test",
+    usage: { inputTokens: 0, outputTokens: 0 },
+  });
 }
 
 const interpretation: Interpretation = {
@@ -37,13 +41,23 @@ describe("detailChapter", () => {
           title: "Run 3km easy",
           estimatedMinutes: 25,
           verification: "TIMER",
-          guide: { approach: "Jog at conversational pace", materials: [], commonMistakes: [], whatGoodLooksLike: "You finish able to talk" },
+          guide: {
+            approach: "Jog at conversational pace",
+            materials: [],
+            commonMistakes: [],
+            whatGoodLooksLike: "You finish able to talk",
+          },
         },
         {
           title: "Run 4km easy",
           estimatedMinutes: 30,
           verification: "TIMER",
-          guide: { approach: "Same pace, longer", materials: [], commonMistakes: [], whatGoodLooksLike: "Consistent pace" },
+          guide: {
+            approach: "Same pace, longer",
+            materials: [],
+            commonMistakes: [],
+            whatGoodLooksLike: "Consistent pace",
+          },
         },
       ],
     });

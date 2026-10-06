@@ -9,7 +9,12 @@ const zlib = require("node:zlib");
 const root = path.resolve(__dirname, "..");
 const sourcePath = path.join(root, "design", "WebsiteDesign.html");
 const outputRoot = path.join(root, "apps", "web", "public", "design");
-const referenceRoot = path.join(root, "_bmad-output", "implementation-artifacts", "claude-reference");
+const referenceRoot = path.join(
+  root,
+  "_bmad-output",
+  "implementation-artifacts",
+  "claude-reference",
+);
 const checkOnly = process.argv.includes("--check");
 
 function fail(message) {
@@ -66,7 +71,9 @@ function main() {
   const rootManifest = parseJsonScript(source, "__bundler/manifest");
   const pageOrder = parseJsonScript(source, "__bundler/page_order");
   if (!Array.isArray(pageOrder) || pageOrder.length !== 12) {
-    fail(`expected 12 ordered pages, found ${Array.isArray(pageOrder) ? pageOrder.length : "invalid data"}`);
+    fail(
+      `expected 12 ordered pages, found ${Array.isArray(pageOrder) ? pageOrder.length : "invalid data"}`,
+    );
   }
 
   const uniqueAssets = new Map();
@@ -107,7 +114,8 @@ function main() {
   if (pngs.length !== 1) fail(`expected one unique mascot PNG, found ${pngs.length}`);
   if (fonts.length !== 9) fail(`expected nine unique WOFF2 files, found ${fonts.length}`);
   const [mascotHash, mascot] = pngs[0];
-  if (mascot.bytes.length !== 353767) fail(`mascot byte length is ${mascot.bytes.length}, expected 353767`);
+  if (mascot.bytes.length !== 353767)
+    fail(`mascot byte length is ${mascot.bytes.length}, expected 353767`);
   if (!mascotHash.startsWith("abe2675e") || !mascotHash.endsWith("69d29")) {
     fail(`unexpected mascot hash ${mascotHash}`);
   }
@@ -125,7 +133,11 @@ function main() {
     source: "design/WebsiteDesign.html",
     sourceSha256: sha256(Buffer.from(source)),
     mascot: { file: mascot.fileName, bytes: mascot.bytes.length, sha256: mascotHash },
-    fonts: fonts.map(([hash, asset]) => ({ file: asset.fileName, bytes: asset.bytes.length, sha256: hash })),
+    fonts: fonts.map(([hash, asset]) => ({
+      file: asset.fileName,
+      bytes: asset.bytes.length,
+      sha256: hash,
+    })),
     boards: boards.map(({ index, id, title, resources }) => ({ index, id, title, resources })),
   };
   safeWrite(path.join(outputRoot, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);

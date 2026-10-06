@@ -23,8 +23,14 @@ export const demoMissions: readonly DemoMission[] = [
 ] as const;
 
 export const demoDomains = [
-  ["Mind", 11], ["Edge", 9], ["Coin", 6], ["Body", 8],
-  ["Grit", 12], ["Craft", 7], ["Bond", 5], ["World", 4],
+  ["Mind", 11],
+  ["Edge", 9],
+  ["Coin", 6],
+  ["Body", 8],
+  ["Grit", 12],
+  ["Craft", 7],
+  ["Bond", 5],
+  ["World", 4],
 ] as const;
 
 export const demoLeague = [

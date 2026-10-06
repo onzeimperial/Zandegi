@@ -70,7 +70,9 @@ describe("selectCelebrationClip", () => {
   });
 
   it("falls back to the Universal base tier when the domain has no clip of its own", () => {
-    const library = [clip({ id: "universal-step", domain: "Universal", eventType: "step_complete" })];
+    const library = [
+      clip({ id: "universal-step", domain: "Universal", eventType: "step_complete" }),
+    ];
     const picked = selectCelebrationClip(
       { eventType: "step_complete", domain: "Body", seed: "evt-1" },
       library,

@@ -16,7 +16,9 @@ jobs:
       - run: corepack enable
       - run: corepack prepare pnpm@12.8.2 --activate
       - run: pnpm install --frozen-lockfile
-      - run: pnpm verify:current
+      # Canonical gate for the current workspace: format check, lint, every
+      # package type check, unit tests, production builds. It never enters legacy/.
+      - run: pnpm verify
 
   legacy:
     runs-on: ubuntu-latest

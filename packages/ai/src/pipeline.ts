@@ -57,9 +57,7 @@ string, "rewrittenText": string }] }. Return every supplied issueId exactly once
           entry.chapterIndex,
           entry.stepIndex,
           chapters[entry.chapterIndex]!.steps[entry.stepIndex]!,
-        ).find(
-          (field) => field.field === entry.field && field.itemIndex === entry.itemIndex,
-        )!.text,
+        ).find((field) => field.field === entry.field && field.itemIndex === entry.itemIndex)!.text,
       })),
     }),
     maxTokens: 1536,

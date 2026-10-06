@@ -6,7 +6,17 @@ import type { PipelineResult, ScoredChapter } from "@zandegi/ai";
 import { percentageAllowed } from "@zandegi/core";
 import { FlowHeader } from "./flow-header";
 
-function Chapter({ chapter, index, open, onToggle }: { chapter: ScoredChapter; index: number; open: boolean; onToggle: () => void }) {
+function Chapter({
+  chapter,
+  index,
+  open,
+  onToggle,
+}: {
+  chapter: ScoredChapter;
+  index: number;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const minutes = chapter.steps.reduce((total, step) => total + step.estimatedMinutes, 0);
   return (
     <li className="chapter-card">
@@ -24,7 +34,9 @@ function Chapter({ chapter, index, open, onToggle }: { chapter: ScoredChapter; i
             <div className="step" key={step.index}>
               <div>
                 <span className="what">{step.title}</span>
-                <span className="when">{step.estimatedMinutes} min · {step.verification}</span>
+                <span className="when">
+                  {step.estimatedMinutes} min · {step.verification}
+                </span>
               </div>
               <span className="d xp">+{step.baseXp} XP</span>
             </div>
@@ -54,7 +66,9 @@ export function MissionReview({ result }: { result: PipelineResult }) {
               <span className="goal-tag metric">{mission.primaryDomain}</span>
             </div>
             <h1 className="d">Your mission: {mission.title}</h1>
-            <span className="shape">{mission.chapters.length} chapters · built from your real ambition</span>
+            <span className="shape">
+              {mission.chapters.length} chapters · built from your real ambition
+            </span>
             <p className="sr-only">
               {metric
                 ? "Measurable progress uses your real current and target values."
@@ -63,17 +77,26 @@ export function MissionReview({ result }: { result: PipelineResult }) {
 
             {result.event?.payload.safety.professionalFrameApplied && (
               <div className="preview-note" role="note">
-                <b>Professional guidance applies.</b><br />
-                Use this mission to prepare for a qualified professional, not as medical, financial, or legal advice.
+                <b>Professional guidance applies.</b>
+                <br />
+                Use this mission to prepare for a qualified professional, not as medical, financial,
+                or legal advice.
               </div>
             )}
 
             <div className="review-actions">
               <p>Planned by Zandegi AI. XP and difficulty come from fixed rules.</p>
-              <p className="preview-note">This result is not saved and will not carry over. Tweak and Start open clearly labelled local examples.</p>
+              <p className="preview-note">
+                This result is not saved and will not carry over. Tweak and Start open clearly
+                labelled local examples.
+              </p>
               <div className="row">
-                <Link href="/builder" className="d button-tweak">Tweak</Link>
-                <Link href="/path" className="d button-start">Start chapter 1</Link>
+                <Link href="/builder" className="d button-tweak">
+                  Tweak
+                </Link>
+                <Link href="/path" className="d button-start">
+                  Start chapter 1
+                </Link>
               </div>
             </div>
           </section>

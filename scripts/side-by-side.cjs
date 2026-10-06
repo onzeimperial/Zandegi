@@ -11,9 +11,13 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const captureRoot = path.join(root, "_bmad-output", "implementation-artifacts", "visual-diffs");
 const outputRoot = path.join(captureRoot, "side-by-side");
-const sharpPackage = fs.readdirSync(path.join(root, "node_modules", ".pnpm")).find((entry) => entry.startsWith("sharp@"));
+const sharpPackage = fs
+  .readdirSync(path.join(root, "node_modules", ".pnpm"))
+  .find((entry) => entry.startsWith("sharp@"));
 if (!sharpPackage) throw new Error("Sharp is not installed");
-const sharp = require(path.join(root, "node_modules", ".pnpm", sharpPackage, "node_modules", "sharp"));
+const sharp = require(
+  path.join(root, "node_modules", ".pnpm", sharpPackage, "node_modules", "sharp"),
+);
 
 const gap = 24;
 const labelHeight = 40;

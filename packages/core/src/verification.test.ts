@@ -3,13 +3,7 @@ import { VERIFICATION_METHODS, verificationMult } from "./verification";
 
 describe("verification multipliers (SPEC §4.1)", () => {
   it("has the five methods", () => {
-    expect(VERIFICATION_METHODS).toEqual([
-      "SELF",
-      "TIMER",
-      "ARTIFACT",
-      "METRIC",
-      "INTEGRATION",
-    ]);
+    expect(VERIFICATION_METHODS).toEqual(["SELF", "TIMER", "ARTIFACT", "METRIC", "INTEGRATION"]);
   });
 
   it("pays exactly the spec values", () => {

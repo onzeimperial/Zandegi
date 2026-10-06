@@ -61,7 +61,8 @@ function isRefusal(value: unknown): boolean {
 }
 
 function isMissionGeneratedEvent(value: unknown): boolean {
-  if (!isRecord(value) || value.type !== "MissionGenerated" || !isRecord(value.payload)) return false;
+  if (!isRecord(value) || value.type !== "MissionGenerated" || !isRecord(value.payload))
+    return false;
   const mission = value.payload.mission;
   const safety = value.payload.safety;
   return (
@@ -132,8 +133,7 @@ function normalizeNewlines(value: string, final: boolean): string {
   const holdsTrailingCarriageReturn = !final && value.endsWith("\r");
   const complete = holdsTrailingCarriageReturn ? value.slice(0, -1) : value;
   return (
-    complete.replace(/\r\n/g, "\n").replace(/\r/g, "\n") +
-    (holdsTrailingCarriageReturn ? "\r" : "")
+    complete.replace(/\r\n/g, "\n").replace(/\r/g, "\n") + (holdsTrailingCarriageReturn ? "\r" : "")
   );
 }
 
@@ -155,7 +155,11 @@ export async function consumeGenerationStream(
     if (message.type === "progress") onProgress(message.event);
     else if (message.type === "result") terminal = message.result;
     else {
-      throw new GenerationStreamError(message.error.message, message.error.code, message.error.requestId);
+      throw new GenerationStreamError(
+        message.error.message,
+        message.error.code,
+        message.error.requestId,
+      );
     }
   };
 

@@ -47,7 +47,10 @@ describe("applyExactRewrites", () => {
     applyExactRewrites(
       missionChapters,
       issues,
-      issues.map((issue, index) => ({ issueId: issue.issueId, rewrittenText: `Replacement ${index}` })),
+      issues.map((issue, index) => ({
+        issueId: issue.issueId,
+        rewrittenText: `Replacement ${index}`,
+      })),
     );
 
     const step = missionChapters[0]!.steps[0]!;
@@ -62,7 +65,11 @@ describe("applyExactRewrites", () => {
 
   it("rejects whitespace-only rewrite content", () => {
     expect(() =>
-      parseStageJson("ground", '{"rewrites":[{"issueId":"x","rewrittenText":"   "}]}', rewriteOutputSchema),
+      parseStageJson(
+        "ground",
+        '{"rewrites":[{"issueId":"x","rewrittenText":"   "}]}',
+        rewriteOutputSchema,
+      ),
     ).toThrow(/schema validation/);
   });
 });

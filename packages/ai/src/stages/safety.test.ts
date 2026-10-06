@@ -59,7 +59,10 @@ describe("safetyPass", () => {
   });
 
   it("flags personal financial advice", () => {
-    const scored = scoreMission(missionWith("You should invest in an index fund now."), NEUTRAL_CONTEXT);
+    const scored = scoreMission(
+      missionWith("You should invest in an index fund now."),
+      NEUTRAL_CONTEXT,
+    );
     expect(safetyPass(scored, "FINANCIAL").needsRewrite.length).toBeGreaterThan(0);
   });
 

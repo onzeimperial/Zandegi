@@ -4,6 +4,122 @@ Newest first.
 
 ---
 
+## 2026-10-05 - verification and repository guardrails
+
+**Shipped**
+
+- `pnpm verify` is now the single canonical command for the current workspace, and it runs the
+  stages in cost order, stopping at the first failure: `format:check`, `lint`, `typecheck`,
+  `test`, `build`. `verify:current` is gone; CI's `current` job runs `pnpm verify`. `verify:legacy`
+  remains a separate script and is no longer chained into `verify`, because `legacy/` is an
+  independent npm project that needs its own `npm ci` and therefore could never pass from a
+  pnpm-only checkout.
+- `lint` is now `eslint . --max-warnings 0`. Without this, `no-explicit-any` - the rule that
+  enforces CLAUDE.md section 3 - could never fail the gate. The tree is at zero errors and zero
+  warnings, so this costs nothing today.
+- Added the `legacy/` import boundary to `eslint.config.js`, scoped to `apps/**`, `packages/**`,
+  `scripts/**`, and `tooling/**` - every first-party tree, not just the two app/package roots.
+  `no-restricted-imports` blocks the static specifiers `legacy`, `legacy/*`, `**/legacy/**`, and
+  `*/legacy/*`; a `no-restricted-syntax` rule on `ImportExpression` closes the dynamic `import()`
+  hole, because `no-restricted-imports` never sees it. Both carry the same AD-13 message. There is
+  deliberately no eslint-disable escape hatch: extraction from `legacy/` means reimplementation
+  against current contracts. No new dependency was added.
+- Added `tooling/import-boundary.test.ts`, which lints fixture source through the ESLint Node API
+  and asserts the boundary fires for a relative, bare, and aliased legacy specifier, for a dynamic
+  `import()`, and from an `apps/` path as well as a `packages/` one; that it stays silent for a
+  `@zandegi/*` import, static or dynamic; and that neither fixture path is swallowed by the
+  config's ignore list. `vitest.workspace.ts` gained a named `tooling` project, because the
+  existing `packages/*` and `apps/*` globs do not discover root-level tests.
+- Added `tooling/verify-contract.test.ts`, which pins the parts of the gate that are script wiring
+  rather than code: that `verify` is an `&&` chain of exactly the five stages in cost order, that
+  every stage it names exists, that it never enters `legacy/`, that `lint` carries
+  `--max-warnings 0`, that the build stage really is a recursive `pnpm -r` run reaching the web
+  build, that every project with a tsconfig declares a `typecheck` script, that CI's `current` job
+  runs `pnpm verify`, and that `_bmad/render` is excluded both by `.prettierignore` and on the
+  command line. It also enforces the one-ESLint-instance invariant below as a test rather than a
+  comment.
+- Added `tsconfig.tooling.json` and made the root `typecheck` stage `pnpm -r typecheck && tsc -p
+tsconfig.tooling.json`. `pnpm -r` only recurses into `apps/*` and `packages/*`, so the files that
+  enforce the whole contract - `tooling/*.test.ts`, `vitest.workspace.ts`, `eslint.config.js` -
+  were never type-checked at all.
+- Added `.prettierignore` and reformatted the 65 workspace source files that had drifted. `README.md`
+  now documents `pnpm verify` as the canonical command for CI and local use and states that it
+  covers the current workspace only.
+
+**Foundation status: scaffolded versus implemented**
+
+Every TypeScript project in the workspace type-checks, but most of them are empty. Implemented
+capability today:
+
+- `@zandegi/core` - domains, goal types, safety, verification, scoring (XP, rarity). Pure, tested.
+- `@zandegi/ai` - generation pipeline stages, grounding, rewrite, schemas, plus the eval harness.
+- `@zandegi/celebrations` - selection and prompt logic.
+- `apps/web` - the ported design boards and the `/api/generate` route, backendless and preview-only.
+
+Scaffold only - a single `export {}` with a comment, no implementation: `@zandegi/api`,
+`@zandegi/db`, `@zandegi/economy`, `@zandegi/tools`, `@zandegi/ui`, `@zandegi/integrations`.
+`apps/admin` and `apps/mobile` are README-only placeholders with no source. So a green typecheck
+stage is not a built product, and nothing in this story changed that.
+
+**Verified**
+
+- `pnpm verify` exits 0 on this tree: format check clean, lint clean at zero warnings, every
+  type-check project passes, 208 tests across 32 files pass (197 pre-existing plus 11 guardrail
+  tests), and the Next 15.5.27 production build emits all 14 routes.
+- Adding `import "../../legacy/src/lib/x"` to `packages/core/src/domains.ts` made `pnpm lint`
+  exit 1 and name the file, the specifier, and the AD-13 message. Reverted.
+- Adding an unresolvable import to `apps/web/src/app/step/page.tsx` made `pnpm build` exit 1 and
+  propagate through `pnpm -r build`. Reverted.
+- `git status --porcelain legacy` is empty; `legacy/package.json` and `legacy/package-lock.json`
+  are untouched and `legacy/` was never installed or entered.
+
+**Known risk / remaining evidence**
+
+- Prettier applies `.prettierignore` to matched files but still walks the directory tree, and
+  `_bmad/render` holds review worktrees that `scandir` cannot read on this machine. With only the
+  ignore file, `prettier --check .` exits 2 on an `EPERM` while printing "All matched files use
+  Prettier code style". The format scripts therefore also pass `!_bmad/**` on the command line so
+  the unreadable path is excluded by configuration rather than masked. If a new unreadable path
+  appears outside `_bmad/`, the stage fails loudly rather than reporting a false success.
+- `.prettierignore` also excludes tool-owned trees we do not author - `.agents`, `.claude`,
+  `_bmad`, `_bmad-output`, `design` - so the format stage never rewrites installed skill content
+  or a frozen spec section.
+- The boundary rules inspect import specifiers and `import()` expressions only. They would not
+  catch a `tsconfig` path mapping, a bundler alias, or a computed `import(variable)` that resolves
+  into `legacy/`. They are also scoped to `apps/**`, `packages/**`, `scripts/**` and `tooling/**`,
+  so a file sitting at the repository root is not covered - today that is only configuration
+  (`eslint.config.js`, `vitest.workspace.ts`), never application code. There are currently zero
+  legacy references of any kind, so the rule is preventative; these limits are recorded here
+  rather than paid for with a boundary-analysis dependency.
+- Reformatting broke five assertions in `apps/web/src/app/routes.test.ts` that matched source text
+  with no spaces (`type:"add-step"`, `prefers-reduced-motion:reduce`). They are now
+  whitespace-tolerant regexes. Any further test that asserts on raw source text is exposed to the
+  same coupling.
+- One `prettier --write` pass left `apps/web/src/app/generate/generation-flow.test.ts` still
+  failing the check; a second pass on that file fixed it. If `pnpm format:check` ever fails
+  immediately after `pnpm format`, run `pnpm format` again before investigating further.
+- Only one test file may construct an `ESLint` instance. Vitest isolates the module registry per
+  file, so a second instance loads the flat config again in parallel: with two, this suite went
+  from 10s to 2333s. For the same reason the `no-explicit-any` severity is read from
+  `calculateConfigForFile` rather than by linting a typed declaration, which pulled in the
+  TypeScript parser and cost 42s on its own. The boundary file still dominates the suite, and its
+  cost is machine-dependent: 6.2s here, 44.6s on a reviewer's machine. Treat it as anywhere from
+  seconds to a minute, not as a fixed number.
+- Local bootstrap still needs the Story 1.1 workaround: Node 24.11.0's bundled Corepack 0.34.0
+  cannot launch pnpm 12, so `pnpm` may be absent from PATH even though the 12.8.2 payload is
+  cached. CI is unaffected - it installs Corepack 0.36.0 explicitly.
+- Environment and runtime config validation, and the `.env.example` work, remain deliberately out
+  of scope and are tracked in `_bmad-output/implementation-artifacts/deferred-work.md`.
+
+**Next step**
+
+Story 1.3 - put mission generation behind the `@zandegi/api` boundary, so `apps/web` stops owning
+generation directly and imports only `@zandegi/core/contracts` and `@zandegi/api/client`. The
+environment and runtime config validation work, including `.env.example`, stays deferred and is
+tracked in `_bmad-output/implementation-artifacts/deferred-work.md`.
+
+---
+
 ## 2026-10-03 - reproducible supported workspace
 
 **Shipped**
@@ -118,7 +234,7 @@ direction after they asked "is there integrated AI in the website/app?" and the 
   - Stage 3 (hydrate) is a documented no-op — no knowledge layer exists (sessions 2 + 3).
   - Stage 9 (persist) constructs the `MissionGenerated` event but writes nothing — no database
     exists (session 3).
-  - Safety gating happens *before* generation: `SELF_HARM_ADJACENT` short-circuits to
+  - Safety gating happens _before_ generation: `SELF_HARM_ADJACENT` short-circuits to
     `refusal.route: "support"` right after stage 2, never reaching plan/detail. `isImpossibleScope`
     similarly short-circuits to `refusal.route: "clarify"`.
   - Grounding (stage 6) and safety (stage 8) rewrite loops are real: flagged step text gets one
@@ -146,7 +262,7 @@ direction after they asked "is there integrated AI in the website/app?" and the 
 
 - **`ANTHROPIC_API_KEY` is still empty in `.env`.** Everything above is typechecked and unit-tested
   with a mocked model client, but nothing has been run against a live model — the actual
-  generation *quality* is unverified. This is the immediate next blocking step and is the user's
+  generation _quality_ is unverified. This is the immediate next blocking step and is the user's
   to supply, not something addable from this session.
 - No rebuild of the session-1 scored-HTML eval harness (`harness/run.ts`) — still doesn't exist.
   The `/generate` demo page is the quality check for now.
@@ -276,6 +392,7 @@ built as part of it (the spec assumed a prior codebase that isn't this one):
    `packages/ai/router.ts`, grounding validator.
 
 Session 1 explicitly builds no UI, DB, or infra.
+
 ## Website design integration — 28 September 2026
 
 **Shipped**
@@ -326,7 +443,6 @@ Run the app with a configured generation provider, intercept a representative SS
 **Next step**
 
 Connect those preview boundaries only when their corresponding backend contracts are implemented; retain the captured design boards as regression fixtures.
-
 
 ## Real component port of the Claude Design — 1 October 2026
 

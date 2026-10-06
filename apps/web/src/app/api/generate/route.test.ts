@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const generateMission = vi.fn();
-vi.mock("@zandegi/ai", () => ({ generateMission: (...args: unknown[]) => generateMission(...args) }));
+vi.mock("@zandegi/ai", () => ({
+  generateMission: (...args: unknown[]) => generateMission(...args),
+}));
 
 const { POST } = await import("./route");
 
-function request(body: string, init: { headers?: Record<string, string>; signal?: AbortSignal } = {}) {
+function request(
+  body: string,
+  init: { headers?: Record<string, string>; signal?: AbortSignal } = {},
+) {
   return new Request("http://localhost/api/generate", {
     method: "POST",
     body,
@@ -14,7 +19,12 @@ function request(body: string, init: { headers?: Record<string, string>; signal?
   });
 }
 
-async function expectPublicError(response: Response, status: number, code: string, message: string) {
+async function expectPublicError(
+  response: Response,
+  status: number,
+  code: string,
+  message: string,
+) {
   expect(response.status).toBe(status);
   const body = (await response.json()) as {
     error: { code: string; message: string; requestId: string };
@@ -27,7 +37,10 @@ async function expectPublicError(response: Response, status: number, code: strin
 
 beforeEach(() => {
   generateMission.mockReset();
-  generateMission.mockResolvedValue({ event: null, refusal: { reason: "narrow", route: "clarify" } });
+  generateMission.mockResolvedValue({
+    event: null,
+    refusal: { reason: "narrow", route: "clarify" },
+  });
   vi.stubEnv("NODE_ENV", "test");
   vi.stubEnv("ENABLE_UNAUTHENTICATED_GENERATION", "");
 });
@@ -37,7 +50,12 @@ afterEach(() => vi.unstubAllEnvs());
 describe("POST /api/generate", () => {
   it("rejects the wrong media type, malformed JSON, oversized bodies, and unknown fields", async () => {
     const wrongType = await POST(request("{}", { headers: { "Content-Type": "text/plain" } }));
-    await expectPublicError(wrongType, 415, "UNSUPPORTED_MEDIA_TYPE", "Send an application/json request.");
+    await expectPublicError(
+      wrongType,
+      415,
+      "UNSUPPORTED_MEDIA_TYPE",
+      "Send an application/json request.",
+    );
 
     const malformed = await POST(request("{"));
     await expectPublicError(malformed, 400, "INVALID_JSON", "Send a valid JSON body.");
@@ -113,7 +131,9 @@ describe("POST /api/generate", () => {
   it("does not start generation for an already-aborted request", async () => {
     const client = new AbortController();
     client.abort();
-    const response = await POST(request(JSON.stringify({ rawText: "run" }), { signal: client.signal }));
+    const response = await POST(
+      request(JSON.stringify({ rawText: "run" }), { signal: client.signal }),
+    );
     await expect(response.text()).resolves.toBe("");
     expect(generateMission).not.toHaveBeenCalled();
   });
@@ -144,11 +164,15 @@ describe("POST /api/generate", () => {
       (_input: unknown, _onEvent: unknown, options: { signal: AbortSignal }) =>
         new Promise((_resolve, reject) => {
           pipelineSignal = options.signal;
-          options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+          options.signal.addEventListener("abort", () => reject(options.signal.reason), {
+            once: true,
+          });
         }),
     );
 
-    const response = await POST(request(JSON.stringify({ rawText: "run" }), { signal: client.signal }));
+    const response = await POST(
+      request(JSON.stringify({ rawText: "run" }), { signal: client.signal }),
+    );
     client.abort();
     await expect(response.text()).resolves.toBe("");
     expect(pipelineSignal?.aborted).toBe(true);
