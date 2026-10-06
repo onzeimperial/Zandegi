@@ -13,10 +13,21 @@ function response(...messages: unknown[]) {
   return new Response(body, { status: 200 });
 }
 
+const META = {
+  runId: "run-1",
+  startedAt: "2026-01-01T00:00:00.000Z",
+  completedAt: "2026-01-01T00:00:01.000Z",
+  durationMs: 1_000,
+};
+
 describe("generation orchestration", () => {
   it("forwards progress and returns a refusal terminal", async () => {
     const progress = vi.fn();
-    const refusal = { event: null, refusal: { reason: "Narrow it", route: "clarify" as const } };
+    const refusal = {
+      outcome: "refusal" as const,
+      refusal: { reason: "Narrow it", route: "clarify" as const },
+      meta: META,
+    };
     const fetcher = vi
       .fn<GenerationFetch>()
       .mockResolvedValue(
@@ -36,14 +47,11 @@ describe("generation orchestration", () => {
   });
   it("returns a generated mission result terminal", async () => {
     const result = {
-      event: {
-        type: "MissionGenerated",
-        occurredAt: "2026-01-01",
-        payload: {
-          mission: { title: "Mission", primaryDomain: "Mind", completionXp: 100, chapters: [] },
-          safety: { professionalFrameApplied: false },
-        },
-      },
+      outcome: "mission" as const,
+      mission: { title: "Mission", goalType: "METRIC", primaryDomain: "Mind", chapters: [] },
+      safety: { safetyClass: "NORMAL", professionalFrameApplied: false },
+      grounding: { claimsChecked: 0, ungroundedClaims: 0, rewritten: 0, dropped: 0 },
+      meta: META,
     };
     const fetcher = vi
       .fn<GenerationFetch>()

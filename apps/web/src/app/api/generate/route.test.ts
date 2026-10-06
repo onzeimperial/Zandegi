@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// The adapter calls exactly one API-owned use case. Mocking it here proves
+// that, and keeps the contract helpers (validation, error codes, ports) real.
 const generateMission = vi.fn();
-vi.mock("@zandegi/ai", () => ({
-  generateMission: (...args: unknown[]) => generateMission(...args),
-}));
+vi.mock("@zandegi/api", async () => {
+  const actual = await vi.importActual<typeof import("@zandegi/api")>("@zandegi/api");
+  return { ...actual, generateMission: (...args: unknown[]) => generateMission(...args) };
+});
 
 const { POST } = await import("./route");
 
@@ -38,14 +41,26 @@ async function expectPublicError(
 beforeEach(() => {
   generateMission.mockReset();
   generateMission.mockResolvedValue({
-    event: null,
+    outcome: "refusal",
     refusal: { reason: "narrow", route: "clarify" },
+    meta: {
+      runId: "run-1",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      completedAt: "2026-01-01T00:00:01.000Z",
+      durationMs: 1_000,
+    },
   });
   vi.stubEnv("NODE_ENV", "test");
   vi.stubEnv("ENABLE_UNAUTHENTICATED_GENERATION", "");
+  // Diagnostics are written to the server log, never to the response, so the
+  // test output stays readable while the assertions below check the body.
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 
 describe("POST /api/generate", () => {
   it("rejects the wrong media type, malformed JSON, oversized bodies, and unknown fields", async () => {
@@ -100,6 +115,28 @@ describe("POST /api/generate", () => {
     expect(generateMission).toHaveBeenCalledOnce();
   });
 
+  it("calls one API use case with the clock, id, cancellation and persistence ports", async () => {
+    const response = await POST(request(JSON.stringify({ rawText: "run a half marathon" })));
+    await response.text();
+
+    expect(generateMission).toHaveBeenCalledOnce();
+    const [input, ports] = generateMission.mock.calls[0] as [
+      { request: unknown },
+      Record<string, unknown>,
+    ];
+    expect(input.request).toEqual({ rawText: "run a half marathon" });
+    expect(Object.keys(ports).sort()).toEqual([
+      "cancellation",
+      "clock",
+      "ids",
+      "knowledge",
+      "persistence",
+    ]);
+    expect((ports.cancellation as { signal: AbortSignal }).signal).toBeInstanceOf(AbortSignal);
+    expect(typeof (ports.clock as { now: () => Date }).now()).toBe("object");
+    expect(typeof (ports.ids as { newId: () => string }).newId()).toBe("string");
+  });
+
   it("never exposes a secret-bearing pipeline error", async () => {
     generateMission.mockRejectedValue(new Error("secret sk-ant-sensitive"));
     const response = await POST(request(JSON.stringify({ rawText: "run" })));
@@ -113,8 +150,8 @@ describe("POST /api/generate", () => {
     try {
       let pipelineSignal: AbortSignal | undefined;
       generateMission.mockImplementation(
-        (_input: unknown, _onEvent: unknown, options: { signal: AbortSignal }) => {
-          pipelineSignal = options.signal;
+        (_input: unknown, ports: { cancellation: { signal: AbortSignal } }) => {
+          pipelineSignal = ports.cancellation.signal;
           return new Promise(() => undefined);
         },
       );
@@ -161,12 +198,11 @@ describe("POST /api/generate", () => {
     const client = new AbortController();
     let pipelineSignal: AbortSignal | undefined;
     generateMission.mockImplementation(
-      (_input: unknown, _onEvent: unknown, options: { signal: AbortSignal }) =>
+      (_input: unknown, ports: { cancellation: { signal: AbortSignal } }) =>
         new Promise((_resolve, reject) => {
-          pipelineSignal = options.signal;
-          options.signal.addEventListener("abort", () => reject(options.signal.reason), {
-            once: true,
-          });
+          const { signal } = ports.cancellation;
+          pipelineSignal = signal;
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
         }),
     );
 

@@ -4,6 +4,90 @@ Newest first.
 
 ---
 
+## 2026-10-06 - mission generation behind the API boundary (story 1.3)
+
+**Shipped**
+
+- `@zandegi/api` is no longer a scaffold. It owns the one generation use case the web adapter
+  calls, plus the ports it needs: `Clock`, `IdGenerator`, `CancellationPort`, `KnowledgePort` and
+  `GenerationPersistencePort`. Every impure thing is injected. The run ID, `startedAt`,
+  `completedAt` and `durationMs` now come from the id and clock ports, so no authoritative
+  timestamp or identity originates inside `ai`.
+- `@zandegi/api/client` is the new client-safe contract: request shape and limits, the stage
+  table, the mission/chapter/step views, the two terminal outcomes (`mission` / `refusal`), run
+  metadata, and the stable error codes with their published messages. It imports only
+  `@zandegi/core/contracts`, so it can never drag the pipeline into a browser bundle.
+- `@zandegi/core` gained a `./contracts` subpath carrying exactly what the web already consumes
+  (`GoalType`, `ProgressDisplay`, `percentageAllowed`, `progressDisplayAllowed`). Story 1.4 owns
+  the full contract surface; this opens the door without furnishing the room.
+- `@zandegi/ai` is narrowed to validated draft content. The `score` and `persist` stages are gone,
+  `StageName` is seven members, `ScoredStep`/`ScoredChapter`/`ScoredMission` and
+  `MissionGeneratedEvent`/`PipelineResult` are deleted, and `generateMission` is now
+  `generateMissionDraft` returning `{ draft, refusal? }` with no event, no `occurredAt` and no
+  `Date.now()`. `safetyPass` operates on a `DraftMission`.
+- The web route keeps all of its machinery - bounded body, SSE framing, the 25s deadline, abort
+  handling, `X-Request-Id`, the stable codes - and now calls exactly one API use case with its
+  ports injected. Field validation moved to `parseGenerateMissionRequest` in `@zandegi/api`, so
+  the adapter and the use case cannot drift, and a bad request is still a non-2xx JSON body before
+  any stream is opened. Diagnostics are logged server-side with the goal text and anything
+  key-shaped redacted.
+- Every web file re-sources its types from `@zandegi/api/client` and `@zandegi/core/contracts`.
+  `sse.ts` validates the new terminal frame (and rejects `score`/`persist` progress frames),
+  `generator-state.ts` derives stage order from `GENERATION_STAGES` instead of a duplicated
+  literal, and `page.tsx` builds its stage rows from the contract with an exhaustive title record.
+- `mission-review.tsx` no longer renders `+N XP`. The time estimate reads `Est. N min`, the
+  chapter total reads `~N h`, and the copy now says times are planning estimates and that XP comes
+  from completing verified work, not from generating a plan.
+- `eslint.config.js` forbids `apps/**` importing `@zandegi/ai`, `db`, `economy` or `tools`,
+  statically or dynamically, in runtime or type position. Because flat config replaces rule
+  options rather than merging them, the `apps/**` block repeats the legacy patterns alongside the
+  new ones; `tooling/import-boundary.test.ts` pins both, including the case where an app violates
+  each rule in the same file.
+
+**Learned**
+
+The XP removal was never about the arithmetic. Stage 7 already computed XP deterministically from
+`@zandegi/core`; the input was the problem, because `stepBaseXp(step.estimatedMinutes)` takes a
+number the model wrote. Removing XP from generation entirely - rather than recomputing it more
+carefully - is what makes law 3 true: XP exists only once a completion event is accepted.
+`estimatedMinutes` survives as a planning estimate, clearly labelled, because the user still needs
+to know roughly how long a step takes.
+
+The mapping layer copies every field by name and spreads nothing. That is deliberate: if `ai` ever
+regrows a field a client must not see, it cannot reach the wire by accident.
+
+Flat ESLint config overrides rule options wholesale. An `apps/**` block added after the existing
+legacy block silently disabled the legacy rule for apps until both were listed together - exactly
+the kind of regression the pinning test exists to catch.
+
+**Verified**
+
+`pnpm verify` green: prettier, `eslint . --max-warnings 0`, all package typechecks, 247 tests
+across 34 files, production build. Adding `import type { ScoredChapter } from "@zandegi/ai"` to a
+web file fails lint naming the file and the package; reverted. `grep` over `apps/web/src` finds no
+`@zandegi/ai|db|economy|tools`, and no `baseXp|completionXp|MissionGenerated` survives in
+`packages/ai/src` or `apps/web/src` outside a doc comment and two negative assertions.
+
+**Deferred / risky**
+
+- Not exercised against a real `ANTHROPIC_API_KEY`: the live `/generate` run and the mid-stream
+  disconnect check from the spec's verification list still need a human with a key.
+- `KnowledgePort` is called with an empty slot list and `emptyKnowledge` returns nothing, because
+  no knowledge layer exists (story 1.17). The port exists to be filled, not to pretend.
+- `GenerationPersistencePort` is injected and no-op. Story 1.19 implements the atomic write.
+  Generation must never become a ledger fact.
+- The contract in `@zandegi/api/client` is pre-protocol: no version field, no server run sequence.
+  Story 1.4 replaces it rather than extending it.
+- `@trpc/server` and `inngest` remain unused dependencies of `@zandegi/api`.
+
+**Next step**
+
+Story 1.4: define the versioned Goal, Pursuit, Mission and stream contracts in
+`@zandegi/core/contracts`, and fold `@zandegi/api/client`'s pre-protocol shapes into them with
+compatibility fixtures.
+
+---
+
 ## 2026-10-05 - verification and repository guardrails
 
 **Shipped**

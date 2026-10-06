@@ -8,7 +8,7 @@
  */
 
 import { z } from "zod";
-import type { ScoredMission } from "../src/types";
+import type { DraftMission } from "../src/types";
 import type { HarnessGoal } from "./goals";
 
 export const RUBRIC_AXES = [
@@ -50,7 +50,7 @@ export const rubricScoreSchema = z.object({
 
 export type RubricScore = z.infer<typeof rubricScoreSchema>;
 
-export function buildJudgePrompt(goal: HarnessGoal, mission: ScoredMission): string {
+export function buildJudgePrompt(goal: HarnessGoal, mission: DraftMission): string {
   const axes = RUBRIC_AXES.map((a) => `- ${a}: ${AXIS_DESCRIPTION[a]}`).join("\n");
   return [
     `You are grading a generated life-mission for quality. Be a harsh grader.`,

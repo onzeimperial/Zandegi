@@ -112,6 +112,99 @@ describe("legacy import boundary", () => {
   );
 });
 
+// AD-2: an app is a presentation adapter. It calls API use cases and reads
+// client-safe contracts; it never reaches into the generation pipeline, the
+// database, the economy or the tool runtimes, in runtime or in type position.
+describe("application import boundary", () => {
+  const FORBIDDEN = ["@zandegi/ai", "@zandegi/db", "@zandegi/economy", "@zandegi/tools"];
+
+  it(
+    "fails an app file that imports a server-only package",
+    async () => {
+      for (const specifier of FORBIDDEN) {
+        const { messages } = await boundaryMessages(`import "${specifier}";\n`, appFixturePath);
+        expect(messages, specifier).toHaveLength(1);
+        expect(messages[0]!.ruleId, specifier).toBe("no-restricted-imports");
+        expect(messages[0]!.severity, specifier).toBe(2);
+        expect(messages[0]!.message, specifier).toContain("AD-2");
+        expect(messages[0]!.message, specifier).toContain(specifier);
+      }
+    },
+    SLOW,
+  );
+
+  it(
+    "fails a type-only import, which erases at runtime but still couples the app",
+    async () => {
+      const { messages } = await boundaryMessages(
+        'import type { DraftChapter } from "@zandegi/ai";\nexport type X = DraftChapter;\n',
+        appFixturePath,
+      );
+      expect(messages).toHaveLength(1);
+      expect(messages[0]!.message).toContain("AD-2");
+    },
+    SLOW,
+  );
+
+  it(
+    "fails a deep subpath and a dynamic import of a server-only package",
+    async () => {
+      const deep = await boundaryMessages('import "@zandegi/ai/pipeline";\n', appFixturePath);
+      expect(deep.messages).toHaveLength(1);
+      expect(deep.messages[0]!.message).toContain("AD-2");
+
+      const dynamic = await boundaryMessages(
+        'export const load = () => import("@zandegi/economy");\n',
+        appFixturePath,
+      );
+      expect(dynamic.messages).toHaveLength(1);
+      expect(dynamic.messages[0]!.ruleId).toBe("no-restricted-syntax");
+      expect(dynamic.messages[0]!.message).toContain("AD-2");
+    },
+    SLOW,
+  );
+
+  it(
+    "stays silent for the seam an app is supposed to use",
+    async () => {
+      const { messages } = await boundaryMessages(
+        [
+          'import "@zandegi/api";',
+          'import "@zandegi/api/client";',
+          'import "@zandegi/core/contracts";',
+          'export const load = () => import("@zandegi/api/client");',
+          "",
+        ].join("\n"),
+        appFixturePath,
+      );
+      expect(messages).toHaveLength(0);
+    },
+    SLOW,
+  );
+
+  it(
+    "leaves packages free to depend on a server-only package, as @zandegi/api does",
+    async () => {
+      const { messages } = await boundaryMessages('import "@zandegi/ai";\n');
+      expect(messages).toHaveLength(0);
+    },
+    SLOW,
+  );
+
+  it(
+    "still fails a legacy import from an app, now that two rules share the block",
+    async () => {
+      const { messages } = await boundaryMessages(
+        'import "@zandegi/db";\nimport "legacy/src/lib/x";\n',
+        appFixturePath,
+      );
+      expect(messages).toHaveLength(2);
+      expect(messages.map((message) => message.message).join(" ")).toContain("AD-13");
+    },
+    SLOW,
+  );
+});
+
 // Matrix row: "Lint warning". This shares the warmed instance above rather than
 // living beside the other verify-contract assertions, because a second ESLint
 // instance in a second test file loads the flat config again in parallel.

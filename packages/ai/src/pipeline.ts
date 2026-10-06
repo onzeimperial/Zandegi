@@ -7,7 +7,6 @@ import { hydrate } from "./stages/03-hydrate";
 import { plan } from "./stages/04-plan";
 import { detailChapter } from "./stages/05-detail";
 import { validateMissionGrounding } from "./grounding";
-import { scoreMission, NEUTRAL_CONTEXT } from "./stages/07-score";
 import { safetyPass } from "./stages/08-safety";
 import { complete, modelForStage } from "./router";
 import { parseStageJson, rewriteOutputSchema } from "./schemas";
@@ -17,10 +16,9 @@ import type {
   DraftMission,
   DraftStep,
   GoalInput,
-  PipelineResult,
+  MissionDraftOutcome,
   ProgressCallback,
   RewriteIssue,
-  ScoredMission,
   StageEvent,
   StageName,
 } from "./types";
@@ -68,16 +66,29 @@ string, "rewrittenText": string }] }. Return every supplied issueId exactly once
   applyExactRewrites(chapters, issues, parsed.rewrites);
 }
 
-export interface GenerateMissionOptions {
+export interface GenerateMissionDraftOptions {
+  /**
+   * The one request-scoped evaluation instant, supplied by the API clock port.
+   * It is required so this package can never fall back to an ambient clock:
+   * every freshness decision in a run is judged against the same moment.
+   */
+  asOf: Date;
   signal?: AbortSignal;
 }
 
-export async function generateMission(
+/**
+ * Produce validated draft content for a goal. This package owns the seven
+ * content stages and nothing else: no clock, no identifiers, no persistence,
+ * no event, and no number that affects progression. `@zandegi/api` orchestrates
+ * the result into the client-facing contract.
+ */
+export async function generateMissionDraft(
   input: GoalInput,
-  onEvent?: ProgressCallback,
-  options: GenerateMissionOptions = {},
-): Promise<PipelineResult> {
-  const startedAt = Date.now();
+  // Explicitly nullable rather than optional: `options` carries the required
+  // evaluation instant, and a required parameter cannot follow an optional one.
+  onEvent: ProgressCallback | undefined,
+  options: GenerateMissionDraftOptions,
+): Promise<MissionDraftOutcome> {
   const modelsUsed: Partial<Record<StageName, string>> = {};
 
   async function runStage<T>(stage: StageName, fn: () => Promise<T>): Promise<T> {
@@ -99,7 +110,7 @@ export async function generateMission(
 
   if (interpretation.notes.isImpossibleScope) {
     return {
-      event: null,
+      draft: null,
       refusal: {
         reason: "The goal as stated isn't achievable in the implied timeframe.",
         route: "clarify",
@@ -112,7 +123,7 @@ export async function generateMission(
 
   if (isGenerationBlocked(resolved.safetyClass)) {
     return {
-      event: null,
+      draft: null,
       refusal: { reason: "This needs a person, not a mission.", route: "support" },
     };
   }
@@ -171,12 +182,12 @@ export async function generateMission(
   };
 
   const groundingResult = await runStage("ground", async () => {
-    const initial = validateMissionGrounding(draftMission);
+    const initial = validateMissionGrounding(draftMission, options.asOf);
     if (initial.ungroundedClaims.length === 0) return initial;
 
     await rewriteFlagged("ground", draftChapters, initial.ungroundedClaims, options.signal);
     modelsUsed.ground = modelForStage("ground");
-    const revalidated = validateMissionGrounding(draftMission);
+    const revalidated = validateMissionGrounding(draftMission, options.asOf);
     if (revalidated.ungroundedClaims.length > 0) {
       throw new Error("grounding rewrite did not resolve every finding");
     }
@@ -188,24 +199,20 @@ export async function generateMission(
     };
   });
 
-  const scoredMission: ScoredMission = await runStage("score", async () =>
-    scoreMission(draftMission, NEUTRAL_CONTEXT),
-  );
-
   let finalGroundingResult = groundingResult;
   const safetyResult = await runStage("safety", async () => {
-    let result = safetyPass(scoredMission, resolved.safetyClass);
+    let result = safetyPass(draftMission, resolved.safetyClass);
     const initialRedactions = result.outcome.redactions;
     if (result.needsRewrite.length > 0) {
-      await rewriteFlagged("safety", scoredMission.chapters, result.needsRewrite, options.signal);
+      await rewriteFlagged("safety", draftChapters, result.needsRewrite, options.signal);
       modelsUsed.safety = modelForStage("safety");
-      result = safetyPass(scoredMission, resolved.safetyClass);
+      result = safetyPass(draftMission, resolved.safetyClass);
       if (result.needsRewrite.length > 0) {
         throw new Error("safety rewrite did not resolve every finding");
       }
     }
 
-    const postSafetyGrounding = validateMissionGrounding(scoredMission);
+    const postSafetyGrounding = validateMissionGrounding(draftMission, options.asOf);
     if (postSafetyGrounding.ungroundedClaims.length > 0) {
       throw new Error("safety rewrite introduced an ungrounded finding");
     }
@@ -221,22 +228,18 @@ export async function generateMission(
   });
 
   // Chapters are released only after both content validators succeed.
-  for (const chapter of scoredMission.chapters) {
+  for (const chapter of draftMission.chapters) {
     emit(onEvent, { stage: "detail", status: "done", chapter });
   }
 
-  return runStage("persist", async () => ({
-    event: {
-      type: "MissionGenerated" as const,
-      occurredAt: new Date().toISOString(),
-      payload: {
-        goalText: input.rawText,
-        pursuitSlug: resolved.slug,
-        mission: scoredMission,
-        grounding: finalGroundingResult,
-        safety: safetyResult.outcome,
-        generationMeta: { modelsUsed, totalMs: Date.now() - startedAt },
-      },
+  return {
+    draft: {
+      goalText: input.rawText,
+      pursuitSlug: resolved.slug,
+      mission: draftMission,
+      grounding: finalGroundingResult,
+      safety: safetyResult.outcome,
+      modelsUsed,
     },
-  }));
+  };
 }

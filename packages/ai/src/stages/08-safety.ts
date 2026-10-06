@@ -7,7 +7,7 @@
 
 import { isGenerationBlocked, requiresProfessionalFrame, type SafetyClass } from "@zandegi/core";
 import { issueId, stepTextFields } from "../rewrite";
-import type { RewriteIssue, ScoredMission, SafetyOutcome } from "../types";
+import type { DraftMission, RewriteIssue, SafetyOutcome } from "../types";
 
 // Phrases a CLINICAL / FINANCIAL / LEGAL mission must not contain. Redacted
 // (the step is softened by a model rewrite the pipeline triggers) rather
@@ -37,7 +37,7 @@ export interface SafetyPassResult {
   needsRewrite: RewriteIssue[];
 }
 
-export function safetyPass(mission: ScoredMission, safetyClass: SafetyClass): SafetyPassResult {
+export function safetyPass(mission: DraftMission, safetyClass: SafetyClass): SafetyPassResult {
   if (isGenerationBlocked(safetyClass)) {
     return {
       outcome: {

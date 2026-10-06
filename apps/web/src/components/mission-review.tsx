@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import React, { useState } from "react";
-import type { PipelineResult, ScoredChapter } from "@zandegi/ai";
-import { percentageAllowed } from "@zandegi/core";
+import type { GenerationResult, MissionChapter } from "@zandegi/api/client";
+import { percentageAllowed } from "@zandegi/core/contracts";
 import { FlowHeader } from "./flow-header";
 
 function Chapter({
@@ -12,7 +12,7 @@ function Chapter({
   open,
   onToggle,
 }: {
-  chapter: ScoredChapter;
+  chapter: MissionChapter;
   index: number;
   open: boolean;
   onToggle: () => void;
@@ -26,7 +26,7 @@ function Chapter({
           <span className="name">{chapter.title}</span>
           <span className="goal">Mini-goal: {chapter.exitCondition}</span>
         </span>
-        <span className="weeks">{Math.max(1, Math.round(minutes / 60))} h</span>
+        <span className="weeks">~{Math.max(1, Math.round(minutes / 60))} h</span>
       </button>
       {open && (
         <div className="chapter-steps">
@@ -34,11 +34,12 @@ function Chapter({
             <div className="step" key={step.index}>
               <div>
                 <span className="what">{step.title}</span>
+                {/* A planning estimate, never a promise and never an XP figure:
+                    XP exists only once verified work is completed. */}
                 <span className="when">
-                  {step.estimatedMinutes} min · {step.verification}
+                  Est. {step.estimatedMinutes} min · {step.verification}
                 </span>
               </div>
-              <span className="d xp">+{step.baseXp} XP</span>
             </div>
           ))}
           <p className="advice">{chapter.steps[0]?.guide.approach}</p>
@@ -48,10 +49,10 @@ function Chapter({
   );
 }
 
-export function MissionReview({ result }: { result: PipelineResult }) {
-  const mission = result.event?.payload.mission;
+export function MissionReview({ result }: { result: GenerationResult }) {
   const [openChapter, setOpenChapter] = useState(0);
-  if (!mission) return null;
+  if (result.outcome !== "mission") return null;
+  const mission = result.mission;
   const metric = percentageAllowed(mission.goalType);
 
   return (
@@ -75,7 +76,7 @@ export function MissionReview({ result }: { result: PipelineResult }) {
                 : "Honest progress tracks chapters, evidence and the next action without a made-up percentage."}
             </p>
 
-            {result.event?.payload.safety.professionalFrameApplied && (
+            {result.safety.professionalFrameApplied && (
               <div className="preview-note" role="note">
                 <b>Professional guidance applies.</b>
                 <br />
@@ -85,7 +86,10 @@ export function MissionReview({ result }: { result: PipelineResult }) {
             )}
 
             <div className="review-actions">
-              <p>Planned by Zandegi AI. XP and difficulty come from fixed rules.</p>
+              <p>
+                Planned by Zandegi AI. Times are planning estimates, not targets. You earn XP by
+                completing verified work, never by generating a plan.
+              </p>
               <p className="preview-note">
                 This result is not saved and will not carry over. Tweak and Start open clearly
                 labelled local examples.

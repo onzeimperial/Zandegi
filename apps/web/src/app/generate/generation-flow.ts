@@ -1,4 +1,4 @@
-import type { PipelineResult, StageEvent } from "@zandegi/ai";
+import type { GenerationProgress, GenerationResult } from "@zandegi/api/client";
 import { consumeGenerationStream } from "./sse";
 import { generationRequestInit } from "./request";
 
@@ -6,9 +6,9 @@ export type GenerationFetch = (input: RequestInfo | URL, init?: RequestInit) => 
 export async function runGeneration(
   rawText: string,
   signal: AbortSignal,
-  onProgress: (event: StageEvent) => void,
+  onProgress: (event: GenerationProgress) => void,
   fetcher: GenerationFetch = fetch,
-): Promise<PipelineResult> {
+): Promise<GenerationResult> {
   const response = await fetcher("/api/generate", generationRequestInit(rawText, signal));
   if (!response.ok || !response.body) {
     const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };

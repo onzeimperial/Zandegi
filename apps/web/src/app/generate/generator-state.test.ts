@@ -6,6 +6,14 @@ import {
   visibleStageState,
 } from "./generator-state";
 import { generationRequestInit } from "./request";
+import { GENERATION_STAGES, type GenerationResult } from "@zandegi/api/client";
+
+const META = {
+  runId: "run-1",
+  startedAt: "2026-01-01T00:00:00.000Z",
+  completedAt: "2026-01-01T00:00:01.000Z",
+  durationMs: 1_000,
+};
 
 describe("generator UI state", () => {
   it("sends the protected exact request shape", () => {
@@ -32,7 +40,6 @@ describe("generator UI state", () => {
       index: 0,
       title: "Start",
       exitCondition: "Evidence gathered",
-      completionXp: 50,
       steps: [],
     };
     const revealed = generatorReducer(detail, {
@@ -42,10 +49,12 @@ describe("generator UI state", () => {
     expect(revealed.chapters).toEqual([chapter]);
   });
   it("keeps refusal and transport errors distinct for retry", () => {
-    const refused = generatorReducer(initialGeneratorState, {
-      type: "result",
-      result: { event: null, refusal: { reason: "Please clarify", route: "clarify" } },
-    });
+    const refusal: GenerationResult = {
+      outcome: "refusal",
+      refusal: { reason: "Please clarify", route: "clarify" },
+      meta: META,
+    };
+    const refused = generatorReducer(initialGeneratorState, { type: "result", result: refusal });
     expect(refused.status).toBe("refusal");
     const failed = generatorReducer(initialGeneratorState, {
       type: "error",
@@ -64,5 +73,17 @@ describe("generator UI state", () => {
     expect(visibleStageState("resolve", "hydrate")).toBe("active");
     expect(visibleStageState("interpret", "hydrate")).toBe("done");
     expect(visibleStageState("plan", "hydrate")).toBe("pending");
+  });
+  it("orders stages from the contract, which no longer scores or persists", () => {
+    expect([...GENERATION_STAGES]).toEqual([
+      "interpret",
+      "resolve",
+      "hydrate",
+      "plan",
+      "detail",
+      "ground",
+      "safety",
+    ]);
+    expect(visibleStageState("ground", "safety")).toBe("done");
   });
 });

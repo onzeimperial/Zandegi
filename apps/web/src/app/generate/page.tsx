@@ -2,7 +2,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useReducer, useRef, useState } from "react";
-import type { StageEvent } from "@zandegi/ai";
+import { GENERATION_STAGES, type GenerationStage } from "@zandegi/api/client";
 import { FlowHeader } from "@/components/flow-header";
 import { Icon } from "@/components/icons";
 import { MissionReview } from "@/components/mission-review";
@@ -17,18 +17,24 @@ import { runGeneration } from "./generation-flow";
 const mascotSrc =
   "/design/mascot-abe2675ee7fc68d644fa0e93dc74b94ffb85b330e5b5e02bcac4b0ab8c569d29.png";
 
-/* The authored board sketches five stages; the real pipeline reports eight,
-   so the live screen shows what actually ran. */
-const stages: ReadonlyArray<{ key: StageEvent["stage"]; title: string }> = [
-  { key: "interpret", title: "Reading your ambition" },
-  { key: "resolve", title: "Finding your starting point" },
-  { key: "plan", title: "Splitting it into chapters" },
-  { key: "detail", title: "Writing practical steps" },
-  { key: "ground", title: "Checking facts" },
-  { key: "score", title: "Scoring with fixed rules" },
-  { key: "safety", title: "Running the safety pass" },
-  { key: "persist", title: "Finishing your mission" },
-];
+/* The authored board sketches five stages. The real pipeline reports seven,
+   and `hydrate` is shown inside the resolve row, so six rows are drawn. The
+   list is derived from the contract rather than retyped, so the screen cannot
+   promise a stage the server does not run — and the exhaustive record below
+   fails typecheck the day a stage is added. */
+const STAGE_TITLES: Record<GenerationStage, string> = {
+  interpret: "Reading your ambition",
+  resolve: "Finding your starting point",
+  hydrate: "Finding your starting point",
+  plan: "Splitting it into chapters",
+  detail: "Writing practical steps",
+  ground: "Checking facts",
+  safety: "Running the safety pass",
+};
+
+const stages: ReadonlyArray<{ key: GenerationStage; title: string }> = GENERATION_STAGES.filter(
+  (stage) => stage !== "hydrate",
+).map((key) => ({ key, title: STAGE_TITLES[key] }));
 
 const suggestions = [
   "Bench 100 kg",
@@ -252,7 +258,7 @@ export default function GeneratePage() {
               </div>
             )}
 
-            {state.status === "refusal" && state.result?.refusal && (
+            {state.status === "refusal" && state.result?.outcome === "refusal" && (
               <div className="alert" role="alert" aria-live="assertive">
                 <h2>
                   {state.result.refusal.route === "support"

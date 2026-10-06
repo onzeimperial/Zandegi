@@ -13,7 +13,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "@zandegi/core": "workspace:*",
-    "@zandegi/ai": "workspace:*"
+    "@zandegi/api": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",

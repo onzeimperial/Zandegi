@@ -1,0 +1,255 @@
+/**
+ * @zandegi/api/client — the client-safe generation contract.
+ *
+ * Apps import this subpath and nothing deeper (AD-2). It is types and frozen
+ * literal tables only: no I/O, no model client, no Prisma, no server policy,
+ * and deliberately no dependency on `@zandegi/ai`, so importing it can never
+ * drag the pipeline into a browser bundle.
+ *
+ * Two product laws are visible in the shapes below:
+ *   - Law 3/5: nothing here carries XP, rarity, difficulty or priority.
+ *     Generation promises no progression number. `estimatedMinutes` is a
+ *     planning estimate and is documented as non-authoritative.
+ *   - Law 4: there is no `MissionGenerated` event. Generation is not a ledger
+ *     fact, so the contract has no `occurredAt` and no event envelope.
+ *
+ * Story 1.4 owns the versioned wire protocol (protocol version, run ID,
+ * monotonic sequence). This file is the pre-protocol contract the current
+ * SSE adapter speaks, and 1.4 replaces it rather than extending it here.
+ */
+
+import type { GoalType } from "@zandegi/core/contracts";
+
+// ── Request ────────────────────────────────────────────────
+
+/** The only fields a client may send. The adapter rejects any other key. */
+export interface GenerateMissionRequest {
+  /** The user's words, preserved verbatim. */
+  rawText: string;
+  /** IANA timezone, e.g. "Australia/Melbourne". */
+  timezone?: string;
+  location?: string;
+  weeklyTimeBudgetMinutes?: number;
+}
+
+export const GENERATE_MISSION_REQUEST_FIELDS = [
+  "rawText",
+  "timezone",
+  "location",
+  "weeklyTimeBudgetMinutes",
+] as const;
+
+export const GENERATE_MISSION_LIMITS = {
+  maxGoalLength: 2_000,
+  maxLocationLength: 200,
+  maxTimezoneLength: 100,
+  minWeeklyTimeBudgetMinutes: 1,
+  /** Minutes in a week. */
+  maxWeeklyTimeBudgetMinutes: 10_080,
+} as const;
+
+// ── Progress ───────────────────────────────────────────────
+
+/**
+ * The content stages a client may be told about, in the order they run. The
+ * UI derives its stage list from this table rather than duplicating it.
+ *
+ * There is no `score` stage (generation assigns no number) and no `persist`
+ * stage (generation writes no ledger fact).
+ */
+export const GENERATION_STAGES = [
+  "interpret",
+  "resolve",
+  "hydrate",
+  "plan",
+  "detail",
+  "ground",
+  "safety",
+] as const;
+
+export type GenerationStage = (typeof GENERATION_STAGES)[number];
+
+export const GENERATION_STAGE_STATUSES = ["start", "done", "error"] as const;
+export type GenerationStageStatus = (typeof GENERATION_STAGE_STATUSES)[number];
+
+export interface GenerationProgress {
+  stage: GenerationStage;
+  status: GenerationStageStatus;
+  /** Short, safe, user-facing detail. Never a stage trace or model output. */
+  detail?: string;
+  /** Progressive reveal: a chapter that cleared grounding and safety. */
+  chapter?: MissionChapter;
+}
+
+export function isGenerationStage(value: unknown): value is GenerationStage {
+  return (GENERATION_STAGES as readonly unknown[]).includes(value);
+}
+
+export function isGenerationStageStatus(value: unknown): value is GenerationStageStatus {
+  return (GENERATION_STAGE_STATUSES as readonly unknown[]).includes(value);
+}
+
+// ── Mission draft ──────────────────────────────────────────
+
+export const GENERATION_DOMAINS = [
+  "Mind",
+  "Edge",
+  "Coin",
+  "Body",
+  "Grit",
+  "Craft",
+  "Bond",
+  "World",
+] as const;
+export type GenerationDomain = (typeof GENERATION_DOMAINS)[number];
+
+export const GENERATION_VERIFICATION_METHODS = [
+  "SELF",
+  "TIMER",
+  "ARTIFACT",
+  "METRIC",
+  "INTEGRATION",
+] as const;
+export type GenerationVerificationMethod = (typeof GENERATION_VERIFICATION_METHODS)[number];
+
+export const GENERATION_SAFETY_CLASSES = [
+  "NORMAL",
+  "CLINICAL",
+  "FINANCIAL",
+  "LEGAL",
+  "SELF_HARM_ADJACENT",
+] as const;
+export type GenerationSafetyClass = (typeof GENERATION_SAFETY_CLASSES)[number];
+
+export interface MissionSource {
+  title: string;
+  url?: string;
+  /** ISO date the fact was published or last verified. */
+  date: string;
+}
+
+export interface MissionStepGuide {
+  approach: string;
+  materials: string[];
+  commonMistakes: string[];
+  whatGoodLooksLike: string;
+}
+
+export interface MissionStep {
+  index: number;
+  title: string;
+  /**
+   * A **planning estimate only**, in minutes. It is not authoritative, it is
+   * not a target, and no XP, rank or reward is ever derived from it. Render it
+   * as an estimate.
+   */
+  estimatedMinutes: number;
+  verification: GenerationVerificationMethod;
+  guide: MissionStepGuide;
+  sources: MissionSource[];
+  toolKinds: string[];
+}
+
+export interface MissionChapter {
+  index: number;
+  title: string;
+  exitCondition: string;
+  steps: MissionStep[];
+}
+
+export interface MissionDraft {
+  title: string;
+  goalType: GoalType;
+  primaryDomain: GenerationDomain;
+  chapters: MissionChapter[];
+}
+
+export interface MissionSafetyNotice {
+  safetyClass: GenerationSafetyClass;
+  professionalFrameApplied: boolean;
+}
+
+export interface MissionGroundingSummary {
+  claimsChecked: number;
+  /** Always 0 for a delivered draft: an ungrounded claim fails closed. */
+  ungroundedClaims: number;
+  rewritten: number;
+  dropped: number;
+}
+
+/**
+ * Where the run came from. `runId` and the timestamps come from the API's
+ * injected id and clock ports — never from `@zandegi/ai`, and never from the
+ * client.
+ */
+export interface GenerationRunMeta {
+  runId: string;
+  /** ISO-8601 UTC. */
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+}
+
+export interface GenerationRefusal {
+  reason: string;
+  route: "support" | "clarify";
+}
+
+export const GENERATION_REFUSAL_ROUTES = ["support", "clarify"] as const;
+
+/** Exactly one terminal result per run. */
+export type GenerationResult =
+  | {
+      outcome: "mission";
+      mission: MissionDraft;
+      safety: MissionSafetyNotice;
+      grounding: MissionGroundingSummary;
+      meta: GenerationRunMeta;
+    }
+  | {
+      outcome: "refusal";
+      refusal: GenerationRefusal;
+      meta: GenerationRunMeta;
+    };
+
+// ── Errors ─────────────────────────────────────────────────
+
+/**
+ * Stable error codes. These are part of the contract: clients branch on them,
+ * so a code is never renamed, only added. Diagnostic detail (stage names,
+ * model messages, the user's goal text) stays server-side.
+ */
+export const GENERATION_ERROR_CODES = [
+  "GENERATION_DISABLED",
+  "UNSUPPORTED_MEDIA_TYPE",
+  "PAYLOAD_TOO_LARGE",
+  "INVALID_JSON",
+  "INVALID_REQUEST",
+  "GENERATION_TIMEOUT",
+  "GENERATION_FAILED",
+] as const;
+
+export type GenerationErrorCode = (typeof GENERATION_ERROR_CODES)[number];
+
+export const GENERATION_ERROR_MESSAGES: Record<GenerationErrorCode, string> = {
+  GENERATION_DISABLED: "Mission generation is unavailable.",
+  UNSUPPORTED_MEDIA_TYPE: "Send an application/json request.",
+  PAYLOAD_TOO_LARGE: "The request body is too large.",
+  INVALID_JSON: "Send a valid JSON body.",
+  INVALID_REQUEST: "The request fields are invalid.",
+  GENERATION_TIMEOUT: "Mission generation timed out. Try again.",
+  GENERATION_FAILED: "Mission generation failed. Try again.",
+};
+
+export interface GenerationErrorBody {
+  code: GenerationErrorCode;
+  message: string;
+  requestId: string;
+}
+
+export function generationErrorBody(
+  code: GenerationErrorCode,
+  requestId: string,
+): { error: GenerationErrorBody } {
+  return { error: { code, message: GENERATION_ERROR_MESSAGES[code], requestId } };
+}

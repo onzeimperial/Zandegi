@@ -7,7 +7,6 @@ import {
   summariseScores,
   type RubricScore,
 } from "./rubric";
-import { scoreMission, NEUTRAL_CONTEXT } from "../src/stages/07-score";
 import type { DraftMission } from "../src/types";
 import { HARNESS_GOALS } from "./goals";
 
@@ -71,7 +70,7 @@ describe("rubric shape", () => {
 describe("buildJudgePrompt", () => {
   it("embeds the verbatim goal and the mission JSON", () => {
     const goal = HARNESS_GOALS[0]!;
-    const prompt = buildJudgePrompt(goal, scoreMission(mission, NEUTRAL_CONTEXT));
+    const prompt = buildJudgePrompt(goal, mission);
     expect(prompt).toContain(goal.text);
     expect(prompt).toContain("Run a half marathon");
     expect(prompt).toContain("Return ONLY JSON");

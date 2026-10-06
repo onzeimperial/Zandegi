@@ -32,9 +32,9 @@ importers:
 
   apps/web:
     dependencies:
-      '@zandegi/ai':
+      '@zandegi/api':
         specifier: workspace:*
-        version: link:../../packages/ai
+        version: link:../../packages/api
       '@zandegi/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -85,6 +85,12 @@ importers:
       '@trpc/server':
         specifier: 11.19.0
         version: 11.19.0(typescript@6.0.3)
+      '@zandegi/ai':
+        specifier: workspace:*
+        version: link:../ai
+      '@zandegi/core':
+        specifier: workspace:*
+        version: link:../core
       inngest:
         specifier: 4.21.0
         version: 4.21.0(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(next@15.5.27(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)(supports-color@7.2.0)(typescript@6.0.3)(zod@4.6.5)

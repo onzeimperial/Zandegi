@@ -1,0 +1,294 @@
+import { describe, expect, it, vi } from "vitest";
+import type { MissionDraftOutcome } from "@zandegi/ai";
+import { GENERATION_STAGES, type GenerationProgress, type GenerationResult } from "../client";
+import { GenerationError } from "../errors";
+import {
+  cancellationFrom,
+  emptyKnowledge,
+  fixedClock,
+  sequentialIdGenerator,
+  type GeneratedMissionRecord,
+  type GenerateMissionPorts,
+  type KnowledgePort,
+} from "../index";
+import { generateMission, type MissionDraftGenerator } from "./generate-mission";
+
+const START = new Date("2026-10-06T01:00:00.000Z");
+const GOAL = "run a half marathon in april";
+
+function draftOutcome(): MissionDraftOutcome {
+  return {
+    draft: {
+      goalText: GOAL,
+      pursuitSlug: "run-a-half-marathon",
+      mission: {
+        title: "Half Marathon",
+        goalType: "METRIC",
+        primaryDomain: "Body",
+        chapters: [
+          {
+            index: 0,
+            title: "Base building",
+            exitCondition: "Run 3x a week for four weeks",
+            steps: [
+              {
+                index: 0,
+                title: "Run 3km easy",
+                estimatedMinutes: 30,
+                verification: "TIMER",
+                guide: {
+                  approach: "Jog at a conversational pace.",
+                  materials: [],
+                  commonMistakes: [],
+                  whatGoodLooksLike: "You finish able to talk.",
+                },
+                sources: [],
+                toolKinds: [],
+              },
+            ],
+          },
+        ],
+      },
+      grounding: { claimsChecked: 4, ungroundedClaims: [], rewritten: 1, dropped: 0 },
+      safety: {
+        safetyClass: "NORMAL",
+        blocked: false,
+        professionalFrameApplied: false,
+        redactions: ["1200 kcal"],
+      },
+      modelsUsed: { interpret: "test-model" },
+    },
+  };
+}
+
+/** Walks every key of a value, however deeply nested. */
+function allKeys(value: unknown, found: string[] = []): string[] {
+  if (Array.isArray(value)) {
+    for (const item of value) allKeys(item, found);
+  } else if (typeof value === "object" && value !== null) {
+    for (const [key, child] of Object.entries(value)) {
+      found.push(key);
+      allKeys(child, found);
+    }
+  }
+  return found;
+}
+
+type TestPorts = GenerateMissionPorts & { records: GeneratedMissionRecord[] };
+
+function ports(overrides: Partial<GenerateMissionPorts> = {}): TestPorts {
+  const records: GeneratedMissionRecord[] = [];
+  return {
+    clock: fixedClock(START),
+    ids: sequentialIdGenerator("run"),
+    cancellation: cancellationFrom(new AbortController().signal),
+    knowledge: emptyKnowledge,
+    persistence: {
+      record: async (record) => {
+        records.push(record);
+      },
+    },
+    draftGenerator: async () => draftOutcome(),
+    records,
+    ...overrides,
+  };
+}
+
+describe("generateMission use case", () => {
+  it("returns a client-safe mission result with no progression number anywhere", async () => {
+    const progress: GenerationProgress[] = [];
+    const deps = ports({
+      draftGenerator: async (_input, onEvent) => {
+        onEvent?.({ stage: "interpret", status: "start" });
+        onEvent?.({
+          stage: "detail",
+          status: "done",
+          chapter: draftOutcome().draft!.mission.chapters[0]!,
+        });
+        return draftOutcome();
+      },
+    });
+
+    const result = await generateMission(
+      { request: { rawText: GOAL }, onProgress: (entry) => progress.push(entry) },
+      deps,
+    );
+
+    expect(result.outcome).toBe("mission");
+    const keys = allKeys(result).map((key) => key.toLowerCase());
+    for (const forbidden of ["basexp", "completionxp", "xp", "rarity", "difficulty", "priority"]) {
+      expect(keys, forbidden).not.toContain(forbidden);
+    }
+    expect(JSON.stringify(result)).not.toContain("MissionGenerated");
+
+    if (result.outcome !== "mission") throw new Error("unreachable");
+    expect(result.mission.chapters[0]?.steps[0]?.estimatedMinutes).toBe(30);
+    expect(result.grounding).toEqual({
+      claimsChecked: 4,
+      ungroundedClaims: 0,
+      rewritten: 1,
+      dropped: 0,
+    });
+    // Redactions and the blocked flag are server diagnostics, not client content.
+    expect(result.safety).toEqual({ safetyClass: "NORMAL", professionalFrameApplied: false });
+    expect(progress.map((entry) => entry.stage)).toEqual(["interpret", "detail"]);
+    expect(progress[1]?.chapter?.steps[0]?.title).toBe("Run 3km easy");
+    expect(allKeys(progress)).not.toContain("baseXp");
+    expect(GENERATION_STAGES as readonly string[]).not.toContain("score");
+  });
+
+  it("takes its run id, timestamps and evaluation instant from the injected ports", async () => {
+    const knowledge: KnowledgePort = { resolve: vi.fn(async () => []) };
+    const ticks = [START, new Date(START.getTime() + 4_200)];
+    const seenOptions: { asOf: Date }[] = [];
+    const deps = ports({
+      knowledge,
+      clock: { now: () => ticks.shift() ?? new Date(START.getTime() + 4_200) },
+      draftGenerator: async (_input, _onEvent, options) => {
+        seenOptions.push(options);
+        return draftOutcome();
+      },
+    });
+
+    const result = await generateMission({ request: { rawText: GOAL } }, deps);
+
+    expect(result.meta).toEqual({
+      runId: "run-1",
+      startedAt: "2026-10-06T01:00:00.000Z",
+      completedAt: "2026-10-06T01:00:04.200Z",
+      durationMs: 4_200,
+    });
+    expect(knowledge.resolve).toHaveBeenCalledWith({ slots: [], asOf: START });
+    // The same instant reaches generation, so every freshness decision in a run
+    // is judged against one moment and `ai` never reads an ambient clock.
+    expect(seenOptions).toHaveLength(1);
+    expect(seenOptions[0]?.asOf).toBe(START);
+  });
+
+  it("injects persistence but creates no ledger fact", async () => {
+    const deps = ports();
+    await generateMission({ request: { rawText: GOAL } }, deps);
+
+    expect(deps.records).toHaveLength(1);
+    expect(deps.records[0]).toMatchObject({ runId: "run-1", pursuitSlug: "run-a-half-marathon" });
+    expect(Object.keys(deps.records[0]!)).not.toContain("type");
+    expect(JSON.stringify(deps.records[0])).not.toContain("MissionGenerated");
+  });
+
+  it("passes a refusal through with its route and no mission content", async () => {
+    const deps = ports({
+      draftGenerator: async () => ({
+        draft: null,
+        refusal: { reason: "This needs a person, not a mission.", route: "support" as const },
+      }),
+    });
+
+    const result: GenerationResult = await generateMission(
+      { request: { rawText: "i want to die less" } },
+      deps,
+    );
+
+    expect(result).toMatchObject({ outcome: "refusal", refusal: { route: "support" } });
+    expect(JSON.stringify(result)).not.toContain("chapters");
+    expect(deps.records).toHaveLength(0);
+  });
+
+  it.each([
+    ["a non-object body", "not-a-body"],
+    ["an unknown field", { rawText: "run", extra: true }],
+    ["a blank goal", { rawText: "   " }],
+    ["an oversized goal", { rawText: "x".repeat(2_001) }],
+    ["a bad timezone", { rawText: "run", timezone: "not/a-zone" }],
+    ["a fractional time budget", { rawText: "run", weeklyTimeBudgetMinutes: 1.5 }],
+  ])("rejects %s before calling the pipeline", async (_label, request) => {
+    const draftGenerator = vi.fn<MissionDraftGenerator>();
+    const deps = ports({ draftGenerator });
+
+    await expect(generateMission({ request }, deps)).rejects.toMatchObject({
+      name: "GenerationError",
+      code: "INVALID_REQUEST",
+      message: "The request fields are invalid.",
+    });
+    expect(draftGenerator).not.toHaveBeenCalled();
+    expect(deps.records).toHaveLength(0);
+  });
+
+  it("aborts through the injected signal and produces no terminal result", async () => {
+    const controller = new AbortController();
+    let pipelineSignal: AbortSignal | undefined;
+    const progress: GenerationProgress[] = [];
+    const deps = ports({
+      cancellation: cancellationFrom(controller.signal),
+      draftGenerator: (_input, onEvent, options) =>
+        new Promise((_resolve, reject) => {
+          pipelineSignal = options?.signal;
+          options?.signal?.addEventListener(
+            "abort",
+            () => {
+              onEvent?.({ stage: "plan", status: "error" });
+              reject(options.signal!.reason);
+            },
+            { once: true },
+          );
+        }),
+    });
+
+    const pending = generateMission(
+      { request: { rawText: GOAL }, onProgress: (entry) => progress.push(entry) },
+      deps,
+    );
+    // Let the use case reach the pipeline before the client goes away.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.abort(new DOMException("Client disconnected", "AbortError"));
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(pipelineSignal).toBe(controller.signal);
+    // Nothing is emitted or persisted once the client is gone.
+    expect(progress).toHaveLength(0);
+    expect(deps.records).toHaveLength(0);
+  });
+
+  it("refuses to start when the signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort(new DOMException("Client disconnected", "AbortError"));
+    const draftGenerator = vi.fn<MissionDraftGenerator>();
+
+    await expect(
+      generateMission(
+        { request: { rawText: "run" } },
+        ports({ cancellation: cancellationFrom(controller.signal), draftGenerator }),
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(draftGenerator).not.toHaveBeenCalled();
+  });
+
+  it("turns an internal failure into a stable code and keeps the detail server-side", async () => {
+    const deps = ports({
+      draftGenerator: async () => {
+        throw new Error(`stage detail failed for "${GOAL}" with key sk-ant-secret123456`);
+      },
+    });
+
+    const error = await generateMission({ request: { rawText: GOAL } }, deps).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(GenerationError);
+    const failure = error as GenerationError;
+    expect(failure.code).toBe("GENERATION_FAILED");
+    expect(failure.message).toBe("Mission generation failed. Try again.");
+    // The diagnostic survives for the server log, with personal content and
+    // anything key-shaped redacted.
+    expect(failure.diagnostic).toContain("stage detail failed");
+    expect(failure.diagnostic).not.toContain(GOAL);
+    expect(failure.diagnostic).not.toContain("sk-ant-secret123456");
+    expect(deps.records).toHaveLength(0);
+  });
+
+  it("fails closed when the pipeline returns neither a draft nor a refusal", async () => {
+    const deps = ports({ draftGenerator: async () => ({ draft: null }) });
+    await expect(generateMission({ request: { rawText: "run" } }, deps)).rejects.toMatchObject({
+      code: "GENERATION_FAILED",
+    });
+  });
+});

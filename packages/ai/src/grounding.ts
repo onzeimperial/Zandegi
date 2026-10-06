@@ -46,7 +46,7 @@ export function detectFactualClaims(text: string): string[] {
 }
 
 /** A source is usable if it names something and carries a parseable, not-absurd date. */
-export function isValidSource(source: Source, now: Date = new Date()): boolean {
+export function isValidSource(source: Source, now: Date): boolean {
   if (!source.title || source.title.trim().length < 3) return false;
   const t = Date.parse(source.date);
   if (Number.isNaN(t)) return false;
@@ -67,10 +67,7 @@ export interface StepGroundingResult {
  * that makes factual assertions is the bar. Per-claim linkage is a later
  * refinement, tracked in BUILD-LOG.
  */
-export function validateStepGrounding(
-  step: DraftStep,
-  now: Date = new Date(),
-): StepGroundingResult {
+export function validateStepGrounding(step: DraftStep, now: Date): StepGroundingResult {
   const claims = stepTextFields(0, 0, step).flatMap((field) => detectFactualClaims(field.text));
 
   if (claims.length === 0) return { claims, ungrounded: [] };
@@ -79,10 +76,7 @@ export function validateStepGrounding(
   return { claims, ungrounded: hasValidSource ? [] : claims };
 }
 
-export function validateMissionGrounding(
-  mission: DraftMission,
-  now: Date = new Date(),
-): GroundingReport {
+export function validateMissionGrounding(mission: DraftMission, now: Date): GroundingReport {
   let claimsChecked = 0;
   const ungroundedClaims: GroundingReport["ungroundedClaims"] = [];
 

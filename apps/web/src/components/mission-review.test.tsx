@@ -1,59 +1,54 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import React from "react";
 import { describe, expect, it } from "vitest";
-import type { PipelineResult } from "@zandegi/ai";
+import type { GenerationResult } from "@zandegi/api/client";
 import { MissionReview } from "./mission-review";
 
-function result(goalType: "OUTCOME" | "METRIC", professionalFrameApplied = false): PipelineResult {
+function result(
+  goalType: "OUTCOME" | "METRIC",
+  professionalFrameApplied = false,
+): GenerationResult {
   return {
-    event: {
-      type: "MissionGenerated",
-      occurredAt: "2026-01-01T00:00:00Z",
-      payload: {
-        goalText: "Become a doctor",
-        pursuitSlug: "medicine",
-        mission: {
-          title: "Become a doctor",
-          goalType,
-          primaryDomain: "Mind",
-          completionXp: 400,
-          chapters: [
+    outcome: "mission",
+    mission: {
+      title: "Become a doctor",
+      goalType,
+      primaryDomain: "Mind",
+      chapters: [
+        {
+          index: 0,
+          title: "Know the pathway",
+          exitCondition: "Gather entry evidence",
+          steps: [
             {
               index: 0,
-              title: "Know the pathway",
-              exitCondition: "Gather entry evidence",
-              completionXp: 100,
-              steps: [
-                {
-                  index: 0,
-                  title: "Read entry requirements",
-                  estimatedMinutes: 30,
-                  verification: "ARTIFACT",
-                  guide: {
-                    approach: "Capture the official requirements.",
-                    materials: [],
-                    commonMistakes: [],
-                    whatGoodLooksLike: "A dated note.",
-                  },
-                  toolKinds: [],
-                  sources: [],
-                  baseXp: 30,
-                },
-              ],
+              title: "Read entry requirements",
+              estimatedMinutes: 30,
+              verification: "ARTIFACT",
+              guide: {
+                approach: "Capture the official requirements.",
+                materials: [],
+                commonMistakes: [],
+                whatGoodLooksLike: "A dated note.",
+              },
+              toolKinds: [],
+              sources: [],
             },
           ],
         },
-        grounding: { claimsChecked: 0, ungroundedClaims: [], rewritten: 0, dropped: 0 },
-        safety: {
-          safetyClass: professionalFrameApplied ? "CLINICAL" : "NORMAL",
-          blocked: false,
-          professionalFrameApplied,
-          redactions: [],
-        },
-        generationMeta: { modelsUsed: {}, totalMs: 1 },
-      },
+      ],
     },
-    refusal: undefined,
+    safety: {
+      safetyClass: professionalFrameApplied ? "CLINICAL" : "NORMAL",
+      professionalFrameApplied,
+    },
+    grounding: { claimsChecked: 0, ungroundedClaims: 0, rewritten: 0, dropped: 0 },
+    meta: {
+      runId: "run-1",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      completedAt: "2026-01-01T00:00:12.000Z",
+      durationMs: 12_000,
+    },
   };
 }
 
@@ -75,5 +70,21 @@ describe("mission review", () => {
     const html = renderToStaticMarkup(<MissionReview result={result("OUTCOME", true)} />);
     expect(html).toContain("Professional guidance applies");
     expect(html).toContain("qualified professional");
+  });
+  it("promises no XP and marks the time as an estimate (laws 2 and 3)", () => {
+    const html = renderToStaticMarkup(<MissionReview result={result("METRIC")} />);
+    // No per-step XP badge of any size, and no XP total.
+    expect(html).not.toMatch(/\+\s*\d+\s*XP/);
+    expect(html).not.toMatch(/\d+\s*XP/);
+    expect(html).toContain("Est. 30 min");
+    expect(html).toContain("planning estimates");
+  });
+  it("renders nothing for a refusal terminal", () => {
+    const refusal: GenerationResult = {
+      outcome: "refusal",
+      refusal: { reason: "This needs a person, not a mission.", route: "support" },
+      meta: result("METRIC").meta,
+    };
+    expect(renderToStaticMarkup(<MissionReview result={refusal} />)).toBe("");
   });
 });

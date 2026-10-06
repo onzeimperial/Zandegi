@@ -1,12 +1,18 @@
-import type { PipelineResult, ScoredChapter, StageEvent } from "@zandegi/ai";
+import {
+  GENERATION_STAGES,
+  type GenerationProgress,
+  type GenerationResult,
+  type GenerationStage,
+  type MissionChapter,
+} from "@zandegi/api/client";
 
 export type GeneratorStatus = "idle" | "generating" | "done" | "refusal" | "error";
 export interface GeneratorState {
   status: GeneratorStatus;
-  activeStage: StageEvent["stage"] | null;
+  activeStage: GenerationStage | null;
   detail: string | null;
-  chapters: ScoredChapter[];
-  result: PipelineResult | null;
+  chapters: MissionChapter[];
+  result: GenerationResult | null;
   error: string | null;
 }
 export const initialGeneratorState: GeneratorState = {
@@ -20,30 +26,22 @@ export const initialGeneratorState: GeneratorState = {
 export function canSubmitGeneration(rawText: string, status: GeneratorStatus) {
   return rawText.trim().length > 0 && status !== "generating";
 }
-const STAGE_ORDER: StageEvent["stage"][] = [
-  "interpret",
-  "resolve",
-  "hydrate",
-  "plan",
-  "detail",
-  "ground",
-  "score",
-  "safety",
-  "persist",
-];
 export function visibleStageState(
-  stage: StageEvent["stage"],
-  activeStage: StageEvent["stage"] | null,
+  stage: GenerationStage,
+  activeStage: GenerationStage | null,
 ): "active" | "done" | "pending" {
   if (activeStage === stage || (stage === "resolve" && activeStage === "hydrate")) return "active";
-  return activeStage !== null && STAGE_ORDER.indexOf(activeStage) > STAGE_ORDER.indexOf(stage)
+  // Stage order comes from the contract, so the screen cannot drift from the
+  // stages the server actually runs.
+  return activeStage !== null &&
+    GENERATION_STAGES.indexOf(activeStage) > GENERATION_STAGES.indexOf(stage)
     ? "done"
     : "pending";
 }
 export type GeneratorAction =
   | { type: "start" }
-  | { type: "progress"; event: StageEvent }
-  | { type: "result"; result: PipelineResult }
+  | { type: "progress"; event: GenerationProgress }
+  | { type: "result"; result: GenerationResult }
   | { type: "error"; message: string }
   | { type: "reset" };
 
@@ -52,7 +50,11 @@ export function generatorReducer(state: GeneratorState, action: GeneratorAction)
   if (action.type === "start") return { ...initialGeneratorState, status: "generating" };
   if (action.type === "error") return { ...state, status: "error", error: action.message };
   if (action.type === "result")
-    return { ...state, status: action.result.refusal ? "refusal" : "done", result: action.result };
+    return {
+      ...state,
+      status: action.result.outcome === "refusal" ? "refusal" : "done",
+      result: action.result,
+    };
   return {
     ...state,
     activeStage: action.event.stage,

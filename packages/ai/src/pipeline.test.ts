@@ -20,7 +20,20 @@ vi.mock("./router", async () => {
   return { ...actual, complete: (...a: unknown[]) => completeMock(...a) };
 });
 
-const { generateMission } = await import("./pipeline");
+const pipeline = await import("./pipeline");
+
+const NOW = new Date("2026-06-15T00:00:00Z");
+
+type DraftOptions = Parameters<typeof pipeline.generateMissionDraft>[2];
+
+// Production injects the request-scoped instant through the API clock port.
+// These tests go through the real signature, defaulting only the instant so
+// each case stays about the behaviour it is actually testing.
+const generateMissionDraft = (
+  input: Parameters<typeof pipeline.generateMissionDraft>[0],
+  onEvent?: Parameters<typeof pipeline.generateMissionDraft>[1],
+  options: Partial<DraftOptions> = {},
+) => pipeline.generateMissionDraft(input, onEvent, { asOf: NOW, ...options });
 
 const baseInterpretation: Interpretation = {
   intent: "Run a half marathon",
@@ -79,20 +92,24 @@ beforeEach(() => {
 });
 
 describe("generateMission", () => {
-  it("runs the full pipeline and returns a MissionGenerated event", async () => {
-    const result = await generateMission({ rawText: "run a half marathon in april" });
+  it("runs the full pipeline and returns a validated draft with no XP and no event", async () => {
+    const result = await generateMissionDraft({ rawText: "run a half marathon in april" });
     expect(result.refusal).toBeUndefined();
-    expect(result.event?.type).toBe("MissionGenerated");
-    expect(result.event?.payload.mission.chapters).toHaveLength(2);
-    expect(result.event?.payload.mission.completionXp).toBeGreaterThan(0);
-    expect(result.event?.payload.generationMeta.modelsUsed.interpret).toBeDefined();
-    expect(result.event?.payload.generationMeta.modelsUsed.score).toBeUndefined();
-    expect(result.event?.payload.generationMeta.modelsUsed.hydrate).toBeUndefined();
+    expect(result.draft?.mission.chapters).toHaveLength(2);
+    expect(result.draft?.goalText).toBe("run a half marathon in april");
+    expect(result.draft?.pursuitSlug).toBe("run-a-half-marathon");
+    expect(result.draft?.modelsUsed.interpret).toBeDefined();
+    expect(result.draft?.modelsUsed.hydrate).toBeUndefined();
+    // Law 3/5: generation promises no progression number, and law 4: it
+    // fabricates no ledger fact.
+    expect(JSON.stringify(result)).not.toMatch(
+      /"(?:baseXp|completionXp)"|MissionGenerated|occurredAt/,
+    );
   });
 
-  it("emits scored chapters only after grounding and safety complete", async () => {
+  it("emits draft chapters only after grounding and safety complete", async () => {
     const events: { stage: string; status: string; hasChapter: boolean }[] = [];
-    await generateMission({ rawText: "run a half marathon" }, (e) =>
+    await generateMissionDraft({ rawText: "run a half marathon" }, (e) =>
       events.push({ stage: e.stage, status: e.status, hasChapter: Boolean(e.chapter) }),
     );
     const chapterEvents = events.filter((e) => e.hasChapter);
@@ -107,16 +124,16 @@ describe("generateMission", () => {
       ...baseInterpretation,
       notes: { isImpossibleScope: true },
     });
-    const result = await generateMission({ rawText: "become a billionaire by march" });
-    expect(result.event).toBeNull();
+    const result = await generateMissionDraft({ rawText: "become a billionaire by march" });
+    expect(result.draft).toBeNull();
     expect(result.refusal?.route).toBe("clarify");
     expect(resolveMock).not.toHaveBeenCalled();
   });
 
   it("short-circuits to a support refusal for SELF_HARM_ADJACENT, without planning/detailing", async () => {
     resolveMock.mockResolvedValue({ ...baseResolved, safetyClass: "SELF_HARM_ADJACENT" });
-    const result = await generateMission({ rawText: "i want to die less" });
-    expect(result.event).toBeNull();
+    const result = await generateMissionDraft({ rawText: "i want to die less" });
+    expect(result.draft).toBeNull();
     expect(result.refusal?.route).toBe("support");
     expect(planMock).not.toHaveBeenCalled();
     expect(detailChapterMock).not.toHaveBeenCalled();
@@ -141,10 +158,10 @@ describe("generateMission", () => {
       model: "test-model",
       usage: { inputTokens: 0, outputTokens: 0 },
     });
-    const result = await generateMission({ rawText: "run a half marathon" });
+    const result = await generateMissionDraft({ rawText: "run a half marathon" });
     expect(completeMock).toHaveBeenCalledWith(expect.objectContaining({ stage: "ground" }));
-    expect(result.event?.payload.grounding.ungroundedClaims).toEqual([]);
-    expect(result.event?.payload.mission.chapters[0]?.steps[0]?.guide.approach).toBe(
+    expect(result.draft?.grounding.ungroundedClaims).toEqual([]);
+    expect(result.draft?.mission.chapters[0]?.steps[0]?.guide.approach).toBe(
       "Budget for this session in advance.",
     );
   });
@@ -153,7 +170,9 @@ describe("generateMission", () => {
     interpretMock.mockRejectedValue(new Error("model unavailable"));
     const events: { stage: string; status: string }[] = [];
     await expect(
-      generateMission({ rawText: "x" }, (e) => events.push({ stage: e.stage, status: e.status })),
+      generateMissionDraft({ rawText: "x" }, (e) =>
+        events.push({ stage: e.stage, status: e.status }),
+      ),
     ).rejects.toThrow("model unavailable");
     expect(events).toContainEqual({ stage: "interpret", status: "error" });
   });
@@ -182,7 +201,7 @@ describe("generateMission", () => {
     });
     const events: { chapter?: unknown }[] = [];
     await expect(
-      generateMission({ rawText: "run" }, (event) => events.push(event)),
+      generateMissionDraft({ rawText: "run" }, (event) => events.push(event)),
     ).rejects.toThrow();
     expect(events.some((event) => event.chapter)).toBe(false);
   });
@@ -205,7 +224,7 @@ describe("generateMission", () => {
     });
     const events: { chapter?: unknown }[] = [];
     await expect(
-      generateMission({ rawText: "run" }, (event) => events.push(event)),
+      generateMissionDraft({ rawText: "run" }, (event) => events.push(event)),
     ).rejects.toThrow("grounding rewrite did not resolve");
     expect(events.some((event) => event.chapter)).toBe(false);
   });
@@ -230,7 +249,7 @@ describe("generateMission", () => {
     });
     const events: { chapter?: unknown }[] = [];
     await expect(
-      generateMission({ rawText: "run" }, (event) => events.push(event)),
+      generateMissionDraft({ rawText: "run" }, (event) => events.push(event)),
     ).rejects.toThrow("safety rewrite did not resolve");
     expect(events.some((event) => event.chapter)).toBe(false);
   });
@@ -255,7 +274,7 @@ describe("generateMission", () => {
     });
     const events: { chapter?: unknown }[] = [];
     await expect(
-      generateMission({ rawText: "run" }, (event) => events.push(event)),
+      generateMissionDraft({ rawText: "run" }, (event) => events.push(event)),
     ).rejects.toThrow("safety rewrite introduced an ungrounded finding");
     expect(events.some((event) => event.chapter)).toBe(false);
   });
@@ -278,8 +297,8 @@ describe("generateMission", () => {
       model: "test-model",
       usage: { inputTokens: 0, outputTokens: 0 },
     });
-    const result = await generateMission({ rawText: "run" });
-    expect(result.event?.payload.safety.redactions).toEqual(["1200 kcal"]);
+    const result = await generateMissionDraft({ rawText: "run" });
+    expect(result.draft?.safety.redactions).toEqual(["1200 kcal"]);
   });
 
   it("forwards the exact AbortSignal through later stages and rewrite model calls", async () => {
@@ -299,7 +318,7 @@ describe("generateMission", () => {
       model: "test-model",
       usage: { inputTokens: 0, outputTokens: 0 },
     });
-    await generateMission({ rawText: "run" }, undefined, { signal: controller.signal });
+    await generateMissionDraft({ rawText: "run" }, undefined, { signal: controller.signal });
     expect(resolveMock).toHaveBeenCalledWith(baseInterpretation, controller.signal);
     expect(planMock).toHaveBeenCalledWith(baseInterpretation, baseResolved, controller.signal);
     expect(detailChapterMock).toHaveBeenCalledWith(expect.any(Object), controller.signal);
@@ -316,7 +335,9 @@ describe("generateMission", () => {
         signal.addEventListener("abort", () => reject(signal.reason), { once: true });
       });
     });
-    const pending = generateMission({ rawText: "run" }, undefined, { signal: controller.signal });
+    const pending = generateMissionDraft({ rawText: "run" }, undefined, {
+      signal: controller.signal,
+    });
     controller.abort();
     await expect(pending).rejects.toThrow();
     expect(resolveMock).not.toHaveBeenCalled();

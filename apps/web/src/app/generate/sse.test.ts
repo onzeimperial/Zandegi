@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { consumeGenerationStream } from "./sse";
 
+const META =
+  '"meta":{"runId":"run-1","startedAt":"2026-01-01T00:00:00.000Z","completedAt":"2026-01-01T00:00:01.000Z","durationMs":1000}';
+
 function stream(...chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   return new ReadableStream({
@@ -19,13 +22,15 @@ describe("consumeGenerationStream", () => {
         'data: {"type":"progress","event":{"stage":"plan",',
         '"status":"done"}}\r',
         "\n\r",
-        '\ndata: {"type":"result","result":{"event":null,',
-        '"refusal":{"reason":"narrow it","route":"clarify"}},"requestId":"r1"}\n\n',
+        '\ndata: {"type":"result","result":{"outcome":"refusal",',
+        `"refusal":{"reason":"narrow it","route":"clarify"},${META}},"requestId":"r1"}\n\n`,
       ),
       progress,
     );
     expect(progress).toHaveBeenCalledWith({ stage: "plan", status: "done" });
-    expect(result.refusal?.route).toBe("clarify");
+    expect(result.outcome).toBe("refusal");
+    if (result.outcome !== "refusal") throw new Error("unreachable");
+    expect(result.refusal.route).toBe("clarify");
   });
 
   it("throws the stable terminal error", async () => {
@@ -55,8 +60,7 @@ describe("consumeGenerationStream", () => {
     await expect(consumeGenerationStream(stream("data: not-json\n\n"), vi.fn())).rejects.toThrow(
       "stream was invalid",
     );
-    const result =
-      'data: {"type":"result","result":{"event":null,"refusal":{"reason":"narrow","route":"clarify"}},"requestId":"r"}\n\n';
+    const result = `data: {"type":"result","result":{"outcome":"refusal","refusal":{"reason":"narrow","route":"clarify"},${META}},"requestId":"r"}\n\n`;
     await expect(consumeGenerationStream(stream(result, result), vi.fn())).rejects.toThrow(
       "multiple terminal",
     );
@@ -65,9 +69,13 @@ describe("consumeGenerationStream", () => {
   it.each([
     "{}",
     '{"type":"progress","event":{"stage":"unknown","status":"done"}}',
-    '{"type":"result","result":{"event":null}}',
-    '{"type":"result","result":{"event":"wrong"},"requestId":"r"}',
-    '{"type":"result","result":{"event":{}},"requestId":"r"}',
+    // The removed stages must not be accepted again by the back door.
+    '{"type":"progress","event":{"stage":"score","status":"done"}}',
+    '{"type":"progress","event":{"stage":"persist","status":"done"}}',
+    '{"type":"result","result":{"outcome":"refusal"},"requestId":"r"}',
+    `{"type":"result","result":{"outcome":"mission",${META}},"requestId":"r"}`,
+    '{"type":"result","result":{"event":{"type":"MissionGenerated"}},"requestId":"r"}',
+    `{"type":"result","result":{"outcome":"mission","mission":{},"safety":{},${META}},"requestId":"r"}`,
     '{"type":"error","error":{"code":"FAILED"}}',
   ])("turns malformed payload shape %s into a stable stream error", async (payload) => {
     await expect(

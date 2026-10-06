@@ -114,41 +114,32 @@ export interface DraftMission {
   chapters: DraftChapter[];
 }
 
-// ── Stage 7: Score (deterministic, @zandegi/core) ──────────
-
-export interface ScoredStep extends DraftStep {
-  baseXp: number;
-}
-
-export interface ScoredChapter extends Omit<DraftChapter, "steps"> {
-  steps: ScoredStep[];
-  completionXp: number;
-}
-
-export interface ScoredMission extends Omit<DraftMission, "chapters"> {
-  chapters: ScoredChapter[];
-  completionXp: number;
-}
-
 // ── Pipeline orchestration ─────────────────────────────────
 
-export type StageName =
-  | "interpret"
-  | "resolve"
-  | "hydrate"
-  | "plan"
-  | "detail"
-  | "ground"
-  | "score"
-  | "safety"
-  | "persist";
+/**
+ * The seven content stages. `score` and `persist` were removed in story 1.3:
+ * generation never emits a progression number (law 3/5) and never writes a
+ * ledger fact. The clock, identifiers, cancellation and persistence belong to
+ * `@zandegi/api`'s injected ports, not to this package.
+ */
+export const STAGE_NAMES = [
+  "interpret",
+  "resolve",
+  "hydrate",
+  "plan",
+  "detail",
+  "ground",
+  "safety",
+] as const;
+
+export type StageName = (typeof STAGE_NAMES)[number];
 
 export interface StageEvent {
   stage: StageName;
   status: "start" | "done" | "error";
   detail?: string;
-  /** Progressive reveal: chapters as they land (SPEC §2.2). */
-  chapter?: ScoredChapter;
+  /** Progressive reveal: validated draft chapters as they land (SPEC §2.2). */
+  chapter?: DraftChapter;
 }
 
 export type ProgressCallback = (event: StageEvent) => void;
@@ -190,24 +181,29 @@ export interface SafetyOutcome {
   redactions: string[];
 }
 
-export interface MissionGeneratedEvent {
-  type: "MissionGenerated";
-  occurredAt: string;
-  payload: {
-    goalText: string;
-    pursuitSlug: string;
-    mission: ScoredMission;
-    grounding: GroundingReport;
-    safety: SafetyOutcome;
-    generationMeta: {
-      modelsUsed: Partial<Record<StageName, string>>;
-      totalMs: number;
-    };
-  };
+/**
+ * What `@zandegi/ai` returns: validated draft content plus the grounding,
+ * safety and model metadata that justify it. No event, no `occurredAt`, no
+ * duration — every authoritative timestamp comes from the API's clock port.
+ */
+export interface MissionDraft {
+  goalText: string;
+  pursuitSlug: string;
+  mission: DraftMission;
+  grounding: GroundingReport;
+  safety: SafetyOutcome;
+  /** Which model served each stage that called one. */
+  modelsUsed: Partial<Record<StageName, string>>;
 }
 
-export interface PipelineResult {
-  event: MissionGeneratedEvent | null;
+export interface DraftRefusal {
+  reason: string;
+  route: "support" | "clarify";
+}
+
+/** Exactly one of `draft` or `refusal` is set. */
+export interface MissionDraftOutcome {
+  draft: MissionDraft | null;
   /** Set when generation was blocked (SELF_HARM_ADJACENT) or otherwise refused. */
-  refusal?: { reason: string; route: "support" | "clarify" };
+  refusal?: DraftRefusal;
 }

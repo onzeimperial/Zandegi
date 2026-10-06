@@ -1,4 +1,11 @@
-import type { PipelineResult, StageEvent } from "@zandegi/ai";
+import {
+  GENERATION_REFUSAL_ROUTES,
+  isGenerationStage,
+  isGenerationStageStatus,
+  type GenerationProgress,
+  type GenerationResult,
+  type MissionChapter,
+} from "@zandegi/api/client";
 
 export interface PublicStreamError {
   code: string;
@@ -7,22 +14,9 @@ export interface PublicStreamError {
 }
 
 type SseMessage =
-  | { type: "progress"; event: StageEvent }
-  | { type: "result"; result: PipelineResult; requestId: string }
+  | { type: "progress"; event: GenerationProgress }
+  | { type: "result"; result: GenerationResult; requestId: string }
   | { type: "error"; error: PublicStreamError };
-
-const STAGES = new Set([
-  "interpret",
-  "resolve",
-  "hydrate",
-  "plan",
-  "detail",
-  "ground",
-  "score",
-  "safety",
-  "persist",
-]);
-const STATUSES = new Set(["start", "done", "error"]);
 
 export class GenerationStreamError extends Error {
   constructor(
@@ -43,54 +37,78 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isStageEvent(value: unknown): value is StageEvent {
-  if (!isRecord(value) || typeof value.stage !== "string" || typeof value.status !== "string") {
-    return false;
-  }
-  if (!STAGES.has(value.stage) || !STATUSES.has(value.status)) return false;
-  if (value.detail !== undefined && typeof value.detail !== "string") return false;
-  return value.chapter === undefined || isRecord(value.chapter);
-}
-
-function isRefusal(value: unknown): boolean {
+function isChapter(value: unknown): value is MissionChapter {
   return (
     isRecord(value) &&
-    typeof value.reason === "string" &&
-    (value.route === "support" || value.route === "clarify")
+    typeof value.index === "number" &&
+    typeof value.title === "string" &&
+    typeof value.exitCondition === "string" &&
+    Array.isArray(value.steps)
   );
 }
 
-function isMissionGeneratedEvent(value: unknown): boolean {
-  if (!isRecord(value) || value.type !== "MissionGenerated" || !isRecord(value.payload))
+function isProgress(value: unknown): value is GenerationProgress {
+  if (!isRecord(value) || !isGenerationStage(value.stage) || !isGenerationStageStatus(value.status))
     return false;
-  const mission = value.payload.mission;
-  const safety = value.payload.safety;
+  if (value.detail !== undefined && typeof value.detail !== "string") return false;
+  return value.chapter === undefined || isChapter(value.chapter);
+}
+
+function isRunMeta(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.runId === "string" &&
+    typeof value.startedAt === "string" &&
+    typeof value.completedAt === "string" &&
+    typeof value.durationMs === "number" &&
+    Number.isFinite(value.durationMs)
+  );
+}
+
+function isMissionOutcome(value: Record<string, unknown>): boolean {
+  const mission = value.mission;
+  const safety = value.safety;
   return (
     isRecord(mission) &&
     typeof mission.title === "string" &&
+    typeof mission.goalType === "string" &&
     typeof mission.primaryDomain === "string" &&
-    typeof mission.completionXp === "number" &&
-    Number.isFinite(mission.completionXp) &&
     Array.isArray(mission.chapters) &&
+    mission.chapters.every(isChapter) &&
     isRecord(safety) &&
     typeof safety.professionalFrameApplied === "boolean"
   );
 }
 
-function isPipelineResult(value: unknown): value is PipelineResult {
-  if (!isRecord(value)) return false;
-  if (value.event === null) return isRefusal(value.refusal);
-  return isMissionGeneratedEvent(value.event) && value.refusal === undefined;
+function isRefusalOutcome(value: Record<string, unknown>): boolean {
+  const refusal = value.refusal;
+  return (
+    isRecord(refusal) &&
+    typeof refusal.reason === "string" &&
+    (GENERATION_REFUSAL_ROUTES as readonly unknown[]).includes(refusal.route)
+  );
+}
+
+/**
+ * The terminal frame is one of exactly two shapes. There is deliberately no
+ * XP, rarity or difficulty field to validate: generation promises no
+ * progression number, so a frame carrying one is not a frame we understand.
+ */
+function isGenerationResult(value: unknown): value is GenerationResult {
+  if (!isRecord(value) || !isRunMeta(value.meta)) return false;
+  if (value.outcome === "mission") return isMissionOutcome(value);
+  if (value.outcome === "refusal") return isRefusalOutcome(value);
+  return false;
 }
 
 function parseMessage(value: unknown): SseMessage {
   if (!isRecord(value) || typeof value.type !== "string") throw invalidStream();
-  if (value.type === "progress" && isStageEvent(value.event)) {
+  if (value.type === "progress" && isProgress(value.event)) {
     return { type: "progress", event: value.event };
   }
   if (
     value.type === "result" &&
-    isPipelineResult(value.result) &&
+    isGenerationResult(value.result) &&
     typeof value.requestId === "string"
   ) {
     return { type: "result", result: value.result, requestId: value.requestId };
@@ -139,12 +157,12 @@ function normalizeNewlines(value: string, final: boolean): string {
 
 export async function consumeGenerationStream(
   stream: ReadableStream<Uint8Array>,
-  onProgress: (event: StageEvent) => void,
-): Promise<PipelineResult> {
+  onProgress: (event: GenerationProgress) => void,
+): Promise<GenerationResult> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let terminal: PipelineResult | undefined;
+  let terminal: GenerationResult | undefined;
 
   const consumeBlock = (block: string) => {
     const message = parseBlock(block);
