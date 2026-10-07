@@ -7,6 +7,8 @@
  * able to mint an authoritative timestamp, identifier, identity or fact.
  */
 
+import type { GenerationSafetyClass, MissionDraft } from "./client";
+
 /** The one source of "now" a use case may read. */
 export interface Clock {
   now(): Date;
@@ -80,31 +82,47 @@ export const emptyKnowledge: KnowledgePort = {
   resolve: async () => [],
 };
 
-/** What the persistence port is handed once a draft is produced. */
+/**
+ * An accepted mission, as persistence receives it.
+ *
+ * `missionId` and `ownerId` are both server-assigned: the id comes from the
+ * `IdGenerator` port and the owner from the guest principal the adapter
+ * resolved before the request reached a use case. A client cannot supply or
+ * influence either, and the request validator rejects a body that tries.
+ *
+ * `mission` holds the client-safe `MissionDraft` — the very value the terminal
+ * frame carried. Storing the already-mapped draft is deliberate: the read path
+ * then needs no knowledge of `@zandegi/ai`'s shapes, and no provider payload
+ * or model trace can reach the store by being spread into it.
+ *
+ * This is a relational record, not a ledger fact (law 4). It has no event
+ * type, no `occurredAt`, and generation never appends to the ledger.
+ */
 export interface GeneratedMissionRecord {
+  missionId: string;
+  ownerId: string;
   runId: string;
   /** ISO-8601 UTC, from the clock port. */
   generatedAt: string;
   goalText: string;
   pursuitSlug: string;
-  mission: unknown;
-  safetyClass: string;
+  mission: MissionDraft;
+  safetyClass: GenerationSafetyClass;
 }
 
 /**
- * Where an accepted mission would be written.
+ * Where an accepted mission is written and read back.
  *
- * Deliberately a **no-op** in this story. Law 4: generation is not a
- * progression-ledger event, so there is no `MissionGenerated` fact to append;
- * story 1.19 implements the real atomic write through `@zandegi/db`'s unit of
- * work. The port exists now so the seam is injected rather than retrofitted.
+ * Implemented in `@zandegi/db` — in memory for local development and tests,
+ * in Upstash Redis for the deployed demo — and injected here so the eventual
+ * Prisma store replaces an adapter and nothing above it.
+ *
+ * `findForOwner` takes the owner and the id together rather than fetching and
+ * then comparing. A record the principal does not own is `null`, exactly like
+ * an id that was never issued: a caller cannot tell the two apart, and that is
+ * why the read returns not-found rather than forbidden.
  */
 export interface GenerationPersistencePort {
   record(record: GeneratedMissionRecord): Promise<void>;
+  findForOwner(ownerId: string, missionId: string): Promise<GeneratedMissionRecord | null>;
 }
-
-export const noopGenerationPersistence: GenerationPersistencePort = {
-  // why-no-op: story 1.19 owns persistence; writing here would create the
-  // ledger fact product law 4 forbids for generation.
-  record: async () => undefined,
-};

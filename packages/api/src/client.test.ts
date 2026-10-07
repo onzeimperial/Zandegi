@@ -34,6 +34,9 @@ describe("generation client contract", () => {
       "INVALID_REQUEST",
       "GENERATION_TIMEOUT",
       "GENERATION_FAILED",
+      "CROSS_SITE_REQUEST",
+      "MISSION_NOT_FOUND",
+      "STORE_UNAVAILABLE",
     ]);
     for (const code of GENERATION_ERROR_CODES) {
       expect(GENERATION_ERROR_MESSAGES[code]).toBeTruthy();

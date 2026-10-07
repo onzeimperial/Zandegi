@@ -9,14 +9,20 @@
  * Two laws constrain the result shape and are asserted by the tests beside
  * this file:
  *   - Law 3/5: the result carries no XP, rarity, difficulty or priority.
- *   - Law 4: no `MissionGenerated` ledger fact is created. The persistence
- *     port is injected and is a no-op until story 1.19.
+ *   - Law 4: no `MissionGenerated` ledger fact is created. The accepted
+ *     mission is written as a relational record through the persistence port;
+ *     nothing is appended to the ledger.
+ *
+ * Identity arrives the same way everything else impure does: the adapter
+ * resolves the guest principal before this function is called, so the use case
+ * never derives an owner and a client can never name one.
  */
 
 import { generateMissionDraft } from "@zandegi/ai";
 import type { GoalInput, MissionDraftOutcome, ProgressCallback } from "@zandegi/ai";
 import type { GenerateMissionRequest, GenerationProgress, GenerationResult } from "../client";
-import { GenerationError, describeFailure } from "../errors";
+import { GenerationError, describeFailure, isGenerationError } from "../errors";
+import type { GuestPrincipal } from "../identity/ports";
 import type {
   CancellationPort,
   Clock,
@@ -54,6 +60,13 @@ export interface GenerateMissionPorts {
 export interface GenerateMissionInput {
   /** Untrusted. Validated here before any model call. */
   request: unknown;
+  /**
+   * The resolved owner. Trusted, because the adapter minted or resolved it
+   * from a server-held token hash — it is never read out of the request body,
+   * which is also why `parseGenerateMissionRequest` rejects a body that
+   * carries a principal or mission id field as an unknown field.
+   */
+  principal: GuestPrincipal;
   onProgress?: (progress: GenerationProgress) => void;
 }
 
@@ -130,20 +143,40 @@ export async function generateMission(
 
   const draft = outcome.draft;
 
-  // Law 4: this is not a ledger fact. The port is injected so story 1.19 can
-  // make it a real atomic write without reopening this seam.
-  await ports.persistence.record({
-    runId,
-    generatedAt: meta.completedAt,
-    goalText: draft.goalText,
-    pursuitSlug: draft.pursuitSlug,
-    mission: draft.mission,
-    safetyClass: draft.safety.safetyClass,
-  });
+  const mission = toMissionDraft(draft.mission);
+  // Server-assigned, from the id port. The client learns it from the terminal
+  // frame and cannot have influenced it.
+  const missionId = ports.ids.newId();
+
+  // Law 4: a relational record, not a ledger fact — no event type, no
+  // `occurredAt`, nothing appended.
+  //
+  // A store failure fails the request. Returning a mission the server did not
+  // keep would hand the client an id that resolves to nothing, so the honest
+  // answer is a stable error.
+  try {
+    await ports.persistence.record({
+      missionId,
+      ownerId: input.principal.id,
+      runId,
+      generatedAt: meta.completedAt,
+      goalText: draft.goalText,
+      pursuitSlug: draft.pursuitSlug,
+      mission,
+      safetyClass: draft.safety.safetyClass,
+    });
+  } catch (error) {
+    if (signal.aborted) throw error;
+    if (isGenerationError(error)) throw error;
+    throw new GenerationError("STORE_UNAVAILABLE", describeFailure(error, [request.rawText]), {
+      cause: error,
+    });
+  }
 
   return {
     outcome: "mission",
-    mission: toMissionDraft(draft.mission),
+    missionId,
+    mission,
     safety: toSafetyNotice(draft.safety),
     grounding: toGroundingSummary(draft.grounding),
     meta,

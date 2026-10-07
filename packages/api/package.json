@@ -17,6 +17,7 @@
     "@trpc/server": "11.19.0",
     "@zandegi/ai": "workspace:*",
     "@zandegi/core": "workspace:*",
+    "@zandegi/db": "workspace:*",
     "inngest": "4.21.0"
   }
 }

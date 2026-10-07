@@ -10,6 +10,7 @@ function result(
 ): GenerationResult {
   return {
     outcome: "mission",
+    missionId: "mission-1",
     mission: {
       title: "Become a doctor",
       goalType,

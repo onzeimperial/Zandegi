@@ -201,6 +201,12 @@ export const GENERATION_REFUSAL_ROUTES = ["support", "clarify"] as const;
 export type GenerationResult =
   | {
       outcome: "mission";
+      /**
+       * The stored mission's server-assigned id. It is what a client passes to
+       * `GET /api/missions/{id}` to see this mission again, and it comes from
+       * the API's id port — never supplied or influenced by a client.
+       */
+      missionId: string;
       mission: MissionDraft;
       safety: MissionSafetyNotice;
       grounding: MissionGroundingSummary;
@@ -211,6 +217,22 @@ export type GenerationResult =
       refusal: GenerationRefusal;
       meta: GenerationRunMeta;
     };
+
+/**
+ * A mission read back by its owner.
+ *
+ * It carries no grounding summary and no run meta: both describe a generation
+ * run, and a read is not one. The mission body is the same client-safe draft
+ * the terminal frame carried, so nothing on this path has to re-derive it.
+ */
+export interface StoredMissionView {
+  missionId: string;
+  /** ISO-8601 UTC, from the clock port at generation time. */
+  generatedAt: string;
+  pursuitSlug: string;
+  safetyClass: GenerationSafetyClass;
+  mission: MissionDraft;
+}
 
 // ── Errors ─────────────────────────────────────────────────
 
@@ -227,6 +249,10 @@ export const GENERATION_ERROR_CODES = [
   "INVALID_REQUEST",
   "GENERATION_TIMEOUT",
   "GENERATION_FAILED",
+  // Appended, never reordered or renamed: clients branch on these.
+  "CROSS_SITE_REQUEST",
+  "MISSION_NOT_FOUND",
+  "STORE_UNAVAILABLE",
 ] as const;
 
 export type GenerationErrorCode = (typeof GENERATION_ERROR_CODES)[number];
@@ -239,6 +265,9 @@ export const GENERATION_ERROR_MESSAGES: Record<GenerationErrorCode, string> = {
   INVALID_REQUEST: "The request fields are invalid.",
   GENERATION_TIMEOUT: "Mission generation timed out. Try again.",
   GENERATION_FAILED: "Mission generation failed. Try again.",
+  CROSS_SITE_REQUEST: "This request did not come from Zandegi.",
+  MISSION_NOT_FOUND: "That mission is not available.",
+  STORE_UNAVAILABLE: "Your missions are temporarily unavailable. Try again.",
 };
 
 export interface GenerationErrorBody {

@@ -6,22 +6,41 @@
  * belongs to `@zandegi/api`'s use case, which this route calls exactly once
  * with its ports injected (AD-2). The use case is invoked in-process rather
  * than over tRPC, because generation is a long streamed response.
+ *
+ * The order of the checks below is the security design, not an accident:
+ *
+ *   1. the feature gate, so a production deploy that has not opted in serves
+ *      nothing;
+ *   2. the origin check, so a cross-site caller is turned away before the body
+ *      is read, before a principal exists, and long before a model call;
+ *   3. the body, so a request that names its own owner is rejected as an
+ *      unknown field before any identity is created;
+ *   4. the guest principal, whose `Set-Cookie` must be written onto the
+ *      `Response` this function constructs — once the stream's body starts,
+ *      the headers are gone and there is no `cookies()` mutation left to make.
  */
 
 import {
   GENERATION_ERROR_MESSAGES,
   GenerationError,
+  allowedOriginsFromEnv,
+  assertSameSiteRequest,
   cancellationFrom,
+  demoPortsFromEnv,
   emptyKnowledge,
   generateMission,
   generationErrorBody,
-  noopGenerationPersistence,
+  guestCookiePolicyFromEnv,
   parseGenerateMissionRequest,
   randomIdGenerator,
+  randomTokenSource,
+  resolveOrMintGuest,
+  sha256TokenHasher,
   systemClock,
   type GenerateMissionRequest,
   type GenerationErrorCode,
   type GenerationProgress,
+  type GuestSession,
 } from "@zandegi/api";
 
 export const runtime = "nodejs";
@@ -109,9 +128,21 @@ export async function POST(req: Request) {
     return jsonError(503, "GENERATION_DISABLED", requestId);
   }
 
-  // The field rules live with the contract in `@zandegi/api`, so the adapter
-  // and the use case cannot drift. A bad request is answered as a non-2xx JSON
-  // body before any stream is opened and before any model call.
+  // Step 2. `SameSite=Lax` already keeps the cookie off a cross-site form
+  // post, but that is the browser's rule, not ours. This one is ours.
+  try {
+    assertSameSiteRequest({
+      origin: req.headers.get("origin"),
+      requestUrl: req.url,
+      allowedOrigins: allowedOriginsFromEnv(process.env.ZANDEGI_ALLOWED_ORIGINS),
+    });
+  } catch {
+    return jsonError(403, "CROSS_SITE_REQUEST", requestId);
+  }
+
+  // Step 3. The field rules live with the contract in `@zandegi/api`, so the
+  // adapter and the use case cannot drift. A bad request is answered as a
+  // non-2xx JSON body before any stream is opened and before any model call.
   let request: GenerateMissionRequest;
   try {
     request = parseGenerateMissionRequest(await readBoundedJson(req));
@@ -119,6 +150,35 @@ export async function POST(req: Request) {
     if (error instanceof RequestFailure) return jsonError(error.status, error.code, requestId);
     if (error instanceof GenerationError) return jsonError(400, error.code, requestId);
     return jsonError(400, "INVALID_REQUEST", requestId);
+  }
+
+  // Step 4. A cookie we cannot resolve — tampered, unknown or expired — mints
+  // a fresh principal rather than surfacing an error, because there is no
+  // recovery action an anonymous visitor could take and saying so would only
+  // confirm the server recognised something.
+  let guest: GuestSession;
+  let persistence;
+  try {
+    const ports = await demoPortsFromEnv();
+    persistence = ports.persistence;
+    guest = await resolveOrMintGuest(
+      req.headers.get("cookie"),
+      guestCookiePolicyFromEnv(process.env),
+      {
+        clock: systemClock,
+        ids: randomIdGenerator,
+        tokens: randomTokenSource,
+        hasher: sha256TokenHasher,
+        guests: ports.guests,
+      },
+    );
+  } catch (error) {
+    logDiagnostic(
+      requestId,
+      "STORE_UNAVAILABLE",
+      error instanceof GenerationError ? error.diagnostic : "identity store unreachable",
+    );
+    return jsonError(503, "STORE_UNAVAILABLE", requestId);
   }
 
   const encoder = new TextEncoder();
@@ -171,6 +231,7 @@ export async function POST(req: Request) {
         const generation = generateMission(
           {
             request,
+            principal: guest.principal,
             onProgress: (event: GenerationProgress) => {
               if (!abortController.signal.aborted) send({ type: "progress", event });
             },
@@ -180,7 +241,7 @@ export async function POST(req: Request) {
             ids: randomIdGenerator,
             cancellation: cancellationFrom(abortController.signal),
             knowledge: emptyKnowledge,
-            persistence: noopGenerationPersistence,
+            persistence,
           },
         );
         const result = await Promise.race([generation, deadline]);
@@ -226,6 +287,9 @@ export async function POST(req: Request) {
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
       "X-Request-Id": requestId,
+      // Written here because this is the last moment it can be: the stream's
+      // body starts the instant this Response is returned.
+      "Set-Cookie": guest.setCookie,
     },
   });
 }

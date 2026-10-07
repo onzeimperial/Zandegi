@@ -689,3 +689,94 @@ full comparison sweep exits 0.
 
 Have a person review `_bmad-output/implementation-artifacts/visual-diffs/side-by-side/*.png`, then
 commit. After that, drive a real generation once to eyeball boards 02 and 03.
+
+---
+
+## Session — Story 1.16: a secure guest, and a mission that survives the stream
+
+**Shipped**
+
+Generated missions no longer evaporate, and they now belong to somebody.
+
+- **Guest identity** (`packages/api/src/identity/`). The server mints a 256-bit token, stores only
+  its SHA-256, and carries it in a `HttpOnly; SameSite=Lax; Path=/; Max-Age; Expires` cookie that is
+  `Secure` everywhere but local development. Randomness and hashing arrive as ports, so a test can
+  pin "the server minted this" rather than trust a comment. A mutating request's `Origin` is checked
+  against the request's own origin plus `ZANDEGI_ALLOWED_ORIGINS`; an absent header is rejected too.
+- **The persistence seam** (`packages/api/src/ports.ts`). `GeneratedMissionRecord` gained a
+  server-assigned `missionId` and the owning `ownerId`, and now carries the client-safe `MissionDraft`
+  rather than the raw pipeline mission — so the read path needs no `@zandegi/ai` knowledge and no
+  provider payload can reach the store. `GenerationPersistencePort` gained `findForOwner(owner, id)`:
+  one keyed lookup, so "not yours" and "never existed" are the same operation.
+  `noopGenerationPersistence` is gone; a store that silently drops missions is now a footgun.
+- **Two stores behind one interface** (`packages/db/src/`). An in-memory twin (the default, with a
+  modelled expiry so the suite can age it) and an Upstash Redis store (`@upstash/redis` 1.39.0, pinned
+  exactly, imported lazily so no process that skips Redis loads the SDK). Keys are
+  `zandegi:demo:mission:{owner}:{id}` and `zandegi:demo:guest:{hash}`. Redis writes the retention
+  window as a TTL and renews it on touch. Every Redis call is funnelled through a guard that sanitises
+  the message and throws a `StoreUnavailableError` with **no `cause`** — Upstash quotes the endpoint
+  and sometimes the bearer token in its errors, and a `cause` chain would smuggle both past the
+  sanitiser.
+- **Wiring** (`packages/api/src/demo-store.ts`). The composition root lives in `@zandegi/api` because
+  an app may not import `@zandegi/db`. `@zandegi/db` therefore declares its own record shapes and the
+  dependency runs api → db only; the adapter here is the single place the two shapes meet, so a drift
+  fails `pnpm typecheck`.
+- **Routes.** `POST /api/generate` now checks the gate, then the origin, then the body, then resolves
+  or mints the principal — in that order — and writes `Set-Cookie` onto the streamed `Response`'s
+  headers, which is the last moment it can. `GET /api/missions/[id]` returns the caller's own mission
+  or a 404; a missing cookie, a tampered cookie, an unknown id and another guest's id are all
+  indistinguishable.
+- `vercel.json` pins `syd1` (AD-11). `.env.example` documents the five new variables with blank values.
+
+**Learned**
+
+Two things were decided by the shape of the problem rather than by preference.
+
+First, the cookie has to be serialised rather than set. The generate route returns a `ReadableStream`
+and the headers are gone the instant the body starts, so there is no `cookies()` mutation left to make.
+That forces principal resolution before the stream opens — which is exactly where the origin check
+belongs anyway, because a cross-site caller should never reach the model.
+
+Second, an unresolvable cookie mints a fresh principal rather than erroring. Telling an anonymous
+visitor their token failed to resolve leaks that the server recognised and rejected something, and
+there is no recovery action available to them. Expiry behaves identically, which means an expired
+guest's missions become unreachable rather than deleted.
+
+A smaller one: the in-memory twin had to buy the immutability that the Redis store gets free from a
+JSON round-trip. Without `structuredClone` on both sides, a caller holding the object it stored could
+mutate the store, and the two implementations would quietly disagree.
+
+**Decided — the retention window**
+
+30 days of inactivity, read from `ZANDEGI_GUEST_RETENTION_DAYS` (clamped 1–365) rather than hardcoded.
+Any request from the principal renews it: a guest lookup renews the guest, and reading a mission renews
+that mission. There is **no expiry warning and no cleanup job** — for the demo, the Redis TTL _is_ the
+cleanup. Warning timing, richer renewal semantics, and evidence cleanup stay product-owned and deferred.
+
+**Deferred or risky**
+
+- A mission its owner never opens still lapses on its own window even while the guest stays active.
+  That is the "renewal semantics beyond _any request_" the story deliberately left open.
+- Redis is the only path the suite cannot exercise: `redis.test.ts` drives a fake client for keys, TTLs
+  and sanitisation, but nothing proves a mission survives a real server restart. That check is manual
+  and is written up under Verification in the spec.
+- No Prisma, Postgres, Neon or migration exists yet. The eventual store is a third sibling of
+  `DemoStore`; `@prisma/client` and `prisma` stay installed and unused.
+- `/path` and `apps/web/src/lib/demo-data.ts` are still fixture-backed and still say progress is not
+  saved. Wiring the real read endpoint into them is the next spec, not this one.
+- Fail-fast runtime config validation remains story 5.4's. This story reads what it needs and fails
+  closed with `STORE_UNAVAILABLE`.
+
+**Verified**
+
+`pnpm verify` passes end to end with no network access and no Upstash credentials present: format,
+lint (`--max-warnings 0`), 11 TypeScript projects, 328 tests across 43 files, production build.
+Separately confirmed that adding `import {} from "@zandegi/db"` to a web file still fails lint with the
+AD-2 message, and reverted it.
+
+**Next step**
+
+Wire the read endpoint into `/path` so a returning guest sees their own mission instead of fixtures —
+and do it against a live generation, which also finally eyeballs design boards 02 and 03. Before that
+ships, run the one manual check the twin cannot cover: with Upstash credentials set, generate, restart
+the server, and read the mission back.

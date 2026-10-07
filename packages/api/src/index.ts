@@ -29,3 +29,23 @@ export {
   type GenerateMissionPorts,
   type MissionDraftGenerator,
 } from "./generation/generate-mission";
+export {
+  readMission,
+  MAX_MISSION_ID_LENGTH,
+  type ReadMissionInput,
+  type ReadMissionPorts,
+} from "./missions/read-mission";
+export * from "./identity";
+export {
+  createDemoStore,
+  demoPortsFromEnv,
+  demoPortsFromStore,
+  demoStoreConfigFromEnv,
+  guestCookiePolicyFromEnv,
+  guestRetentionSecondsFromEnv,
+  resetDemoPortsCache,
+  type DemoPorts,
+  type DemoStoreConfig,
+  type DemoStoreDriver,
+  type Env,
+} from "./demo-store";

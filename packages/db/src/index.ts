@@ -1,8 +1,38 @@
 /**
- * @zandegi/db
+ * @zandegi/db — persistence.
  *
- * Prisma schema, migrations, seed. Built in session 3.
+ * Today that is the demo store behind `DemoStore`: an in-memory twin for local
+ * development and the test suite, and Upstash Redis for the deployed demo,
+ * chosen by configuration. Prisma, Postgres, Neon and migrations are not here
+ * yet; when they arrive they are a third sibling of the same interface, not a
+ * rewrite of anything above it.
  *
- * Scaffold only — no implementation yet.
+ * `@prisma/client` and `prisma` stay installed and unused until that story.
  */
-export {};
+
+export {
+  DEMO_KEY_PREFIX,
+  DEMO_RETENTION_DAYS,
+  DEMO_RETENTION_SECONDS,
+  StoreUnavailableError,
+  guestKey,
+  isStoreUnavailableError,
+  missionKey,
+  type DemoStore,
+  type StoredGuest,
+  type StoredMission,
+} from "./store";
+
+export {
+  createInMemoryDemoStore,
+  type InMemoryDemoStore,
+  type InMemoryStoreOptions,
+} from "./memory";
+
+export {
+  createRedisDemoStore,
+  createUpstashDemoStore,
+  type RedisLike,
+  type RedisStoreOptions,
+  type UpstashStoreOptions,
+} from "./redis";

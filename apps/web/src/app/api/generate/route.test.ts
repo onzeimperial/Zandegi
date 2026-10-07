@@ -10,6 +10,11 @@ vi.mock("@zandegi/api", async () => {
 
 const { POST } = await import("./route");
 
+const OWN_ORIGIN = "http://localhost";
+
+// Every request carries a same-site `Origin` unless a test is specifically
+// about the origin check: the route turns a cross-site caller away before it
+// reads the body, so an omitted header would mask every other assertion.
 function request(
   body: string,
   init: { headers?: Record<string, string>; signal?: AbortSignal } = {},
@@ -18,7 +23,7 @@ function request(
     method: "POST",
     body,
     signal: init.signal,
-    headers: { "Content-Type": "application/json", ...init.headers },
+    headers: { "Content-Type": "application/json", Origin: OWN_ORIGIN, ...init.headers },
   });
 }
 
@@ -52,6 +57,11 @@ beforeEach(() => {
   });
   vi.stubEnv("NODE_ENV", "test");
   vi.stubEnv("ENABLE_UNAUTHENTICATED_GENERATION", "");
+  // No Upstash credentials: the route must work against the in-memory twin.
+  vi.stubEnv("UPSTASH_REDIS_REST_URL", "");
+  vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "");
+  vi.stubEnv("ZANDEGI_MISSION_STORE", "");
+  vi.stubEnv("ZANDEGI_ALLOWED_ORIGINS", "");
   // Diagnostics are written to the server log, never to the response, so the
   // test output stays readable while the assertions below check the body.
   vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -121,10 +131,14 @@ describe("POST /api/generate", () => {
 
     expect(generateMission).toHaveBeenCalledOnce();
     const [input, ports] = generateMission.mock.calls[0] as [
-      { request: unknown },
+      { request: unknown; principal: { id: string } },
       Record<string, unknown>,
     ];
     expect(input.request).toEqual({ rawText: "run a half marathon" });
+    // The owner arrives as input. It is never read out of the body, and the
+    // route resolved it from a server-held token hash before calling in.
+    expect(typeof input.principal.id).toBe("string");
+    expect(input.principal.id.length).toBeGreaterThan(0);
     expect(Object.keys(ports).sort()).toEqual([
       "cancellation",
       "clock",
@@ -245,7 +259,7 @@ describe("POST /api/generate", () => {
     const oversizedRequest = new Request("http://localhost/api/generate", {
       method: "POST",
       body,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Origin: OWN_ORIGIN },
       duplex: "half",
     } as RequestInit & { duplex: "half" });
     const response = await POST(oversizedRequest);
@@ -271,5 +285,117 @@ describe("POST /api/generate", () => {
     client.abort();
     await expect(response.text()).resolves.toBe("");
     expect(pipelineSignal?.aborted).toBe(true);
+  });
+  it("rejects a cross-site or origin-less mutation before reading the body", async () => {
+    for (const headers of [{ Origin: "https://evil.test" }, { Origin: "null" }]) {
+      const response = await POST(request(JSON.stringify({ rawText: "run" }), { headers }));
+      await expectPublicError(
+        response,
+        403,
+        "CROSS_SITE_REQUEST",
+        "This request did not come from Zandegi.",
+      );
+      // No stream, no model call, and no cookie: nothing was created.
+      expect(response.headers.get("set-cookie")).toBeNull();
+    }
+
+    const noOrigin = new Request("http://localhost/api/generate", {
+      method: "POST",
+      body: JSON.stringify({ rawText: "run" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    await expectPublicError(
+      await POST(noOrigin),
+      403,
+      "CROSS_SITE_REQUEST",
+      "This request did not come from Zandegi.",
+    );
+    expect(generateMission).not.toHaveBeenCalled();
+  });
+
+  it("accepts an origin the configuration explicitly allows", async () => {
+    vi.stubEnv("ZANDEGI_ALLOWED_ORIGINS", "https://preview.zandegi.app");
+    const response = await POST(
+      request(JSON.stringify({ rawText: "run" }), {
+        headers: { Origin: "https://preview.zandegi.app" },
+      }),
+    );
+    await response.text();
+    expect(response.status).toBe(200);
+    expect(generateMission).toHaveBeenCalledOnce();
+  });
+
+  it("sets an HttpOnly, same-site, explicitly expiring cookie on the streamed response", async () => {
+    const response = await POST(request(JSON.stringify({ rawText: "run" })));
+    const cookie = response.headers.get("set-cookie");
+
+    // Written on the Response's headers, because once the body starts they
+    // are gone and there is no cookies() mutation left to make.
+    expect(cookie).toContain("zandegi_guest=");
+    expect(cookie).toContain("HttpOnly");
+    expect(cookie).toContain("SameSite=Lax");
+    expect(cookie).toContain("Max-Age=2592000");
+    expect(cookie).toMatch(/Expires=/);
+    expect(await response.text()).toContain('"type":"result"');
+  });
+
+  it("resolves the same principal on a return visit", async () => {
+    const first = await POST(request(JSON.stringify({ rawText: "run" })));
+    await first.text();
+    const cookie = first.headers.get("set-cookie")!.split(";", 1)[0]!;
+    const firstPrincipal = (generateMission.mock.calls[0]![0] as { principal: { id: string } })
+      .principal.id;
+
+    const second = await POST(
+      request(JSON.stringify({ rawText: "run again" }), { headers: { Cookie: cookie } }),
+    );
+    await second.text();
+    const secondPrincipal = (generateMission.mock.calls[1]![0] as { principal: { id: string } })
+      .principal.id;
+
+    expect(secondPrincipal).toBe(firstPrincipal);
+  });
+
+  it.each([
+    ["a tampered cookie", "zandegi_guest=not a token"],
+    ["a well-formed token nothing matches", `zandegi_guest=${"z".repeat(43)}`],
+  ])("mints a fresh principal for %s rather than erroring", async (_label, cookie) => {
+    const response = await POST(
+      request(JSON.stringify({ rawText: "run" }), { headers: { Cookie: cookie } }),
+    );
+    await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toContain("zandegi_guest=");
+    expect(generateMission).toHaveBeenCalledOnce();
+  });
+
+  it("creates no principal for a request that names its own owner", async () => {
+    for (const body of [
+      { rawText: "run", ownerId: "guest-9" },
+      { rawText: "run", missionId: "mission-9" },
+      { rawText: "run", principal: { id: "guest-9" } },
+    ]) {
+      const response = await POST(request(JSON.stringify(body)));
+      await expectPublicError(response, 400, "INVALID_REQUEST", "The request fields are invalid.");
+      expect(response.headers.get("set-cookie")).toBeNull();
+    }
+    expect(generateMission).not.toHaveBeenCalled();
+  });
+
+  it("fails closed with a safe error when the configured store cannot be reached", async () => {
+    vi.stubEnv("ZANDEGI_MISSION_STORE", "redis");
+    const response = await POST(request(JSON.stringify({ rawText: "run" })));
+
+    const text = await response.clone().text();
+    await expectPublicError(
+      response,
+      503,
+      "STORE_UNAVAILABLE",
+      "Your missions are temporarily unavailable. Try again.",
+    );
+    // The credentials and the endpoint stay out of the client's answer.
+    expect(text.toLowerCase()).not.toContain("upstash");
+    expect(generateMission).not.toHaveBeenCalled();
   });
 });
