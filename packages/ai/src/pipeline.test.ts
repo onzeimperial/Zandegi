@@ -166,6 +166,62 @@ describe("generateMission", () => {
     );
   });
 
+  // The pair below pins that freshness is judged against the *injected*
+  // instant. One source, one claim, two instants, two outcomes: swap
+  // `options.asOf` for an ambient `new Date()` in the pipeline and the first
+  // case fails, because today's clock puts this source back inside the window.
+  const feeSource = [{ title: "Official fee schedule", date: "2028-08-01" }];
+
+  it("judges a source against the injected instant, not an ambient clock", async () => {
+    detailChapterMock.mockResolvedValueOnce({
+      steps: [
+        step({ approach: "The application fee is $500.", sources: feeSource }),
+        step({ title: "Run 4km easy" }),
+      ],
+    });
+    completeMock.mockResolvedValueOnce({
+      text: JSON.stringify({
+        rewrites: [
+          {
+            issueId: "ground:0:0:guide.approach:scalar",
+            rewrittenText: "Check the current fee before you apply.",
+          },
+        ],
+      }),
+      model: "test-model",
+      usage: { inputTokens: 0, outputTokens: 0 },
+    });
+
+    // At NOW (2026-06-15) a 2028-08-01 source is past the two-year horizon, so
+    // it cannot back the claim and the claim is ungrounded.
+    const result = await generateMissionDraft({ rawText: "apply to medicine" });
+
+    expect(completeMock).toHaveBeenCalledWith(expect.objectContaining({ stage: "ground" }));
+    expect(result.draft?.grounding.rewritten).toBe(1);
+    expect(result.draft?.mission.chapters[0]?.steps[0]?.guide.approach).toBe(
+      "Check the current fee before you apply.",
+    );
+  });
+
+  it("accepts that same source once the injected instant is late enough", async () => {
+    detailChapterMock.mockResolvedValueOnce({
+      steps: [
+        step({ approach: "The application fee is $500.", sources: feeSource }),
+        step({ title: "Run 4km easy" }),
+      ],
+    });
+
+    const result = await generateMissionDraft({ rawText: "apply to medicine" }, undefined, {
+      asOf: new Date("2027-01-01T00:00:00Z"),
+    });
+
+    expect(completeMock).not.toHaveBeenCalled();
+    expect(result.draft?.grounding.ungroundedClaims).toEqual([]);
+    expect(result.draft?.mission.chapters[0]?.steps[0]?.guide.approach).toBe(
+      "The application fee is $500.",
+    );
+  });
+
   it("propagates a stage error and emits an error event", async () => {
     interpretMock.mockRejectedValue(new Error("model unavailable"));
     const events: { stage: string; status: string }[] = [];

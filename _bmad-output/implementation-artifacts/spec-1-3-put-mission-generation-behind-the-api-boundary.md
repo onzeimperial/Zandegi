@@ -2,7 +2,7 @@
 title: 'Story 1.3 — Put Mission Generation Behind the API Boundary'
 type: 'refactor'
 created: '2026-10-06'
-status: 'in-progress'
+status: 'done'
 route: 'dispatch'
 review_loop_iteration: 0
 baseline_commit: 'fdb45288c310c03a9a0933039bbc6b54980285f9'
@@ -96,6 +96,26 @@ context:
 ## Spec Change Log
 
 ## Review Triage Log
+
+Single-layer review (verification-gap only) at the user's instruction; the blind-hunter and
+edge-case layers were skipped. Gap findings arrive pre-verified; the `Other findings` and the
+AC1 question were verified here.
+
+| # | Finding | Verdict | Evidence | Route |
+|---|---|---|---|---|
+| 1 | Pipeline's use of the injected `asOf` is unpinned | medium | Demonstrated: replacing all three `options.asOf` arguments with `new Date()` left all 57 `@zandegi/ai` tests passing, so the AC3 fix can regress silently. The required parameter is satisfied by `new Date()`, so types do not help. | patch |
+| 2 | `toProgress` strips a stage error's `detail`, unasserted | medium | No `mapping.test.ts` exists and no test builds an error event carrying `detail`; deleting the error branch keeps every test green, which would write stage/model text into a client-visible SSE frame. | patch |
+| 3 | The route's `GenerationError` branch is never exercised | medium | The only failure test rejects with a plain `Error`, whose diagnostic is the constant "non-api failure"; adding `diagnostic` to the emitted frame would still pass. The `GenerationError` path is the one that fires in production. | patch |
+| 4 | Apps still read server-only `@zandegi/core` policy | medium | Confirmed directly: `builder-state.ts:1` imports `VERIFICATION_METHODS`/`verificationMult` and renders `+{stepXp(step.proof)} XP` at `builder/page.tsx:274`; `domain-art.ts:1` and `demo-data.ts:1` also import core root. The new rule covers only `ai`/`db`/`economy`/`tools`, so AC1's "server-only core policy" clause has neither a rule nor a test. | defer |
+| 5 | `redactDiagnostic` skips strings under three characters | low | Confirmed: `parseGenerateMissionRequest` accepts any non-empty goal, so a one- or two-character goal reaches the server log unredacted. Fix is a direct deletion of the length guard. | patch |
+| 6 | `sse.ts` validates chapter `steps` only as `Array.isArray` | low | Real: `mission-review.tsx` dereferences `step.guide.approach` and `step.verification`, so a malformed terminal frame passes the guard and throws during render. Not a regression — the previous guard was weaker — and frames come from our own server, so it is unlikely in everyday use while the fix adds validation branches. | defer |
+| 7 | A client disconnect is logged as `GENERATION_FAILED` | low | Confirmed at `route.ts:193`: an ordinary abort reads as a generation failure in the log the spec's own verification step tells the developer to inspect. One-line correction. | patch |
+
+**AC1 is not fully satisfied.** Four of the five surfaces it names are enforced and pinned
+(`ai`, `db`, `economy`, `tools`); "server-only `core` policy" is not. Closing it needs `DOMAINS`
+added to the contracts subpath — which story 1.4 owns — and a product decision about whether the
+builder screen may compute XP client-side from published formulas at all. Recorded rather than
+quietly marked done.
 
 ## Design Notes
 

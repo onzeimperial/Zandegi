@@ -34,8 +34,10 @@ export function isGenerationError(value: unknown): value is GenerationError {
 export function redactDiagnostic(text: string, personalContent: readonly string[] = []): string {
   let redacted = text;
   for (const secret of personalContent) {
+    // No length floor: a goal may be one character ("x"), and the request
+    // validator accepts it, so a short goal must redact like any other.
     const trimmed = secret.trim();
-    if (trimmed.length < 3) continue;
+    if (trimmed.length === 0) continue;
     redacted = redacted.split(trimmed).join("[redacted]");
   }
   return redacted.replace(/\b(?:sk|pk)-[A-Za-z0-9_-]{8,}/g, "[redacted]");

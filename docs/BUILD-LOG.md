@@ -62,13 +62,34 @@ the kind of regression the pinning test exists to catch.
 
 **Verified**
 
-`pnpm verify` green: prettier, `eslint . --max-warnings 0`, all package typechecks, 247 tests
-across 34 files, production build. Adding `import type { ScoredChapter } from "@zandegi/ai"` to a
+`pnpm verify` green: prettier, `eslint . --max-warnings 0`, all package typechecks, 257 tests
+across 35 files, production build. Adding `import type { ScoredChapter } from "@zandegi/ai"` to a
 web file fails lint naming the file and the package; reverted. `grep` over `apps/web/src` finds no
 `@zandegi/ai|db|economy|tools`, and no `baseXp|completionXp|MissionGenerated` survives in
 `packages/ai/src` or `apps/web/src` outside a doc comment and two negative assertions.
 
+**Reviewed**
+
+Single-layer review (verification-gap only, by choice). Seven findings: five patched, two
+deferred, none rejected. The valuable ones were that the request-scoped `asOf` fix had no test
+holding it in place -- mutating all three call sites to `new Date()` left all 57 `@zandegi/ai`
+tests passing -- and two paths where internal stage text or a server-only diagnostic could have
+reached an unauthenticated client with the suite still green. Each fix was confirmed by mutation:
+the mutation now fails a test. Also fixed: redaction skipped goals under three characters, and a
+client disconnect was logged as `GENERATION_FAILED`.
+
 **Deferred / risky**
+
+- **AC1 is only partly satisfied.** Four of the five import surfaces it names are enforced and
+  pinned by tests (`ai`, `db`, `economy`, `tools`). "Server-only `core` policy" is not: three app
+  files still import `@zandegi/core` root, and `apps/web/src/app/builder/builder-state.ts` uses the
+  scoring formula `verificationMult` to render `+N XP` in `builder/page.tsx`. Closing it needs
+  `DOMAINS` in the contracts subpath, which story 1.4 owns, and a product decision on whether a
+  client screen may compute XP from published formulas at all. Tracked in `deferred-work.md`.
+- The terminal-frame guard in `apps/web/src/app/generate/sse.ts` validates `steps` only as an
+  array while `mission-review.tsx` dereferences `step.guide.approach` and `step.verification`, so a
+  malformed frame throws during render. Not a regression and frames come from our own server;
+  hardening is tracked in `deferred-work.md`.
 
 - Not exercised against a real `ANTHROPIC_API_KEY`: the live `/generate` run and the mid-stream
   disconnect check from the spec's verification list still need a human with a key.

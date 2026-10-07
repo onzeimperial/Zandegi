@@ -22,3 +22,12 @@
 - source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-1-2-add-verification-and-repository-guardrails.md`
   summary: Tune CI cost and hygiene now that a production build runs inside the canonical gate, and widen `.prettierignore` to cover `coverage`, `out` and `.turbo`.
   evidence: `verify.yml` declares both `on: push` and `on: pull_request` with no `concurrency` group, so every PR commit now runs `next build` twice. The `current` job caches neither the pnpm store nor `.next/cache`, though the `legacy` job does cache npm, and no `permissions:` block is declared. The double-run and missing permissions pre-date this story; adding the build stage is what made the cost material.
+
+- source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-1-3-put-mission-generation-behind-the-api-boundary.md`
+  summary: Finish AC1 by forbidding `apps/**` from importing `@zandegi/core` root, and migrate the three app files that still do.
+  evidence: Story 1.3 enforced four of the five surfaces AC1 names. `apps/web/src/app/builder/builder-state.ts:1` imports the scoring formula `verificationMult` from core root and renders `+N XP` at `builder/page.tsx:274`; `lib/domain-art.ts:1` imports `DOMAINS`; `lib/demo-data.ts:1` imports `GoalType`, which the contracts subpath already carries. Blocked on two things: `DOMAINS` belongs in the contracts surface that story 1.4 owns, and whether a client screen may compute XP from published formulas at all is a product decision, not a refactor.
+
+- source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-1-3-put-mission-generation-behind-the-api-boundary.md`
+  summary: Strengthen the terminal-frame guard in `apps/web/src/app/generate/sse.ts` to validate step shape, not just that `steps` is an array.
+  evidence: `mission-review.tsx` dereferences `step.guide.approach`, `step.estimatedMinutes` and `step.verification`, so a malformed frame passes `isProgress`/the terminal guard and throws during render. Not a regression — the previous `isMissionGeneratedEvent` was weaker — and frames originate from our own server, so this is hardening rather than a live defect.
+

@@ -285,6 +285,21 @@ describe("generateMission use case", () => {
     expect(deps.records).toHaveLength(0);
   });
 
+  it("redacts a one-character goal, which the request validator accepts", async () => {
+    const deps = ports({
+      draftGenerator: async () => {
+        throw new Error("stage detail failed for x");
+      },
+    });
+
+    const failure = (await generateMission({ request: { rawText: "x" } }, deps).catch(
+      (caught: unknown) => caught,
+    )) as GenerationError;
+
+    expect(failure.diagnostic).toContain("[redacted]");
+    expect(failure.diagnostic).not.toMatch(/\bx\b/);
+  });
+
   it("fails closed when the pipeline returns neither a draft nor a refusal", async () => {
     const deps = ports({ draftGenerator: async () => ({ draft: null }) });
     await expect(generateMission({ request: { rawText: "run" } }, deps)).rejects.toMatchObject({

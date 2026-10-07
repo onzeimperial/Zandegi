@@ -54,6 +54,15 @@ function logDiagnostic(requestId: string, code: GenerationErrorCode, diagnostic:
   console.error("[generate]", JSON.stringify({ requestId, code, diagnostic }));
 }
 
+/**
+ * Server-only, and deliberately not an error: the client went away, the run
+ * aborted, and no terminal result was delivered. That is the expected path,
+ * so it is logged as information rather than under a failure code.
+ */
+function logCancelled(requestId: string): void {
+  console.info("[generate]", JSON.stringify({ requestId, outcome: "cancelled" }));
+}
+
 async function readBoundedJson(req: Request): Promise<unknown> {
   const contentType = req.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
   if (contentType !== "application/json") {
@@ -190,7 +199,10 @@ export async function POST(req: Request) {
           );
           send({ type: "error", error: errorBody(code, requestId).error });
         } else {
-          logDiagnostic(requestId, "GENERATION_FAILED", "client disconnected; run aborted");
+          // A disconnect is not a failure. It must not be logged under an
+          // error code, or every closed tab reads as a broken generation in
+          // the log an operator inspects.
+          logCancelled(requestId);
         }
       } finally {
         clearTimeout(timeout!);

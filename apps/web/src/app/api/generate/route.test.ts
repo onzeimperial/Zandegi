@@ -145,6 +145,65 @@ describe("POST /api/generate", () => {
     expect(text).not.toContain("sk-ant-sensitive");
   });
 
+  it("emits only code, message and requestId for a GenerationError, keeping the diagnostic in the log", async () => {
+    const { GenerationError } = await import("@zandegi/api");
+    generateMission.mockRejectedValue(
+      new GenerationError(
+        "GENERATION_FAILED",
+        "Error: detailChapter stage threw for chapter 2 at stages/05-detail.ts",
+      ),
+    );
+
+    const response = await POST(request(JSON.stringify({ rawText: "run" })));
+    const text = await response.text();
+
+    const frames = text
+      .split("\n\n")
+      .filter((block) => block.startsWith("data:"))
+      .map((block) => JSON.parse(block.slice(5).trim()) as { type: string; error?: unknown });
+    const terminal = frames.at(-1);
+
+    expect(terminal?.type).toBe("error");
+    expect(Object.keys(terminal!.error as object).sort()).toEqual(["code", "message", "requestId"]);
+    expect(terminal!.error).toEqual({
+      code: "GENERATION_FAILED",
+      message: "Mission generation failed. Try again.",
+      requestId: response.headers.get("x-request-id"),
+    });
+    // The stage name and file path stay server-side.
+    expect(text).not.toContain("detailChapter");
+    expect(text).not.toContain("05-detail");
+    // It is still written to the log an operator reads.
+    expect(console.error).toHaveBeenCalledWith(
+      "[generate]",
+      expect.stringContaining("detailChapter"),
+    );
+  });
+
+  it("logs a client disconnect as cancelled rather than as a generation failure", async () => {
+    const client = new AbortController();
+    generateMission.mockImplementation(
+      (_input: unknown, ports: { cancellation: { signal: AbortSignal } }) =>
+        new Promise((_resolve, reject) => {
+          const { signal } = ports.cancellation;
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        }),
+    );
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    const response = await POST(
+      request(JSON.stringify({ rawText: "run" }), { signal: client.signal }),
+    );
+    client.abort();
+    await expect(response.text()).resolves.toBe("");
+
+    expect(console.info).toHaveBeenCalledWith(
+      "[generate]",
+      expect.stringContaining('"outcome":"cancelled"'),
+    );
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
   it("aborts active work at the deadline and emits a stable timeout", async () => {
     vi.useFakeTimers();
     try {
