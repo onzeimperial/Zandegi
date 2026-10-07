@@ -25,6 +25,7 @@ export {
   assertSameSiteRequest,
   isSameSiteRequest,
   normalizeOrigin,
+  trustsForwardedOrigin,
   type SameSiteRequest,
 } from "./origin";
 

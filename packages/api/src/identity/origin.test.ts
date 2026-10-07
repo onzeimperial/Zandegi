@@ -5,6 +5,7 @@ import {
   assertSameSiteRequest,
   isSameSiteRequest,
   normalizeOrigin,
+  trustsForwardedOrigin,
 } from "./origin";
 
 const OWN = "https://zandegi.app/api/generate";
@@ -70,5 +71,103 @@ describe("the origin check", () => {
     expect(error!.code).toBe("CROSS_SITE_REQUEST");
     expect(error!.message).toBe("This request did not come from Zandegi.");
     expect(error!.diagnostic).not.toContain("evil.test");
+  });
+});
+
+describe("behind a proxy", () => {
+  // On Vercel the request URL carries the internal host, so comparing it to
+  // Origin rejects every real request. These headers describe the public
+  // origin -- but only the platform may vouch for them.
+  const INTERNAL = "https://zandegi-abc123.vercel.internal/api/generate";
+
+  it("marks the platform's own signal as trustworthy, and nothing else", () => {
+    expect(trustsForwardedOrigin("1")).toBe(true);
+    expect(trustsForwardedOrigin(undefined)).toBe(false);
+    expect(trustsForwardedOrigin("")).toBe(false);
+    expect(trustsForwardedOrigin("   ")).toBe(false);
+  });
+
+  it("accepts the public origin when the platform vouches for the headers", () => {
+    expect(
+      isSameSiteRequest({
+        origin: "https://zandegi.app",
+        requestUrl: INTERNAL,
+        forwardedHost: "zandegi.app",
+        forwardedProto: "https",
+        trustForwarded: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("reads only the client-facing hop of a proxy chain", () => {
+    expect(
+      isSameSiteRequest({
+        origin: "https://zandegi.app",
+        requestUrl: INTERNAL,
+        forwardedHost: "zandegi.app, internal-1.vercel.internal",
+        forwardedProto: "https, http",
+        trustForwarded: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("IGNORES forwarded headers a caller spoofs when nothing vouches for them", () => {
+    // The attack: send Origin and X-Forwarded-Host naming the same attacker
+    // host. Without the platform marker the request URL is the only truth, so
+    // this must stay rejected.
+    expect(
+      isSameSiteRequest({
+        origin: "https://evil.example",
+        requestUrl: OWN,
+        forwardedHost: "evil.example",
+        forwardedProto: "https",
+      }),
+    ).toBe(false);
+    expect(
+      isSameSiteRequest({
+        origin: "https://evil.example",
+        requestUrl: OWN,
+        forwardedHost: "evil.example",
+        forwardedProto: "https",
+        trustForwarded: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("still rejects a foreign origin while trusting the proxy", () => {
+    expect(
+      isSameSiteRequest({
+        origin: "https://evil.example",
+        requestUrl: INTERNAL,
+        forwardedHost: "zandegi.app",
+        forwardedProto: "https",
+        trustForwarded: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("falls back to the request URL when the forwarded host is missing or unusable", () => {
+    for (const forwardedHost of [null, "", "   ", "::not a host::"]) {
+      expect(
+        isSameSiteRequest({
+          origin: "https://zandegi.app",
+          requestUrl: OWN,
+          forwardedHost,
+          trustForwarded: true,
+        }),
+        String(forwardedHost),
+      ).toBe(true);
+    }
+  });
+
+  it("defaults a missing forwarded protocol to https rather than guessing http", () => {
+    expect(
+      isSameSiteRequest({
+        origin: "https://zandegi.app",
+        requestUrl: INTERNAL,
+        forwardedHost: "zandegi.app",
+        trustForwarded: true,
+      }),
+    ).toBe(true);
   });
 });

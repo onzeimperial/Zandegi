@@ -25,6 +25,7 @@ import {
   GenerationError,
   allowedOriginsFromEnv,
   assertSameSiteRequest,
+  trustsForwardedOrigin,
   cancellationFrom,
   demoPortsFromEnv,
   emptyKnowledge,
@@ -135,6 +136,12 @@ export async function POST(req: Request) {
       origin: req.headers.get("origin"),
       requestUrl: req.url,
       allowedOrigins: allowedOriginsFromEnv(process.env.ZANDEGI_ALLOWED_ORIGINS),
+      // Behind a proxy the request URL carries the internal host, which would
+      // reject every legitimate call. These headers are read only when the
+      // platform itself vouches for them.
+      forwardedHost: req.headers.get("x-forwarded-host"),
+      forwardedProto: req.headers.get("x-forwarded-proto"),
+      trustForwarded: trustsForwardedOrigin(process.env.VERCEL),
     });
   } catch {
     return jsonError(403, "CROSS_SITE_REQUEST", requestId);

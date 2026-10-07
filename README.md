@@ -64,6 +64,26 @@ runs `npm ci`, `npm run typecheck` and `npm test` directly inside `legacy/`; the
 Current workspace code must never import from `legacy/`; `pnpm lint` fails if it does,
 including through a dynamic `import()`.
 
+## Deploying the demo
+
+The demo deploys to Vercel. `vercel.json` pins the Sydney region. Set these on the
+project before the first deploy — two of them fail closed, so the app looks broken
+rather than misconfigured if they are missing:
+
+| Variable                            | Why it matters                                                                                                                                                                                               |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ANTHROPIC_API_KEY`                 | Generation cannot run without it.                                                                                                                                                                            |
+| `ENABLE_UNAUTHENTICATED_GENERATION` | Must be exactly `true`. The generate endpoint is deliberately off in production otherwise, because it spends money for anonymous callers and is not rate limited yet. Without it, every request returns 503. |
+| `UPSTASH_REDIS_REST_URL`            | The deployed store. Without both Upstash values the app falls back to an in-process store, and a serverless deployment runs many processes, so missions would vanish between requests.                       |
+| `UPSTASH_REDIS_REST_TOKEN`          | As above.                                                                                                                                                                                                    |
+
+`ZANDEGI_ALLOWED_ORIGINS` is normally not needed on Vercel: the app derives its own
+origin from `X-Forwarded-Host`, which the platform sets. Off the platform those headers
+are ignored, since a caller could forge them.
+
+After the first deploy, confirm two things the test suite cannot: that a generation
+really reaches the model, and that a mission is still readable after the server restarts.
+
 ## Status
 
 Monorepo scaffold complete. Next: BUILD-PROMPTS **session 1** — prove the mission
