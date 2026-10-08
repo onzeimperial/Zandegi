@@ -66,6 +66,20 @@ string, "rewrittenText": string }] }. Return every supplied issueId exactly once
   applyExactRewrites(chapters, issues, parsed.rewrites);
 }
 
+/**
+ * How many chapters are detailed concurrently.
+ *
+ * Sequentially this was one round-trip per chapter in series, and a real
+ * generation exceeded the 25s application deadline (measured: 25.8s). The
+ * chapters are independent -- `detailChapter` receives only its own skeleton
+ * plus the shared interpretation and pursuit -- so they can run together.
+ *
+ * The cap exists rather than running all seven at once because each detail
+ * call may emit up to 3072 output tokens; seven in flight can exceed an
+ * account's per-minute output limit and trade a timeout for a 429.
+ */
+const DETAIL_CONCURRENCY = 4;
+
 export interface GenerateMissionDraftOptions {
   /**
    * The one request-scoped evaluation instant, supplied by the API clock port.
@@ -132,47 +146,78 @@ export async function generateMissionDraft(
   const planResult = await runStage("plan", () => plan(interpretation, resolved, options.signal));
   modelsUsed.plan = modelForStage("plan");
 
-  const draftChapters: DraftChapter[] = [];
-  for (let chapterIndex = 0; chapterIndex < planResult.chapters.length; chapterIndex++) {
-    options.signal?.throwIfAborted();
-    const skeleton = planResult.chapters[chapterIndex]!;
-    emit(onEvent, { stage: "detail", status: "start" });
+  const skeletons = planResult.chapters;
+  const detailed = new Array<DraftChapter | undefined>(skeletons.length);
 
-    let detailOutput;
-    try {
-      detailOutput = await detailChapter(
-        {
-          chapterTitle: skeleton.title,
-          exitCondition: skeleton.exitCondition,
-          interpretation,
-          resolved,
-        },
-        options.signal,
-      );
-      options.signal?.throwIfAborted();
-      modelsUsed.detail = modelForStage("detail");
-    } catch (error) {
-      emit(onEvent, { stage: "detail", status: "error" });
-      throw error;
+  // One failure must stop its siblings: they are calls already being paid for
+  // whose results are about to be discarded. This controller also forwards an
+  // outer abort (a client disconnect) to every in-flight chapter.
+  const detailAbort = new AbortController();
+  const forwardAbort = () => detailAbort.abort(options.signal?.reason);
+  options.signal?.throwIfAborted();
+  options.signal?.addEventListener("abort", forwardAbort, { once: true });
+
+  let nextChapter = 0;
+  async function detailWorker(): Promise<void> {
+    for (;;) {
+      const chapterIndex = nextChapter++;
+      if (chapterIndex >= skeletons.length) return;
+      detailAbort.signal.throwIfAborted();
+
+      const skeleton = skeletons[chapterIndex]!;
+      emit(onEvent, { stage: "detail", status: "start" });
+
+      let detailOutput;
+      try {
+        detailOutput = await detailChapter(
+          {
+            chapterTitle: skeleton.title,
+            exitCondition: skeleton.exitCondition,
+            interpretation,
+            resolved,
+          },
+          detailAbort.signal,
+        );
+        detailAbort.signal.throwIfAborted();
+        modelsUsed.detail = modelForStage("detail");
+      } catch (error) {
+        emit(onEvent, { stage: "detail", status: "error" });
+        detailAbort.abort(error);
+        throw error;
+      }
+
+      const steps: DraftStep[] = detailOutput.steps.map((step, stepIndex) => ({
+        index: stepIndex,
+        title: step.title,
+        estimatedMinutes: step.estimatedMinutes,
+        verification: step.verification,
+        guide: step.guide,
+        sources: step.sources ?? [],
+        toolKinds: step.toolKinds ?? [],
+      }));
+      detailed[chapterIndex] = {
+        index: chapterIndex,
+        title: skeleton.title,
+        exitCondition: skeleton.exitCondition,
+        steps,
+      };
+      emit(onEvent, { stage: "detail", status: "done" });
     }
-
-    const steps: DraftStep[] = detailOutput.steps.map((step, stepIndex) => ({
-      index: stepIndex,
-      title: step.title,
-      estimatedMinutes: step.estimatedMinutes,
-      verification: step.verification,
-      guide: step.guide,
-      sources: step.sources ?? [],
-      toolKinds: step.toolKinds ?? [],
-    }));
-    draftChapters.push({
-      index: chapterIndex,
-      title: skeleton.title,
-      exitCondition: skeleton.exitCondition,
-      steps,
-    });
-    emit(onEvent, { stage: "detail", status: "done" });
   }
+
+  try {
+    await Promise.all(
+      Array.from({ length: Math.min(DETAIL_CONCURRENCY, skeletons.length) }, detailWorker),
+    );
+  } finally {
+    options.signal?.removeEventListener("abort", forwardAbort);
+  }
+
+  // Order is the plan's order, not completion order.
+  const draftChapters: DraftChapter[] = detailed.map((chapter, index) => {
+    if (chapter === undefined) throw new Error(`chapter ${index} was never detailed`);
+    return chapter;
+  });
 
   const draftMission: DraftMission = {
     title: planResult.missionTitle,

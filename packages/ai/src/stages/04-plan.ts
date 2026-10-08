@@ -40,7 +40,7 @@ export async function plan(
       effortBand: resolved.effortBand,
     }),
     maxTokens: 1536,
-    temperature: 0.5,
+    schema: planOutputSchema,
     signal,
   });
   return parseStageJson("plan", res.text, planOutputSchema);

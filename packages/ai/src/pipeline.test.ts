@@ -377,10 +377,64 @@ describe("generateMission", () => {
     await generateMissionDraft({ rawText: "run" }, undefined, { signal: controller.signal });
     expect(resolveMock).toHaveBeenCalledWith(baseInterpretation, controller.signal);
     expect(planMock).toHaveBeenCalledWith(baseInterpretation, baseResolved, controller.signal);
-    expect(detailChapterMock).toHaveBeenCalledWith(expect.any(Object), controller.signal);
+    // Detail receives a linked child signal now, so one failed chapter can cancel
+    // its siblings. That an outer abort still reaches it is proven below, in
+    // flight -- object identity never proved it.
+    expect(detailChapterMock).toHaveBeenCalledWith(expect.any(Object), expect.any(AbortSignal));
     expect(completeMock).toHaveBeenCalledWith(
       expect.objectContaining({ stage: "ground", signal: controller.signal }),
     );
+  });
+
+  it("cancels an in-flight chapter when the client disconnects mid-detail", async () => {
+    const controller = new AbortController();
+    const seen: AbortSignal[] = [];
+    detailChapterMock.mockImplementation((_input: unknown, signal: AbortSignal) => {
+      seen.push(signal);
+      // Disconnect while detail is still running, which is when it matters.
+      controller.abort(new Error("client gone"));
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    });
+
+    await expect(
+      generateMissionDraft({ rawText: "run" }, undefined, { signal: controller.signal }),
+    ).rejects.toBeTruthy();
+
+    expect(seen.length).toBeGreaterThan(0);
+    for (const signal of seen) expect(signal.aborted).toBe(true);
+  });
+
+  it("details chapters concurrently rather than one round-trip at a time", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    detailChapterMock.mockImplementation(async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return { steps: [step(), step()] };
+    });
+    planMock.mockResolvedValueOnce({
+      missionTitle: "Half marathon",
+      primaryDomain: "Body",
+      chapters: Array.from({ length: 4 }, (_unused, index) => ({
+        title: `Chapter ${index + 1}`,
+        exitCondition: `Finish ${index + 1}`,
+      })),
+    });
+
+    const result = await generateMissionDraft({ rawText: "run" });
+
+    expect(peak).toBeGreaterThan(1);
+    // Order follows the plan, not completion order.
+    expect(result.draft?.mission.chapters.map((chapter) => chapter.title)).toEqual([
+      "Chapter 1",
+      "Chapter 2",
+      "Chapter 3",
+      "Chapter 4",
+    ]);
   });
 
   it("propagates one AbortSignal to active model work and does not run later stages", async () => {

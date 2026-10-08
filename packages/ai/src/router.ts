@@ -8,6 +8,8 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import type { z } from "zod";
 import type { StageName } from "./types";
 
 export const MODELS = {
@@ -20,6 +22,42 @@ export const MODELS = {
 } as const;
 
 export type ModelTier = keyof typeof MODELS;
+
+/**
+ * Whether a tier's model accepts sampling parameters.
+ *
+ * Sonnet 5 and the Opus 5 family reject `temperature`, `top_p` and `top_k`
+ * outright — the API answers `400 invalid_request_error: \`temperature\` is
+ * deprecated for this model`. Haiku 4.5 still accepts them. Depth on the newer
+ * models is steered with effort, not sampling.
+ *
+ * This lives here because the router owns model choice: a stage that moves to
+ * another tier must not be able to reintroduce the 400.
+ */
+const ACCEPTS_SAMPLING: Record<ModelTier, boolean> = {
+  fast: true,
+  standard: false,
+  deep: false,
+};
+
+/**
+ * Effort per tier.
+ *
+ * Sonnet 5 runs adaptive thinking whenever `thinking` is omitted, and thinking
+ * tokens count against `max_tokens`. Measured on a real generation: the plan
+ * stage took 10.2s and one chapter of detail took 32s, then had its JSON cut
+ * off mid-string because reasoning had consumed the budget. These stages turn
+ * a structured brief into structured JSON under a 25s deadline; they do not
+ * repay deep deliberation. `low` keeps thinking on (disabling it outright has
+ * its own failure modes) but makes it brief.
+ *
+ * Haiku 4.5 rejects `effort`, so the fast tier sends none.
+ */
+const TIER_EFFORT: Record<ModelTier, "low" | "medium" | "high" | undefined> = {
+  fast: undefined,
+  standard: "low",
+  deep: undefined,
+};
 
 /** Which tier each model-using stage runs on. Stages 7–9 are not here — they never call the model. */
 const STAGE_TIER: Partial<Record<StageName, ModelTier>> = {
@@ -56,6 +94,15 @@ export interface CompleteOptions {
   maxTokens?: number;
   temperature?: number;
   signal?: AbortSignal;
+  /**
+   * Constrain the response to this schema at generation time (structured
+   * outputs), so the model cannot emit malformed JSON. Asking for "ONLY a JSON
+   * object" as free text failed on real output: one unescaped quote inside a
+   * step's guide discarded a whole seven-chapter mission and every call already
+   * paid for. The caller still validates with Zod, because rules such as domain
+   * weights summing to 1 cannot be expressed in JSON Schema.
+   */
+  schema?: z.ZodType;
 }
 
 export interface CompleteResult {
@@ -71,16 +118,36 @@ export interface CompleteResult {
 export async function complete(opts: CompleteOptions): Promise<CompleteResult> {
   const tier = opts.tier ?? STAGE_TIER[opts.stage] ?? "standard";
   const model = MODELS[tier];
-  const res = await getClient().messages.create(
-    {
-      model,
-      max_tokens: opts.maxTokens ?? 4096,
-      temperature: opts.temperature ?? 0.4,
-      system: opts.system,
-      messages: [{ role: "user", content: opts.user }],
-    },
-    { signal: opts.signal },
-  );
+  const maxTokens = opts.maxTokens ?? 4096;
+  const effort = TIER_EFFORT[tier];
+  const outputConfig = {
+    ...(effort === undefined ? {} : { effort }),
+    ...(opts.schema === undefined ? {} : { format: zodOutputFormat(opts.schema) }),
+  };
+  const request = {
+    model,
+    max_tokens: maxTokens,
+    // Only sent where the model accepts it; see ACCEPTS_SAMPLING.
+    ...(ACCEPTS_SAMPLING[tier] ? { temperature: opts.temperature ?? 0.4 } : {}),
+    // Only sent where the model accepts it; see TIER_EFFORT.
+    ...(Object.keys(outputConfig).length === 0 ? {} : { output_config: outputConfig }),
+    system: opts.system,
+    messages: [{ role: "user" as const, content: opts.user }],
+  };
+  const res =
+    opts.schema === undefined
+      ? await getClient().messages.create(request, { signal: opts.signal })
+      : await getClient().messages.parse(request, { signal: opts.signal });
+
+  // Check why the model stopped before trusting what it wrote. A response cut
+  // off at the budget used to surface as a baffling JSON parse error in a later
+  // stage; a refusal used to be read as if it were content.
+  if (res.stop_reason === "max_tokens") {
+    throw new Error(`[${opts.stage}] output truncated at max_tokens=${maxTokens}`);
+  }
+  if (res.stop_reason === "refusal") {
+    throw new Error(`[${opts.stage}] the model declined the request`);
+  }
 
   const text = res.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")

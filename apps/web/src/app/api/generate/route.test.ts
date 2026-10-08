@@ -229,7 +229,7 @@ describe("POST /api/generate", () => {
         },
       );
       const response = await POST(request(JSON.stringify({ rawText: "run" })));
-      await vi.advanceTimersByTimeAsync(25_000);
+      await vi.advanceTimersByTimeAsync(60_000);
       const text = await response.text();
       expect(pipelineSignal?.aborted).toBe(true);
       expect(text).toContain("GENERATION_TIMEOUT");

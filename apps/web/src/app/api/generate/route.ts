@@ -46,8 +46,24 @@ import {
 
 export const runtime = "nodejs";
 
+/**
+ * The host's limit for this function, in seconds. It must stay above the
+ * application deadline below: if the platform killed the function first, the
+ * client would get a raw platform error instead of the stable
+ * GENERATION_TIMEOUT frame (AD-8: the application deadline is shorter than the
+ * host deadline).
+ */
+export const maxDuration = 90;
+
 const MAX_BODY_BYTES = 16 * 1024;
-const GENERATION_TIMEOUT_MS = 25_000;
+/**
+ * Measured on real generations: one chapter of detail takes 18-22s even at low
+ * effort, and roughly 6s pass before the first chapter starts. A 7-chapter
+ * mission at four chapters in parallel therefore needs two waves, around 50s.
+ * NFR1's p95 target of 25s is not achievable with rich chapter detail on the
+ * current model, so the demo runs at 60s -- a known, recorded deviation.
+ */
+const GENERATION_TIMEOUT_MS = 60_000;
 
 class RequestFailure extends Error {
   constructor(

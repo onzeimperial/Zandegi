@@ -62,8 +62,8 @@ export async function detailChapter(input: DetailChapterInput, signal?: AbortSig
       currentLevel: input.interpretation.constraints.currentLevel,
       domains: input.resolved.domains,
     }),
-    maxTokens: 3072,
-    temperature: 0.5,
+    maxTokens: 6000,
+    schema: detailChapterOutputSchema,
     signal,
   });
   return parseStageJson("detail", res.text, detailChapterOutputSchema);
