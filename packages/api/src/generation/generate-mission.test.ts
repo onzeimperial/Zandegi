@@ -92,6 +92,7 @@ function ports(overrides: Partial<GenerateMissionPorts> = {}): TestPorts {
       findForOwner: async (ownerId, missionId) =>
         records.find((record) => record.ownerId === ownerId && record.missionId === missionId) ??
         null,
+      listForOwner: async (ownerId) => records.filter((record) => record.ownerId === ownerId),
     },
     draftGenerator: async () => draftOutcome(),
     records,
@@ -221,6 +222,7 @@ describe("generateMission use case", () => {
           throw new Error(`redis write failed for "${GOAL}" at https://demo.upstash.io`);
         },
         findForOwner: async () => null,
+        listForOwner: async () => [],
       },
     });
 

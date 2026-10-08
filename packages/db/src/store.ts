@@ -51,6 +51,13 @@ export interface DemoStore<TMission = unknown, TSafetyClass extends string = str
     ownerId: string,
     missionId: string,
   ): Promise<StoredMission<TMission, TSafetyClass> | null>;
+  /**
+   * The owner's missions, newest first, at most `MAX_LISTED_MISSIONS`.
+   *
+   * Read through a per-owner index rather than a scan, keeping "every read is
+   * keyed" true. A mission that has expired drops out of the list silently.
+   */
+  listMissions(ownerId: string): Promise<StoredMission<TMission, TSafetyClass>[]>;
   findGuest(tokenHash: string): Promise<StoredGuest | null>;
   saveGuest(tokenHash: string, guest: StoredGuest): Promise<void>;
   /** Renews the retention window. A no-op when the hash is unknown. */
@@ -87,6 +94,63 @@ export function missionKey(ownerId: string, missionId: string): string {
 
 export function guestKey(tokenHash: string): string {
   return `${DEMO_KEY_PREFIX}:guest:${tokenHash}`;
+}
+
+/** The per-owner index of mission ids that makes listing a keyed read. */
+export function ownerIndexKey(ownerId: string): string {
+  return `${DEMO_KEY_PREFIX}:missions:${ownerId}`;
+}
+
+/** Bounds both the index and a listing, so one guest cannot grow either forever. */
+export const MAX_LISTED_MISSIONS = 20;
+
+/** One entry in an owner's index. */
+export interface OwnerIndexEntry {
+  missionId: string;
+  /** ISO-8601 UTC, copied from the mission so the index sorts without reading it. */
+  generatedAt: string;
+}
+
+function isOwnerIndexEntry(value: unknown): value is OwnerIndexEntry {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as OwnerIndexEntry).missionId === "string" &&
+    typeof (value as OwnerIndexEntry).generatedAt === "string"
+  );
+}
+
+/**
+ * Parse a stored index defensively: anything malformed reads as empty rather
+ * than throwing, so a corrupted index degrades to "no missions listed" instead
+ * of breaking the page. The missions themselves are untouched.
+ */
+export function parseOwnerIndex(value: unknown): OwnerIndexEntry[] {
+  return Array.isArray(value) ? value.filter(isOwnerIndexEntry) : [];
+}
+
+/**
+ * The index after recording a mission: newest first, one entry per id, capped.
+ *
+ * Shared by both stores so the twin and Redis cannot disagree about order or
+ * size. This is a read-modify-write, so two missions recorded at the same
+ * instant for the same guest could lose one index entry; the mission itself
+ * stays readable by id. Acceptable for the demo; the Prisma store replaces the
+ * index with a query.
+ */
+export function withIndexEntry(
+  index: readonly OwnerIndexEntry[],
+  entry: OwnerIndexEntry,
+): OwnerIndexEntry[] {
+  return newestFirst([entry, ...index.filter((e) => e.missionId !== entry.missionId)]).slice(
+    0,
+    MAX_LISTED_MISSIONS,
+  );
+}
+
+/** Newest first by `generatedAt`; ties keep their existing order. */
+export function newestFirst<T extends { generatedAt: string }>(items: readonly T[]): T[] {
+  return [...items].sort((a, b) => b.generatedAt.localeCompare(a.generatedAt));
 }
 
 /** 30 days of inactivity — configuration, not a constant (story 1.16). */

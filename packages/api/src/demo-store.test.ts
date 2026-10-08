@@ -119,6 +119,9 @@ describe("the port adapter", () => {
       findMission: async () => {
         throw new StoreUnavailableError("findMission", "[redacted]: connection refused");
       },
+      listMissions: async () => {
+        throw new StoreUnavailableError("listMissions", "[redacted]: connection refused");
+      },
       findGuest: async () => {
         throw new Error("fetch failed for https://demo.upstash.io with token a-token");
       },

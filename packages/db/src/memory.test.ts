@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createInMemoryDemoStore } from "./memory";
-import { guestKey, missionKey, type StoredMission } from "./store";
+import { MAX_LISTED_MISSIONS, guestKey, missionKey, type StoredMission } from "./store";
 
 const NOW = Date.UTC(2026, 9, 7);
 const WINDOW = 60;
@@ -79,6 +79,9 @@ describe("the in-memory demo store", () => {
 
     await expect(store.findGuest("hash-a")).resolves.toBeNull();
     await expect(store.findMission("guest-1", "m-1")).resolves.toBeNull();
+    // A lapsed mission must not linger in the owner's list either. Reading the
+    // list is also what lets the lapsed index entry itself drop.
+    await expect(store.listMissions("guest-1")).resolves.toEqual([]);
     // Lapsed entries are dropped as they are read, not swept on a schedule.
     expect(store.size()).toBe(0);
   });
@@ -99,5 +102,56 @@ describe("the in-memory demo store", () => {
     const store = createInMemoryDemoStore();
     await expect(store.renewGuest("hash-unknown")).resolves.toBeUndefined();
     expect(store.size()).toBe(0);
+  });
+});
+
+describe("listing a guest's missions", () => {
+  const at = (minutes: number) => new Date(NOW + minutes * 60_000).toISOString();
+
+  it("lists the owner's missions newest first", async () => {
+    const store = createInMemoryDemoStore();
+    await store.recordMission(mission({ missionId: "old", generatedAt: at(0) }));
+    await store.recordMission(mission({ missionId: "new", generatedAt: at(10) }));
+    await store.recordMission(mission({ missionId: "mid", generatedAt: at(5) }));
+
+    const listed = await store.listMissions("guest-1");
+    expect(listed.map((entry) => entry.missionId)).toEqual(["new", "mid", "old"]);
+  });
+
+  it("never lists another guest's missions", async () => {
+    const store = createInMemoryDemoStore();
+    await store.recordMission(mission({ missionId: "mine", ownerId: "guest-1" }));
+    await store.recordMission(mission({ missionId: "theirs", ownerId: "guest-2" }));
+
+    expect((await store.listMissions("guest-1")).map((m) => m.missionId)).toEqual(["mine"]);
+    expect((await store.listMissions("guest-2")).map((m) => m.missionId)).toEqual(["theirs"]);
+    await expect(store.listMissions("guest-3")).resolves.toEqual([]);
+  });
+
+  it("caps the list so one guest cannot grow it forever", async () => {
+    const store = createInMemoryDemoStore();
+    for (let i = 0; i < MAX_LISTED_MISSIONS + 5; i++) {
+      await store.recordMission(mission({ missionId: `m-${i}`, generatedAt: at(i) }));
+    }
+    const listed = await store.listMissions("guest-1");
+    expect(listed).toHaveLength(MAX_LISTED_MISSIONS);
+    // The newest survive the cap, not the oldest.
+    expect(listed[0]!.missionId).toBe(`m-${MAX_LISTED_MISSIONS + 4}`);
+  });
+
+  it("records the same mission once even if it is written twice", async () => {
+    const store = createInMemoryDemoStore();
+    await store.recordMission(mission());
+    await store.recordMission(mission());
+    await expect(store.listMissions("guest-1")).resolves.toHaveLength(1);
+  });
+
+  it("returns copies, so a caller cannot mutate the store through a listing", async () => {
+    const store = createInMemoryDemoStore();
+    await store.recordMission(mission());
+    const [listed] = await store.listMissions("guest-1");
+    (listed!.mission as { title: string }).title = "tampered";
+    const [again] = await store.listMissions("guest-1");
+    expect((again!.mission as { title: string }).title).toBe("Conversational Farsi");
   });
 });

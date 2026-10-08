@@ -25,21 +25,28 @@ describe("designed route contract", () => {
     }
   });
   it("keeps backendless editing and rewards inside an explicit preview boundary", () => {
-    for (const route of [
-      "builder",
-      "complete",
-      "crew",
-      "customise",
-      "path",
-      "profile",
-      "shop",
-      "step",
-    ]) {
+    // `path` and `step` left this list when they began rendering the guest's
+    // real missions; they are pinned by the test below instead. (`path` had been
+    // passing only because an aria-label happened to contain "preview".)
+    for (const route of ["builder", "complete", "crew", "customise", "profile", "shop"]) {
       const source = readFileSync(join(appDirectory, route, "page.tsx"), "utf8");
       expect(source, route).not.toContain("fetch(");
       expect(source.toLowerCase(), route).toMatch(
         /preview|local|not (saved|persisted|connected)|disabled/,
       );
+    }
+  });
+  it("renders the guest's real missions on path and step, with no fixture fabrications", () => {
+    for (const route of ["path", "step"]) {
+      const source = readFileSync(join(appDirectory, route, "page.tsx"), "utf8");
+      // Real data, loaded server-side through the ownership-checked use case.
+      expect(source, route).toContain("loadGuestMissions");
+      expect(source, route).not.toContain("fetch(");
+      // Numbers the fixtures invented, which would read as claims about a real
+      // person: a streak, a progress percentage, a scheduled slot, promised XP.
+      for (const fabrication of ["13 days straight", "72.5%", "6:30", "XP</span>", "+40"]) {
+        expect(source, `${route}: ${fabrication}`).not.toContain(fabrication);
+      }
     }
   });
   it("keeps the responsive canvas, focus, and reduced-motion contracts", () => {

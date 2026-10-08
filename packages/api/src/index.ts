@@ -35,6 +35,11 @@ export {
   type ReadMissionInput,
   type ReadMissionPorts,
 } from "./missions/read-mission";
+export {
+  listMissions,
+  type ListMissionsInput,
+  type ListMissionsPorts,
+} from "./missions/list-missions";
 export * from "./identity";
 export {
   createDemoStore,

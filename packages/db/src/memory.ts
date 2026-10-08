@@ -14,6 +14,10 @@
 import {
   guestKey,
   missionKey,
+  newestFirst,
+  ownerIndexKey,
+  parseOwnerIndex,
+  withIndexEntry,
   DEMO_RETENTION_SECONDS,
   type DemoStore,
   type StoredGuest,
@@ -75,6 +79,30 @@ export function createInMemoryDemoStore<TMission = unknown, TSafetyClass extends
   return {
     async recordMission(record) {
       write(missionKey(record.ownerId, record.missionId), record);
+      const indexKey = ownerIndexKey(record.ownerId);
+      write(
+        indexKey,
+        withIndexEntry(parseOwnerIndex(read(indexKey)), {
+          missionId: record.missionId,
+          generatedAt: record.generatedAt,
+        }),
+      );
+    },
+
+    async listMissions(ownerId) {
+      const indexKey = ownerIndexKey(ownerId);
+      const index = parseOwnerIndex(read(indexKey));
+      const missions: StoredMission<TMission, TSafetyClass>[] = [];
+      for (const entry of index) {
+        const found = read(missionKey(ownerId, entry.missionId));
+        // An expired mission drops out rather than appearing as a gap.
+        if (found !== null) {
+          missions.push(structuredClone(found) as StoredMission<TMission, TSafetyClass>);
+        }
+      }
+      // Listing is a request from the principal, so it renews the index window.
+      if (index.length > 0) entries.set(indexKey, { value: index, expiresAt: expiryFrom() });
+      return newestFirst(missions);
     },
 
     async findMission(ownerId, missionId) {

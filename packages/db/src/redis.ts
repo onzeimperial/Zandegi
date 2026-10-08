@@ -19,6 +19,10 @@
 import {
   guestKey,
   missionKey,
+  newestFirst,
+  ownerIndexKey,
+  parseOwnerIndex,
+  withIndexEntry,
   StoreUnavailableError,
   DEMO_RETENTION_SECONDS,
   type DemoStore,
@@ -100,6 +104,46 @@ export function createRedisDemoStore<TMission = unknown, TSafetyClass extends st
         client.set(missionKey(record.ownerId, record.missionId), JSON.stringify(record), {
           ex: retentionSeconds,
         }),
+      );
+      // The index is written after the mission, so a failure here leaves a
+      // mission that is readable by id but missing from the list -- never a
+      // listed id that resolves to nothing.
+      const indexKey = ownerIndexKey(record.ownerId);
+      const index = parseOwnerIndex(
+        decode(await guard("recordMission", () => client.get(indexKey))),
+      );
+      const next = withIndexEntry(index, {
+        missionId: record.missionId,
+        generatedAt: record.generatedAt,
+      });
+      await guard("recordMission", () =>
+        client.set(indexKey, JSON.stringify(next), { ex: retentionSeconds }),
+      );
+    },
+
+    async listMissions(ownerId) {
+      const indexKey = ownerIndexKey(ownerId);
+      const index = parseOwnerIndex(
+        decode(await guard("listMissions", () => client.get(indexKey))),
+      );
+      if (index.length === 0) return [];
+
+      const found = await Promise.all(
+        index.map(async (entry) =>
+          decode<StoredMission<TMission, TSafetyClass>>(
+            await guard("listMissions", () => client.get(missionKey(ownerId, entry.missionId))),
+          ),
+        ),
+      );
+      // Listing renews the index. A failure to renew must not fail the read.
+      await guard("listMissions", () => client.expire(indexKey, retentionSeconds)).catch(
+        () => undefined,
+      );
+      // An expired mission drops out rather than appearing as a gap.
+      return newestFirst(
+        found.filter(
+          (mission): mission is StoredMission<TMission, TSafetyClass> => mission !== null,
+        ),
       );
     },
 

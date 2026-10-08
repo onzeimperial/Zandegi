@@ -91,14 +91,16 @@ export function MissionReview({ result }: { result: GenerationResult }) {
                 completing verified work, never by generating a plan.
               </p>
               <p className="preview-note">
-                This result is not saved and will not carry over. Tweak and Start open clearly
-                labelled local examples.
+                Saved to your path. Tweak opens a clearly labelled local example.
               </p>
               <div className="row">
                 <Link href="/builder" className="d button-tweak">
                   Tweak
                 </Link>
-                <Link href="/path" className="d button-start">
+                <Link
+                  href={`/path?mission=${encodeURIComponent(result.missionId)}`}
+                  className="d button-start"
+                >
                   Start chapter 1
                 </Link>
               </div>

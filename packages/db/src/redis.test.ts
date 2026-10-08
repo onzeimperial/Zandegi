@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createRedisDemoStore, type RedisLike } from "./redis";
-import { StoreUnavailableError, guestKey, missionKey, type StoredMission } from "./store";
+import {
+  StoreUnavailableError,
+  guestKey,
+  missionKey,
+  ownerIndexKey,
+  type StoredMission,
+} from "./store";
 
 const URL = "https://demo-12345.upstash.io";
 const TOKEN = "AX9zASQgYTEyMzQ1Njc4OTBhYmNkZWY";
@@ -61,11 +67,17 @@ describe("the Redis demo store", () => {
     await store(fake).recordMission(RECORD);
     await store(fake).saveGuest("hash-a", { id: "guest-1", createdAt: RECORD.generatedAt });
 
-    // The TTL *is* the cleanup: there is no sweep job to schedule.
+    // The TTL *is* the cleanup: there is no sweep job to schedule. That includes
+    // the owner index -- written without a TTL it would quietly live forever.
     expect(fake.calls).toEqual([
       { op: "set", key: missionKey("guest-1", "m-1"), ex: WINDOW },
+      { op: "get", key: ownerIndexKey("guest-1") },
+      { op: "set", key: ownerIndexKey("guest-1"), ex: WINDOW },
       { op: "set", key: guestKey("hash-a"), ex: WINDOW },
     ]);
+    for (const call of fake.calls.filter((entry) => entry.op === "set")) {
+      expect(call.ex, call.key).toBe(WINDOW);
+    }
   });
 
   it("reads a mission with one keyed lookup and no scan", async () => {
@@ -147,5 +159,45 @@ describe("the Redis demo store", () => {
     const fake = fakeRedis({ data: { [guestKey("hash-a")]: "{not json" } });
 
     await expect(store(fake).findGuest("hash-a")).resolves.toBeNull();
+  });
+});
+
+describe("listing a guest's missions from Redis", () => {
+  it("reads the owner's index then each mission by key, newest first, never scanning", async () => {
+    const newer = { ...RECORD, missionId: "m-2", generatedAt: "2026-10-08T00:00:00.000Z" };
+    const fake = fakeRedis();
+    await store(fake).recordMission(RECORD);
+    await store(fake).recordMission(newer);
+    fake.calls.length = 0;
+
+    const listed = await store(fake).listMissions("guest-1");
+
+    expect(listed.map((entry) => entry.missionId)).toEqual(["m-2", "m-1"]);
+    // Only keyed operations: the index, each mission, then renewing the index.
+    expect(fake.calls.map((call) => call.op)).toEqual(["get", "get", "get", "expire"]);
+    expect(fake.calls[0]).toEqual({ op: "get", key: ownerIndexKey("guest-1") });
+  });
+
+  it("skips a mission that has expired out from under its index entry", async () => {
+    const fake = fakeRedis();
+    await store(fake).recordMission(RECORD);
+    // Redis expired the mission, but the index still names it.
+    fake.data.delete(missionKey("guest-1", "m-1"));
+
+    await expect(store(fake).listMissions("guest-1")).resolves.toEqual([]);
+  });
+
+  it("never lists another guest's missions", async () => {
+    const fake = fakeRedis();
+    await store(fake).recordMission(RECORD);
+    await expect(store(fake).listMissions("guest-2")).resolves.toEqual([]);
+  });
+
+  it("keeps credentials out of a listing failure", async () => {
+    const error = await store(fakeRedis({ fail: true }))
+      .listMissions("guest-1")
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(StoreUnavailableError);
+    expect(JSON.stringify(error) + String(error)).not.toContain(TOKEN);
   });
 });

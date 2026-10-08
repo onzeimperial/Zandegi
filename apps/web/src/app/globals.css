@@ -3371,3 +3371,125 @@ h3 {
   font-size: 13px;
   font-weight: 800;
 }
+
+/* ── Real mission path (guest data) ───────────────────────────────────────── */
+
+/* Secondary line on the violet hero. --lavender-2 rather than the fixture's
+   --lavender-3: the latter is 4.28:1 on --violet and fails WCAG AA for text
+   this size; --lavender-2 is 5.18:1. */
+.hero-progress {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--lavender-2);
+}
+
+/* A single mission is a label, not a control that does nothing when pressed. */
+.pursuit-switch.is-static {
+  cursor: default;
+}
+
+.pursuit-menu {
+  position: relative;
+  align-self: flex-start;
+}
+.pursuit-menu > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.pursuit-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.pursuit-menu-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: 0;
+  width: max-content;
+  min-width: 240px;
+  max-width: min(320px, calc(100vw - 32px));
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pursuit-menu-list a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  color: var(--violet-deep);
+  font-weight: 700;
+  text-decoration: none;
+}
+.pursuit-menu-list a:hover,
+.pursuit-menu-list a[aria-current="page"] {
+  background: var(--lavender-2);
+}
+.pursuit-menu-list a[aria-current="page"] {
+  color: var(--violet);
+}
+.pursuit-menu-list .pursuit-menu-new {
+  color: var(--violet);
+  border-top: 2px solid var(--line);
+  border-radius: 0 0 12px 12px;
+}
+
+.rail-note {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+/* Empty and unavailable states. Each one invites the next action. */
+.path-empty {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.path-empty h1 {
+  margin: 0;
+  font-size: 22px;
+  color: var(--violet-deep);
+}
+.path-empty p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.step-missing {
+  margin: 24px auto;
+  max-width: 560px;
+}
+
+/* The real step guide. */
+.guide-section h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: var(--violet-deep);
+}
+.guide-section p {
+  margin: 0;
+  line-height: 1.55;
+}
+.guide-section ul {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  line-height: 1.5;
+}
+.guide-sources a {
+  color: var(--violet);
+}
+.source-date {
+  color: var(--muted);
+  font-size: 13px;
+}

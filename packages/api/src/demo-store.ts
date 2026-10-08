@@ -130,6 +130,7 @@ export function demoPortsFromStore(store: StoredDemoStore): DemoPorts {
       record: (record) => guard("record", () => store.recordMission(record)),
       findForOwner: (ownerId, missionId) =>
         guard("findForOwner", () => store.findMission(ownerId, missionId)),
+      listForOwner: (ownerId) => guard("listForOwner", () => store.listMissions(ownerId)),
     },
     guests: {
       findByTokenHash: (tokenHash) =>

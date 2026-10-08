@@ -36,6 +36,7 @@ function persistence(records: GeneratedMissionRecord[]): GenerationPersistencePo
     },
     findForOwner: async (ownerId, missionId) =>
       records.find((entry) => entry.ownerId === ownerId && entry.missionId === missionId) ?? null,
+    listForOwner: async (ownerId) => records.filter((entry) => entry.ownerId === ownerId),
   };
 }
 
@@ -107,6 +108,7 @@ describe("readMission", () => {
           calls += 1;
           return null;
         },
+        listForOwner: async () => [],
       },
     };
 
@@ -121,6 +123,7 @@ describe("readMission", () => {
         findForOwner: async () => {
           throw new Error("ECONNREFUSED https://demo.upstash.io token=sk-super-secret-value");
         },
+        listForOwner: async () => [],
       },
     };
 

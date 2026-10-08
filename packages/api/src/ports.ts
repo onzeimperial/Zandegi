@@ -125,4 +125,6 @@ export interface GeneratedMissionRecord {
 export interface GenerationPersistencePort {
   record(record: GeneratedMissionRecord): Promise<void>;
   findForOwner(ownerId: string, missionId: string): Promise<GeneratedMissionRecord | null>;
+  /** The owner's missions, newest first. Never another principal's. */
+  listForOwner(ownerId: string): Promise<GeneratedMissionRecord[]>;
 }

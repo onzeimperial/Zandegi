@@ -103,3 +103,37 @@ export function StatusRail({
     </div>
   );
 }
+
+/**
+ * The rail for a page showing the guest's own data.
+ *
+ * `StatusRail` above is a design fixture: a 13-day streak, 340 Shards, level 14,
+ * a crew and a league. Beside a fixture board that reads as illustration;
+ * beside the person's real mission it reads as a claim about them, and every
+ * number in it would be one they never earned (CLAUDE.md laws 1 and 3).
+ *
+ * So this shows only what is true today: a new character at level 1 with no
+ * XP, and why. Streaks, Shards, crews and leagues appear here once they exist,
+ * not before. There is deliberately no streak counter at zero either: law 8
+ * rules out loss-framing a streak, and there is no streak yet to frame.
+ */
+export function GuestStatusRail() {
+  return (
+    <div className="status-rail">
+      <div className="stat-strip">
+        <b className="d stat-level">
+          <Icon name="bolt" tone="bolt" />
+          <span>Lv 1</span>
+        </b>
+      </div>
+
+      <section className="card compact-card">
+        <h2 className="d">Your character</h2>
+        <p className="rail-note">
+          0 XP so far. XP arrives when you complete a step and it is verified, never for generating
+          a plan.
+        </p>
+      </section>
+    </div>
+  );
+}

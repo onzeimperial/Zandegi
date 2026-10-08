@@ -60,7 +60,14 @@ describe("mission review", () => {
     expect(html).not.toContain("Measurable progress");
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain("Start chapter 1");
-    expect(html).toContain("will not carry over");
+  });
+  it("says the mission is saved and starts the mission that was just generated", () => {
+    const html = renderToStaticMarkup(<MissionReview result={result("OUTCOME")} />);
+    // The mission is persisted now; the old "will not carry over" note became false.
+    expect(html).toContain("Saved to your path");
+    expect(html).not.toContain("will not carry over");
+    // Start opens this mission, not whichever happens to be newest.
+    expect(html).toContain('href="/path?mission=mission-1"');
   });
   it("allows measurable progress framing for metric goals", () => {
     expect(renderToStaticMarkup(<MissionReview result={result("METRIC")} />)).toContain(
