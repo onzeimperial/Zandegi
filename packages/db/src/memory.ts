@@ -12,8 +12,11 @@
  */
 
 import {
+  completionKey,
   guestKey,
+  ledgerKey,
   missionKey,
+  MAX_LEDGER_ENTRIES,
   newestFirst,
   ownerIndexKey,
   parseOwnerIndex,
@@ -124,6 +127,35 @@ export function createInMemoryDemoStore<TMission = unknown, TSafetyClass extends
 
     async saveGuest(tokenHash, guest) {
       write(guestKey(tokenHash), guest);
+    },
+
+    async claimCompletion(ownerId, completionId) {
+      const key = completionKey(ownerId, completionId);
+      // Check-and-set with no await between them, so it cannot interleave with
+      // another claim: JavaScript runs this to completion. That is the twin's
+      // equivalent of Redis's atomic SET NX.
+      if (read(key) !== null) return false;
+      write(key, true);
+      return true;
+    },
+
+    async releaseCompletion(ownerId, completionId) {
+      entries.delete(completionKey(ownerId, completionId));
+    },
+
+    async appendLedger(ownerId, entry) {
+      const key = ledgerKey(ownerId);
+      const existing = read(key);
+      const ledger = Array.isArray(existing) ? existing : [];
+      // A new array rather than a push, so an earlier reader's copy is never
+      // changed underneath it: entries are appended, never edited.
+      write(key, [...ledger, entry]);
+    },
+
+    async readLedger(ownerId) {
+      const found = read(ledgerKey(ownerId));
+      if (!Array.isArray(found)) return [];
+      return structuredClone(found.slice(0, MAX_LEDGER_ENTRIES)) as unknown[];
     },
 
     async renewGuest(tokenHash) {

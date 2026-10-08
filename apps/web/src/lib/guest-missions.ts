@@ -15,18 +15,21 @@
 import { headers } from "next/headers";
 import {
   demoPortsFromEnv,
+  foldProgress,
   guestCookiePolicyFromEnv,
   listMissions,
   randomIdGenerator,
   randomTokenSource,
+  readProgress,
   resolveGuest,
   sha256TokenHasher,
   systemClock,
 } from "@zandegi/api";
-import type { StoredMissionView } from "@zandegi/api/client";
+import type { ProgressView, StoredMissionView } from "@zandegi/api/client";
 
 export type GuestMissions =
-  { status: "ready"; missions: StoredMissionView[] } | { status: "unavailable" };
+  | { status: "ready"; missions: StoredMissionView[]; progress: ProgressView }
+  | { status: "unavailable" };
 
 export async function loadGuestMissions(): Promise<GuestMissions> {
   try {
@@ -42,13 +45,14 @@ export async function loadGuestMissions(): Promise<GuestMissions> {
         guests: ports.guests,
       },
     );
-    if (guest === null) return { status: "ready", missions: [] };
+    // No guest means a brand-new character: level 1, no XP, nothing done.
+    if (guest === null) return { status: "ready", missions: [], progress: foldProgress([]) };
 
-    const missions = await listMissions(
-      { principal: guest.principal },
-      { persistence: ports.persistence },
-    );
-    return { status: "ready", missions };
+    const [missions, progress] = await Promise.all([
+      listMissions({ principal: guest.principal }, { persistence: ports.persistence }),
+      readProgress({ principal: guest.principal }, { ledger: ports.ledger }),
+    ]);
+    return { status: "ready", missions, progress };
   } catch (error) {
     // The detail stays in the server log. A page only ever learns that the
     // store could not answer, never why.
@@ -97,4 +101,44 @@ export function estimateLabel(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return rest === 0 ? `About ${hours} h` : `About ${hours} h ${rest} min`;
+}
+
+/** Where a step stands for this guest. */
+export type StepState = "done" | "current" | "upcoming";
+
+/**
+ * Each step's state in one mission. Steps complete in order, so the first one
+ * not yet done is current and everything after it is upcoming.
+ */
+export function stepStates(
+  mission: StoredMissionView,
+  progress: ProgressView,
+): { state: (chapterIndex: number, stepIndex: number) => StepState; finished: boolean } {
+  const done = new Set(
+    progress.completions
+      .filter((completion) => completion.missionId === mission.missionId)
+      .map((completion) => `${completion.chapterIndex}:${completion.stepIndex}`),
+  );
+  // Positions, not the `index` fields: completions are recorded by position
+  // and the step links are built by position, so all three must agree.
+  let current: string | null = null;
+  const chapters = mission.mission.chapters;
+  for (let chapterIndex = 0; chapterIndex < chapters.length && current === null; chapterIndex++) {
+    const steps = chapters[chapterIndex]!.steps;
+    for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+      const key = `${chapterIndex}:${stepIndex}`;
+      if (!done.has(key)) {
+        current = key;
+        break;
+      }
+    }
+  }
+  return {
+    state: (chapterIndex, stepIndex) => {
+      const key = `${chapterIndex}:${stepIndex}`;
+      if (done.has(key)) return "done";
+      return key === current ? "current" : "upcoming";
+    },
+    finished: current === null,
+  };
 }

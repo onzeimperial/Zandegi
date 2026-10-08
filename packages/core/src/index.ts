@@ -12,5 +12,6 @@ export * from "./goal-types";
 export * from "./verification";
 export * from "./safety";
 export * from "./scoring/xp";
+export * from "./scoring/award";
 export * from "./scoring/levels";
 export * from "./scoring/rarity";

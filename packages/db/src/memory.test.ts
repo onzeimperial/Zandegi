@@ -155,3 +155,51 @@ describe("listing a guest's missions", () => {
     expect((again!.mission as { title: string }).title).toBe("Conversational Farsi");
   });
 });
+
+describe("completion claims and the ledger", () => {
+  it("lets exactly one caller claim a completion", async () => {
+    const store = createInMemoryDemoStore();
+    const results = await Promise.all([
+      store.claimCompletion("guest-1", "m-1:0:0"),
+      store.claimCompletion("guest-1", "m-1:0:0"),
+      store.claimCompletion("guest-1", "m-1:0:0"),
+    ]);
+    // A double-tap or a retry must never pay a step twice.
+    expect(results.filter(Boolean)).toHaveLength(1);
+  });
+
+  it("scopes a claim to its owner", async () => {
+    const store = createInMemoryDemoStore();
+    await expect(store.claimCompletion("guest-1", "m-1:0:0")).resolves.toBe(true);
+    await expect(store.claimCompletion("guest-2", "m-1:0:0")).resolves.toBe(true);
+  });
+
+  it("frees a released claim so a failed completion can be retried", async () => {
+    const store = createInMemoryDemoStore();
+    await store.claimCompletion("guest-1", "m-1:0:0");
+    await store.releaseCompletion("guest-1", "m-1:0:0");
+    await expect(store.claimCompletion("guest-1", "m-1:0:0")).resolves.toBe(true);
+  });
+
+  it("keeps the ledger in append order, separately for each guest", async () => {
+    const store = createInMemoryDemoStore();
+    await store.appendLedger("guest-1", { n: 1 });
+    await store.appendLedger("guest-2", { n: 99 });
+    await store.appendLedger("guest-1", { n: 2 });
+
+    await expect(store.readLedger("guest-1")).resolves.toEqual([{ n: 1 }, { n: 2 }]);
+    await expect(store.readLedger("guest-2")).resolves.toEqual([{ n: 99 }]);
+    await expect(store.readLedger("guest-3")).resolves.toEqual([]);
+  });
+
+  it("never edits an entry: an earlier read is unaffected by later appends", async () => {
+    const store = createInMemoryDemoStore();
+    await store.appendLedger("guest-1", { n: 1 });
+    const before = await store.readLedger("guest-1");
+    await store.appendLedger("guest-1", { n: 2 });
+    (before[0] as { n: number }).n = 42;
+
+    expect(before).toHaveLength(1);
+    await expect(store.readLedger("guest-1")).resolves.toEqual([{ n: 1 }, { n: 2 }]);
+  });
+});

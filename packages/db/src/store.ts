@@ -62,6 +62,24 @@ export interface DemoStore<TMission = unknown, TSafetyClass extends string = str
   saveGuest(tokenHash: string, guest: StoredGuest): Promise<void>;
   /** Renews the retention window. A no-op when the hash is unknown. */
   renewGuest(tokenHash: string): Promise<void>;
+
+  /**
+   * Claim a completion atomically. `true` only for the first caller: a
+   * double-tap, a retried request or two tabs all race to one winner, so a
+   * step can never be paid twice. This is a single atomic set-if-absent, never
+   * a read followed by a write.
+   */
+  claimCompletion(ownerId: string, completionId: string): Promise<boolean>;
+  /** Undo a claim whose ledger write then failed, so the person can retry. */
+  releaseCompletion(ownerId: string, completionId: string): Promise<void>;
+  /**
+   * Append one entry to the owner's ledger (law 4). Entries are only ever
+   * appended -- never edited, never removed -- and progress is derived by
+   * folding them. The store holds them opaquely; `@zandegi/api` owns the shape.
+   */
+  appendLedger(ownerId: string, entry: unknown): Promise<void>;
+  /** The owner's ledger in append order, at most `MAX_LEDGER_ENTRIES`. */
+  readLedger(ownerId: string): Promise<unknown[]>;
 }
 
 /**
@@ -100,6 +118,19 @@ export function guestKey(tokenHash: string): string {
 export function ownerIndexKey(ownerId: string): string {
   return `${DEMO_KEY_PREFIX}:missions:${ownerId}`;
 }
+
+/** One guest's append-only ledger. */
+export function ledgerKey(ownerId: string): string {
+  return `${DEMO_KEY_PREFIX}:ledger:${ownerId}`;
+}
+
+/** The atomic marker that a completion has been claimed. */
+export function completionKey(ownerId: string, completionId: string): string {
+  return `${DEMO_KEY_PREFIX}:done:${ownerId}:${completionId}`;
+}
+
+/** Bounds a ledger read. Far above anything a demo guest can reach. */
+export const MAX_LEDGER_ENTRIES = 5000;
 
 /** Bounds both the index and a listing, so one guest cannot grow either forever. */
 export const MAX_LISTED_MISSIONS = 20;

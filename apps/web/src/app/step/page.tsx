@@ -1,7 +1,13 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { Icon } from "@/components/icons";
-import { VERIFICATION_LABEL, estimateLabel, loadGuestMissions } from "@/lib/guest-missions";
+import { CompleteStepPanel } from "@/components/complete-step-panel";
+import {
+  VERIFICATION_LABEL,
+  estimateLabel,
+  loadGuestMissions,
+  stepStates,
+} from "@/lib/guest-missions";
 
 export const metadata: Metadata = { title: "Step" };
 // Every render depends on the guest's own cookie, so nothing here is cacheable.
@@ -69,6 +75,31 @@ export default async function StepPage({ searchParams }: { searchParams: Promise
 
   const backHref = `/path?mission=${encodeURIComponent(mission.missionId)}`;
   const { guide } = step;
+  const state = stepStates(mission, loaded.progress).state(chapterIndex!, stepIndex!);
+  const completion = loaded.progress.completions.find(
+    (entry) =>
+      entry.missionId === mission.missionId &&
+      entry.chapterIndex === chapterIndex &&
+      entry.stepIndex === stepIndex,
+  );
+
+  // The step after this one in order, whatever its state: once this one is
+  // confirmed, it is the one that opens next.
+  const chapters = mission.mission.chapters;
+  const following =
+    stepIndex! + 1 < chapter.steps.length
+      ? { chapter: chapterIndex!, step: stepIndex! + 1 }
+      : chapterIndex! + 1 < chapters.length && chapters[chapterIndex! + 1]!.steps.length > 0
+        ? { chapter: chapterIndex! + 1, step: 0 }
+        : null;
+  const nextHref =
+    following === null
+      ? null
+      : `/step?${new URLSearchParams({
+          mission: mission.missionId,
+          chapter: String(following.chapter),
+          step: String(following.step),
+        }).toString()}`;
 
   return (
     <main className="step-page">
@@ -177,10 +208,19 @@ export default async function StepPage({ searchParams }: { searchParams: Promise
               </section>
             )}
 
-            <Link href={backHref} className="d cta">
-              <Icon name="back" />
-              <span>Back to your path</span>
-            </Link>
+            <CompleteStepPanel
+              missionId={mission.missionId}
+              chapterIndex={chapterIndex!}
+              stepIndex={stepIndex!}
+              state={state}
+              completedWith={
+                completion === undefined
+                  ? undefined
+                  : { evidence: completion.evidence, xp: completion.xp }
+              }
+              nextHref={nextHref}
+              pathHref={backHref}
+            />
           </div>
         </div>
       </div>

@@ -17,8 +17,11 @@
  */
 
 import {
+  completionKey,
   guestKey,
+  ledgerKey,
   missionKey,
+  MAX_LEDGER_ENTRIES,
   newestFirst,
   ownerIndexKey,
   parseOwnerIndex,
@@ -37,8 +40,17 @@ import {
  */
 export interface RedisLike {
   get(key: string): Promise<unknown>;
-  set(key: string, value: string, options: { ex: number }): Promise<unknown>;
+  /**
+   * With `nx`, Redis writes only when the key is absent and answers `null`
+   * otherwise. That single atomic command is what makes a completion claim
+   * race-free; a get followed by a set would not be.
+   */
+  set(key: string, value: string, options: { ex: number; nx?: true }): Promise<unknown>;
   expire(key: string, seconds: number): Promise<unknown>;
+  del(key: string): Promise<unknown>;
+  /** Atomic append, so two completions at once cannot lose one another. */
+  rpush(key: string, value: string): Promise<unknown>;
+  lrange(key: string, start: number, stop: number): Promise<unknown[]>;
 }
 
 export interface RedisStoreOptions {
@@ -167,6 +179,36 @@ export function createRedisDemoStore<TMission = unknown, TSafetyClass extends st
       await guard("saveGuest", () =>
         client.set(guestKey(tokenHash), JSON.stringify(guest), { ex: retentionSeconds }),
       );
+    },
+
+    async claimCompletion(ownerId, completionId) {
+      const result = await guard("claimCompletion", () =>
+        client.set(completionKey(ownerId, completionId), "1", { ex: retentionSeconds, nx: true }),
+      );
+      // "OK" means this call wrote the key, so it is the first. `null` means
+      // the key already existed: somebody else already completed this step.
+      return result === "OK";
+    },
+
+    async releaseCompletion(ownerId, completionId) {
+      await guard("releaseCompletion", () => client.del(completionKey(ownerId, completionId)));
+    },
+
+    async appendLedger(ownerId, entry) {
+      const key = ledgerKey(ownerId);
+      await guard("appendLedger", () => client.rpush(key, JSON.stringify(entry)));
+      // The ledger lives as long as the guest does. A failed renewal must not
+      // fail an append that already succeeded.
+      await guard("appendLedger", () => client.expire(key, retentionSeconds)).catch(
+        () => undefined,
+      );
+    },
+
+    async readLedger(ownerId) {
+      const raw = await guard("readLedger", () =>
+        client.lrange(ledgerKey(ownerId), 0, MAX_LEDGER_ENTRIES - 1),
+      );
+      return raw.map((value) => decode<unknown>(value)).filter((entry) => entry !== null);
     },
 
     async renewGuest(tokenHash) {

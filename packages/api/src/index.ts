@@ -40,6 +40,16 @@ export {
   type ListMissionsInput,
   type ListMissionsPorts,
 } from "./missions/list-missions";
+export {
+  completeStep,
+  readProgress,
+  type CompleteStepInput,
+  type CompleteStepPorts,
+  type CompletionEvidenceInput,
+} from "./progress/complete-step";
+export { fingerprintPhoto, sniffPhotoType } from "./progress/evidence";
+export { foldProgress, nextStep, completedStepKeys } from "./progress/fold";
+export type { LedgerEvent, ProgressLedgerPort } from "./progress/ledger";
 export * from "./identity";
 export {
   createDemoStore,

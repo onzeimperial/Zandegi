@@ -2,11 +2,11 @@ import { Fragment } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import type { Metadata } from "next";
-import type { StoredMissionView } from "@zandegi/api/client";
+import type { ProgressView, StoredMissionView } from "@zandegi/api/client";
 import { AppShell } from "@/components/app-shell";
 import { GuestStatusRail } from "@/components/status-rail";
 import { Icon } from "@/components/icons";
-import { estimateLabel, loadGuestMissions, selectMission } from "@/lib/guest-missions";
+import { estimateLabel, loadGuestMissions, selectMission, stepStates } from "@/lib/guest-missions";
 
 export const metadata: Metadata = { title: "Mission path" };
 // Every render depends on the guest's own cookie, so nothing here is cacheable.
@@ -41,7 +41,7 @@ export default async function PathPage({
 
   if (loaded.status === "unavailable") {
     return (
-      <AppShell current="Path" aside={<GuestStatusRail />}>
+      <AppShell current="Path">
         <section className="card path-empty" role="alert">
           <h1 className="d">Your missions can&#39;t be loaded right now</h1>
           <p>Nothing has been lost. Try again in a moment.</p>
@@ -53,10 +53,11 @@ export default async function PathPage({
     );
   }
 
+  const rail = <GuestStatusRail progress={loaded.progress} />;
   const selected = selectMission(loaded.missions, requested);
   if (selected === undefined) {
     return (
-      <AppShell current="Path" aside={<GuestStatusRail />}>
+      <AppShell current="Path" aside={rail}>
         <section className="card path-empty">
           <h1 className="d">No mission yet</h1>
           <p>Tell Zandegi what you want to achieve and it builds the path to get there.</p>
@@ -69,8 +70,8 @@ export default async function PathPage({
   }
 
   return (
-    <AppShell current="Path" aside={<GuestStatusRail />}>
-      <MissionPath missions={loaded.missions} selected={selected} />
+    <AppShell current="Path" aside={rail}>
+      <MissionPath missions={loaded.missions} selected={selected} progress={loaded.progress} />
     </AppShell>
   );
 }
@@ -128,15 +129,24 @@ function MissionSwitcher({
 function MissionPath({
   missions,
   selected,
+  progress,
 }: {
   missions: readonly StoredMissionView[];
   selected: StoredMissionView;
+  progress: ProgressView;
 }) {
   const { chapters } = selected.mission;
-  const firstChapter = chapters[0];
-  const nextStep = firstChapter?.steps[0];
-  // Nothing is completed yet -- completion arrives with the XP loop -- so the
-  // honest position is the start. Every later step is upcoming.
+  const states = stepStates(selected, progress);
+
+  // The chapter holding the current step is the one the hero describes; once
+  // everything is done there is no current step, so it describes completion.
+  const currentChapterIndex = chapters.findIndex((chapter, chapterIndex) =>
+    chapter.steps.some((_step, stepIndex) => states.state(chapterIndex, stepIndex) === "current"),
+  );
+  const heroChapter = currentChapterIndex >= 0 ? chapters[currentChapterIndex] : undefined;
+  const doneCount = progress.completions.filter(
+    (completion) => completion.missionId === selected.missionId,
+  ).length;
   let position = 0;
 
   return (
@@ -147,29 +157,31 @@ function MissionPath({
         <div className="hero-head">
           <div>
             <div className="eyebrow">Mission · {selected.mission.title}</div>
-            <h1 className="hero-title">Chapter 1 · {firstChapter?.title}</h1>
+            <h1 className="hero-title">
+              {states.finished || heroChapter === undefined
+                ? "Mission complete"
+                : `Chapter ${currentChapterIndex + 1} · ${heroChapter.title}`}
+            </h1>
           </div>
-          {nextStep !== undefined && (
-            <Link
-              href={stepHref(selected.missionId, 0, 0)}
-              className="hero-guide"
-              aria-label="Open the guide for your next step"
-            >
-              <Icon name="book" />
-            </Link>
-          )}
         </div>
-        {/* No percentage bar. Law 2: there is no measured quantity behind this
-            mission yet, so a bar would be an invented denominator. */}
+        {/* Counts, not a percentage bar. Law 2: there is no measured quantity
+            behind a generated mission, so a bar would be an invented
+            denominator. Steps done is a real count. */}
         <p className="hero-progress">
-          Chapter 1 of {chapters.length}
-          {firstChapter !== undefined && <> · Mini-goal: {firstChapter.exitCondition}</>}
+          {states.finished
+            ? `All ${chapters.length} chapters done`
+            : `Chapter ${currentChapterIndex + 1} of ${chapters.length} · ${doneCount} ${
+                doneCount === 1 ? "step" : "steps"
+              } done`}
+          {heroChapter !== undefined && !states.finished && (
+            <> · Mini-goal: {heroChapter.exitCondition}</>
+          )}
         </p>
       </section>
 
       <div className="path-map">
         {chapters.map((chapter, chapterIndex) => (
-          <Fragment key={chapter.index}>
+          <Fragment key={`${selected.missionId}-${chapterIndex}`}>
             {chapterIndex > 0 && (
               <div className="chapter-rule">
                 <i />
@@ -183,24 +195,22 @@ function MissionPath({
             {chapter.steps.map((step, stepIndex) => {
               const offset = offsetAt(position++);
               const href = stepHref(selected.missionId, chapterIndex, stepIndex);
+              const state = states.state(chapterIndex, stepIndex);
+              const key = `${chapterIndex}-${stepIndex}`;
 
-              if (chapterIndex === 0 && stepIndex === 0) {
+              if (state === "current") {
                 return (
                   <div
-                    key={step.index}
+                    key={key}
                     className="path-current"
                     style={{ transform: `translateX(${offset}px)` }}
                   >
                     <div className="next-label">
-                      <span className="when">START · {estimateLabel(step.estimatedMinutes)}</span>
+                      <span className="when">NEXT · {estimateLabel(step.estimatedMinutes)}</span>
                       <span className="what">{step.title}</span>
                     </div>
                     <div className="halo">
-                      <Link
-                        href={href}
-                        className="path-node"
-                        aria-label={`Start step 1, ${step.title}`}
-                      >
+                      <Link href={href} className="path-node" aria-label={`Start ${step.title}`}>
                         <Icon name="bolt" />
                       </Link>
                     </div>
@@ -208,13 +218,27 @@ function MissionPath({
                 );
               }
 
+              if (state === "done") {
+                return (
+                  <Link
+                    key={key}
+                    href={href}
+                    className="path-node done"
+                    style={{ transform: `translateX(${offset}px)` }}
+                    aria-label={`${step.title}, completed`}
+                  >
+                    <Icon name="check" strokeWidth={3.5} />
+                  </Link>
+                );
+              }
+
               return (
                 <Link
-                  key={step.index}
+                  key={key}
                   href={href}
                   className="path-node locked"
                   style={{ transform: `translateX(${offset}px)` }}
-                  aria-label={`Chapter ${chapterIndex + 1}, step ${stepIndex + 1}, ${step.title}. Upcoming, opens a preview of the guide.`}
+                  aria-label={`${step.title}. Upcoming, opens a preview of the guide.`}
                 >
                   <Icon name="lock" strokeWidth={2.5} />
                 </Link>
@@ -224,7 +248,13 @@ function MissionPath({
         ))}
 
         <div className="path-guide">
-          <p className="bubble">Your first step is ready.</p>
+          <p className="bubble">
+            {states.finished
+              ? "Mission complete. That was real work."
+              : doneCount === 0
+                ? "Your first step is ready."
+                : "Nice. Your next step is ready."}
+          </p>
           <Image
             className="mascot"
             src={mascotSrc}

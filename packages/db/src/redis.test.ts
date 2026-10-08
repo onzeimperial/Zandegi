@@ -13,13 +13,14 @@ const TOKEN = "AX9zASQgYTEyMzQ1Njc4OTBhYmNkZWY";
 const WINDOW = 1_234;
 
 interface Call {
-  op: "get" | "set" | "expire";
+  op: "get" | "set" | "expire" | "del" | "rpush" | "lrange";
   key: string;
   ex?: number;
 }
 
 function fakeRedis(options: { data?: Record<string, string>; fail?: boolean } = {}) {
   const data = new Map(Object.entries(options.data ?? {}));
+  const lists = new Map<string, string[]>();
   const calls: Call[] = [];
   const client: RedisLike = {
     async get(key) {
@@ -30,13 +31,33 @@ function fakeRedis(options: { data?: Record<string, string>; fail?: boolean } = 
     async set(key, value, opts) {
       calls.push({ op: "set", key, ex: opts.ex });
       if (options.fail) throw new Error(`fetch failed: POST ${URL}/set (Bearer ${TOKEN})`);
+      // Honour NX the way Redis does, or a claim test would prove nothing.
+      if (opts.nx === true && data.has(key)) return null;
       data.set(key, value);
       return "OK";
     },
     async expire(key, seconds) {
       calls.push({ op: "expire", key, ex: seconds });
       if (options.fail) throw new Error(`fetch failed: POST ${URL}/expire (Bearer ${TOKEN})`);
-      return data.has(key) ? 1 : 0;
+      return data.has(key) || lists.has(key) ? 1 : 0;
+    },
+    async del(key) {
+      calls.push({ op: "del", key });
+      if (options.fail) throw new Error(`fetch failed: POST ${URL}/del (Bearer ${TOKEN})`);
+      return data.delete(key) ? 1 : 0;
+    },
+    async rpush(key, value) {
+      calls.push({ op: "rpush", key });
+      if (options.fail) throw new Error(`fetch failed: POST ${URL}/rpush (Bearer ${TOKEN})`);
+      const list = lists.get(key) ?? [];
+      list.push(value);
+      lists.set(key, list);
+      return list.length;
+    },
+    async lrange(key, start, stop) {
+      calls.push({ op: "lrange", key });
+      if (options.fail) throw new Error(`fetch failed: POST ${URL}/lrange (Bearer ${TOKEN})`);
+      return (lists.get(key) ?? []).slice(start, stop + 1);
     },
   };
   return { client, calls, data };
@@ -145,6 +166,15 @@ describe("the Redis demo store", () => {
       async expire() {
         throw new Error(`fetch failed: POST ${URL}/expire`);
       },
+      async del() {
+        return 0;
+      },
+      async rpush() {
+        return 1;
+      },
+      async lrange() {
+        return [];
+      },
     };
 
     await expect(
@@ -196,6 +226,41 @@ describe("listing a guest's missions from Redis", () => {
   it("keeps credentials out of a listing failure", async () => {
     const error = await store(fakeRedis({ fail: true }))
       .listMissions("guest-1")
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(StoreUnavailableError);
+    expect(JSON.stringify(error) + String(error)).not.toContain(TOKEN);
+  });
+});
+
+describe("completion claims and the ledger in Redis", () => {
+  it("claims with one atomic SET NX, and only the first claim wins", async () => {
+    const fake = fakeRedis();
+    await expect(store(fake).claimCompletion("guest-1", "m-1:0:0")).resolves.toBe(true);
+    await expect(store(fake).claimCompletion("guest-1", "m-1:0:0")).resolves.toBe(false);
+
+    // A single command, never a read followed by a write that could race.
+    expect(fake.calls.map((call) => call.op)).toEqual(["set", "set"]);
+  });
+
+  it("appends with RPUSH rather than rewriting the ledger", async () => {
+    const fake = fakeRedis();
+    await store(fake).appendLedger("guest-1", { n: 1 });
+    await store(fake).appendLedger("guest-1", { n: 2 });
+
+    expect(fake.calls.map((call) => call.op)).not.toContain("set");
+    await expect(store(fake).readLedger("guest-1")).resolves.toEqual([{ n: 1 }, { n: 2 }]);
+  });
+
+  it("frees a released claim so a failed completion can be retried", async () => {
+    const fake = fakeRedis();
+    await store(fake).claimCompletion("guest-1", "m-1:0:0");
+    await store(fake).releaseCompletion("guest-1", "m-1:0:0");
+    await expect(store(fake).claimCompletion("guest-1", "m-1:0:0")).resolves.toBe(true);
+  });
+
+  it("keeps credentials out of a ledger failure", async () => {
+    const error = await store(fakeRedis({ fail: true }))
+      .appendLedger("guest-1", { n: 1 })
       .catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(StoreUnavailableError);
     expect(JSON.stringify(error) + String(error)).not.toContain(TOKEN);

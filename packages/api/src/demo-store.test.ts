@@ -122,6 +122,18 @@ describe("the port adapter", () => {
       listMissions: async () => {
         throw new StoreUnavailableError("listMissions", "[redacted]: connection refused");
       },
+      claimCompletion: async () => {
+        throw new StoreUnavailableError("claimCompletion", "[redacted]: connection refused");
+      },
+      releaseCompletion: async () => {
+        throw new StoreUnavailableError("releaseCompletion", "[redacted]: connection refused");
+      },
+      appendLedger: async () => {
+        throw new StoreUnavailableError("appendLedger", "[redacted]: connection refused");
+      },
+      readLedger: async () => {
+        throw new StoreUnavailableError("readLedger", "[redacted]: connection refused");
+      },
       findGuest: async () => {
         throw new Error("fetch failed for https://demo.upstash.io with token a-token");
       },

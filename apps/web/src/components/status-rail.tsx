@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { demoLeague } from "@/lib/demo-data";
+import type { ProgressView } from "@zandegi/api/client";
 import { Icon } from "./icons";
 
 const mascotSrc =
@@ -112,26 +113,50 @@ export function StatusRail({
  * beside the person's real mission it reads as a claim about them, and every
  * number in it would be one they never earned (CLAUDE.md laws 1 and 3).
  *
- * So this shows only what is true today: a new character at level 1 with no
- * XP, and why. Streaks, Shards, crews and leagues appear here once they exist,
- * not before. There is deliberately no streak counter at zero either: law 8
- * rules out loss-framing a streak, and there is no streak yet to frame.
+ * So this shows only what is true: the level, rank and XP folded from the
+ * guest's own ledger. The level bar is honest where a mission percentage would
+ * not be, because XP is a measured quantity the person actually earned.
+ * Streaks, Shards, crews and leagues appear once they exist, not before; there
+ * is deliberately no streak counter at zero, since law 8 rules out
+ * loss-framing a streak and there is no streak yet to frame.
  */
-export function GuestStatusRail() {
+export function GuestStatusRail({ progress }: { progress: ProgressView }) {
+  const percent =
+    progress.xpForThisLevel > 0
+      ? Math.min(100, Math.round((progress.xpIntoLevel / progress.xpForThisLevel) * 100))
+      : 0;
+
   return (
     <div className="status-rail">
       <div className="stat-strip">
         <b className="d stat-level">
           <Icon name="bolt" tone="bolt" />
-          <span>Lv 1</span>
+          <span>Lv {progress.level}</span>
         </b>
       </div>
 
       <section className="card compact-card">
-        <h2 className="d">Your character</h2>
+        <div className="row-between">
+          <h2 className="d">Your character</h2>
+          <span className="card-note">{progress.rank}</span>
+        </div>
+        <p className="rail-xp">
+          <b>{progress.totalXp} XP</b>
+        </p>
+        <div
+          className="level-bar"
+          role="progressbar"
+          aria-label={`Progress to level ${progress.level + 1}`}
+          aria-valuemin={0}
+          aria-valuemax={progress.xpForThisLevel}
+          aria-valuenow={progress.xpIntoLevel}
+        >
+          <i style={{ width: `${percent}%` }} />
+        </div>
         <p className="rail-note">
-          0 XP so far. XP arrives when you complete a step and it is verified, never for generating
-          a plan.
+          {progress.totalXp === 0
+            ? "XP arrives when you complete a step, never for generating a plan."
+            : `${progress.xpForThisLevel - progress.xpIntoLevel} XP to level ${progress.level + 1}.`}
         </p>
       </section>
     </div>

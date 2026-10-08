@@ -15,6 +15,7 @@
  * config validation story 5.4 owns — it reads what it needs and fails closed
  * with a safe, stable code.
  */
+import type { ProgressLedgerPort } from "./progress/ledger";
 
 import {
   DEMO_RETENTION_DAYS,
@@ -48,6 +49,7 @@ export interface DemoStoreConfig {
 export interface DemoPorts {
   persistence: GenerationPersistencePort;
   guests: GuestPrincipalStorePort;
+  ledger: ProgressLedgerPort;
 }
 
 export type Env = Record<string, string | undefined>;
@@ -143,6 +145,13 @@ export function demoPortsFromStore(store: StoredDemoStore): DemoPorts {
           store.saveGuest(tokenHash, { id: principal.id, createdAt: principal.createdAt }),
         ),
       renew: (tokenHash) => guard("renew", () => store.renewGuest(tokenHash)),
+    },
+    ledger: {
+      claim: (ownerId, claimId) => guard("claim", () => store.claimCompletion(ownerId, claimId)),
+      release: (ownerId, claimId) =>
+        guard("release", () => store.releaseCompletion(ownerId, claimId)),
+      append: (ownerId, event) => guard("append", () => store.appendLedger(ownerId, event)),
+      read: (ownerId) => guard("read", () => store.readLedger(ownerId)),
     },
   };
 }

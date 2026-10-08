@@ -3493,3 +3493,86 @@ h3 {
   color: var(--muted);
   font-size: 13px;
 }
+
+/* ── Confirming a step ────────────────────────────────────────────────────── */
+/* Contrast checked: violet-deep 14.44:1, muted 4.92:1 and violet 5.18:1 on
+   --lavender-2; the error red 6.57:1 on white. All pass WCAG AA. */
+
+.confirm-panel {
+  border: 2px solid var(--line);
+  border-radius: 20px;
+  background: var(--lavender-2);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.confirm-panel.is-done {
+  border-color: var(--line-strong);
+}
+.confirm-title {
+  margin: 0;
+  font-weight: 800;
+  font-size: 17px;
+  color: var(--violet-deep);
+}
+.confirm-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.confirm-actions > * {
+  flex: 1 1 160px;
+  text-align: center;
+}
+.confirm-awards {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 800;
+  color: var(--violet);
+}
+.confirm-preview {
+  width: 100%;
+  max-height: 240px;
+  object-fit: cover;
+  border-radius: 14px;
+  border: 2px solid var(--line);
+}
+.confirm-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff;
+  color: #b42318;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* The character's XP and level, folded from the ledger. */
+.rail-xp {
+  margin: 0;
+  font-size: 22px;
+  color: var(--violet-deep);
+}
+.level-bar {
+  height: 10px;
+  border-radius: 99px;
+  background: var(--lavender-3);
+  overflow: hidden;
+}
+.level-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--violet);
+}

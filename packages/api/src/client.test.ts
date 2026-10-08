@@ -37,6 +37,10 @@ describe("generation client contract", () => {
       "CROSS_SITE_REQUEST",
       "MISSION_NOT_FOUND",
       "STORE_UNAVAILABLE",
+      // Appended for step completion. Codes are only ever appended: clients
+      // branch on them, so a rename or reorder above must fail this test.
+      "STEP_NOT_CURRENT",
+      "EVIDENCE_REJECTED",
     ]);
     for (const code of GENERATION_ERROR_CODES) {
       expect(GENERATION_ERROR_MESSAGES[code]).toBeTruthy();

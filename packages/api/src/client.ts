@@ -253,6 +253,8 @@ export const GENERATION_ERROR_CODES = [
   "CROSS_SITE_REQUEST",
   "MISSION_NOT_FOUND",
   "STORE_UNAVAILABLE",
+  "STEP_NOT_CURRENT",
+  "EVIDENCE_REJECTED",
 ] as const;
 
 export type GenerationErrorCode = (typeof GENERATION_ERROR_CODES)[number];
@@ -268,6 +270,8 @@ export const GENERATION_ERROR_MESSAGES: Record<GenerationErrorCode, string> = {
   CROSS_SITE_REQUEST: "This request did not come from Zandegi.",
   MISSION_NOT_FOUND: "That mission is not available.",
   STORE_UNAVAILABLE: "Your missions are temporarily unavailable. Try again.",
+  STEP_NOT_CURRENT: "Finish the earlier steps in this mission first.",
+  EVIDENCE_REJECTED: "That file isn't a photo we can accept. Try a JPEG, PNG, WebP or HEIC.",
 };
 
 export interface GenerationErrorBody {
@@ -281,4 +285,62 @@ export function generationErrorBody(
   requestId: string,
 ): { error: GenerationErrorBody } {
   return { error: { code, message: GENERATION_ERROR_MESSAGES[code], requestId } };
+}
+
+// ── Progress ───────────────────────────────────────────────
+
+/**
+ * The evidence offered for a completed step. A photo is checked to be a real
+ * image and fingerprinted, then discarded: the photo itself is never kept.
+ * It is checked to *be* an image, not to *show* the step.
+ */
+export const COMPLETION_EVIDENCE = ["SELF", "ARTIFACT"] as const;
+export type CompletionEvidence = (typeof COMPLETION_EVIDENCE)[number];
+
+/**
+ * The largest photo accepted, in bytes. Vercel rejects a function request body
+ * over 4.5 MB before application code runs, so the limit sits under that with
+ * room for the multipart framing. The browser downscales larger photos first.
+ */
+export const MAX_EVIDENCE_PHOTO_BYTES = 4 * 1024 * 1024;
+
+export interface StepCompletionView {
+  missionId: string;
+  chapterIndex: number;
+  stepIndex: number;
+  evidence: CompletionEvidence;
+  xp: number;
+  /** ISO-8601 UTC, from the server's clock. */
+  recordedAt: string;
+}
+
+/**
+ * Everything derived from the guest's ledger. Nothing here is stored as a
+ * running total: it is folded from append-only events every time (law 4).
+ */
+export interface ProgressView {
+  totalXp: number;
+  level: number;
+  rank: string;
+  /**
+   * Earned XP into the current level, and the size of the level. Both are
+   * measured, not estimated, so a level bar is honest in a way a mission
+   * percentage would not be.
+   */
+  xpIntoLevel: number;
+  xpForThisLevel: number;
+  completions: StepCompletionView[];
+  completedChapters: { missionId: string; chapterIndex: number }[];
+  completedMissions: string[];
+}
+
+export interface AwardView {
+  kind: "step" | "chapter" | "mission";
+  xp: number;
+}
+
+export interface CompleteStepResult {
+  /** Empty when the step was already complete: the request was a repeat. */
+  awards: AwardView[];
+  progress: ProgressView;
 }
