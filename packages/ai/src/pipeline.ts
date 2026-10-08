@@ -6,7 +6,7 @@ import { resolve } from "./stages/02-resolve";
 import { hydrate } from "./stages/03-hydrate";
 import { plan } from "./stages/04-plan";
 import { detailChapter } from "./stages/05-detail";
-import { validateMissionGrounding } from "./grounding";
+import { omitUngroundedClaims, validateMissionGrounding } from "./grounding";
 import { safetyPass } from "./stages/08-safety";
 import { complete, modelForStage } from "./router";
 import { parseStageJson, rewriteOutputSchema } from "./schemas";
@@ -233,14 +233,21 @@ export async function generateMissionDraft(
     await rewriteFlagged("ground", draftChapters, initial.ungroundedClaims, options.signal);
     modelsUsed.ground = modelForStage("ground");
     const revalidated = validateMissionGrounding(draftMission, options.asOf);
-    if (revalidated.ungroundedClaims.length > 0) {
-      throw new Error("grounding rewrite did not resolve every finding");
+    // A rewrite pass rarely clears every flagged sentence in a long mission, and
+    // treating one survivor as fatal discarded whole missions in real runs.
+    // Whatever is still flagged is omitted instead; see omitUngroundedClaims.
+    const dropped = omitUngroundedClaims(draftChapters, revalidated.ungroundedClaims);
+    const final = validateMissionGrounding(draftMission, options.asOf);
+    if (final.ungroundedClaims.length > 0) {
+      // Omission removes every flagged sentence, so this is unreachable unless
+      // the detector or the fallback wording changes. It stays fail-closed.
+      throw new Error("grounding omission did not resolve every finding");
     }
     return {
-      ...revalidated,
+      ...final,
       claimsChecked: initial.claimsChecked,
       rewritten: initial.ungroundedClaims.length,
-      dropped: 0,
+      dropped,
     };
   });
 
@@ -257,14 +264,18 @@ export async function generateMissionDraft(
       }
     }
 
+    // A safety rewrite can itself phrase something as a claim. It is omitted
+    // the same way rather than failing a mission that is otherwise complete.
     const postSafetyGrounding = validateMissionGrounding(draftMission, options.asOf);
-    if (postSafetyGrounding.ungroundedClaims.length > 0) {
+    const safetyDropped = omitUngroundedClaims(draftChapters, postSafetyGrounding.ungroundedClaims);
+    const settled = validateMissionGrounding(draftMission, options.asOf);
+    if (settled.ungroundedClaims.length > 0) {
       throw new Error("safety rewrite introduced an ungrounded finding");
     }
     finalGroundingResult = {
-      ...postSafetyGrounding,
+      ...settled,
       rewritten: groundingResult.rewritten,
-      dropped: groundingResult.dropped,
+      dropped: groundingResult.dropped + safetyDropped,
     };
     return {
       ...result,

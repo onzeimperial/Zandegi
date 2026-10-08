@@ -9,7 +9,14 @@
  */
 
 import { issueId, stepTextFields } from "./rewrite";
-import type { DraftStep, DraftMission, Source, GroundingReport } from "./types";
+import type {
+  DraftChapter,
+  DraftStep,
+  DraftMission,
+  GroundingFinding,
+  Source,
+  GroundingReport,
+} from "./types";
 
 // Sentence-level heuristics for "this asserts a hard fact". Deliberately
 // conservative toward false positives — a spuriously flagged sentence just
@@ -105,4 +112,84 @@ export function validateMissionGrounding(mission: DraftMission, now: Date): Grou
 /** True when nothing ungrounded remains — the session-1 exit bar. */
 export function isFullyGrounded(report: GroundingReport): boolean {
   return report.ungroundedClaims.length === 0;
+}
+
+/**
+ * Wording for a required field that would be left empty once its flagged
+ * sentences are removed. A test checks each against CLAIM_PATTERNS, so a
+ * fallback can never itself be an ungrounded claim.
+ */
+export const OMISSION_FALLBACK = {
+  title: "Practice session",
+  "guide.approach": "Work through this step at a pace that suits you.",
+  "guide.whatGoodLooksLike": "You finish the step and can describe what you did.",
+} as const;
+
+/** `text` with every claim-shaped sentence removed. */
+export function withoutClaims(text: string): string {
+  const flagged = new Set(detectFactualClaims(text));
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 0 && !flagged.has(sentence))
+    .join(" ");
+}
+
+/**
+ * The last resort once a rewrite pass has run: remove whatever is still flagged
+ * instead of discarding the whole mission.
+ *
+ * Epic 1 says unsupported facts "must be omitted, safely reframed, or fail
+ * closed", so omission is a sanctioned outcome, and CLAUDE.md law 6 still
+ * holds -- the unsourced claim never reaches the user. What it avoids is the
+ * measured failure where one surviving sentence threw away a complete mission
+ * and every model call already paid for.
+ *
+ * Mutates `chapters` in place and returns how many fields it changed.
+ */
+export function omitUngroundedClaims(
+  chapters: DraftChapter[],
+  findings: readonly GroundingFinding[],
+): number {
+  const touched = new Set<DraftStep>();
+
+  for (const finding of findings) {
+    const step = chapters[finding.chapterIndex]?.steps[finding.stepIndex];
+    if (!step) throw new Error("omission target is invalid");
+    touched.add(step);
+
+    switch (finding.field) {
+      case "title":
+        step.title = withoutClaims(step.title) || OMISSION_FALLBACK.title;
+        break;
+      case "guide.approach":
+        step.guide.approach =
+          withoutClaims(step.guide.approach) || OMISSION_FALLBACK["guide.approach"];
+        break;
+      case "guide.whatGoodLooksLike":
+        step.guide.whatGoodLooksLike =
+          withoutClaims(step.guide.whatGoodLooksLike) ||
+          OMISSION_FALLBACK["guide.whatGoodLooksLike"];
+        break;
+      case "guide.materials":
+      case "guide.commonMistakes": {
+        const list =
+          finding.field === "guide.materials" ? step.guide.materials : step.guide.commonMistakes;
+        const index = finding.itemIndex;
+        if (index === undefined || list[index] === undefined) {
+          throw new Error("omission target is invalid");
+        }
+        // Blank in place so later findings' item indices stay valid; the
+        // empties are removed once every finding has been applied.
+        list[index] = withoutClaims(list[index]!);
+        break;
+      }
+    }
+  }
+
+  for (const step of touched) {
+    step.guide.materials = step.guide.materials.filter((item) => item.length > 0);
+    step.guide.commonMistakes = step.guide.commonMistakes.filter((item) => item.length > 0);
+  }
+  return findings.length;
 }

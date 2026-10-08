@@ -41,7 +41,18 @@ session), ARTIFACT (photo/file proof), METRIC (a tracked number moved), INTEGRAT
 app confirms it — only if genuinely plausible, e.g. a run via Strava).
 
 Never invent a specific price, deadline, or eligibility rule you cannot source. Vague, general
-advice needs no source; a specific hard claim does.`;
+advice needs no source; a specific hard claim does.
+
+Write coaching as invitation, not obligation. An automated check treats the following as hard
+factual claims and removes them from any step without a dated source, so phrase advice to avoid
+them unless you are citing one:
+- obligation words: "you must", "you need to", "you have to", "required", "requires",
+  "minimum of", "mandatory", "eligible" — prefer "aim for", "try to", "it helps to", "consider"
+- calendar dates, months or years, including the user's own goal date — say "before your goal
+  date" or "in the weeks ahead" instead
+- percentages, prices, and statistics such as "on average", "studies show", "X out of Y"
+For example, write "Aim for three easy runs a week" rather than "You need a minimum of three runs
+a week", and "Build up gradually before your goal date" rather than "Be race-ready by April".`;
 
 export interface DetailChapterInput {
   chapterTitle: string;

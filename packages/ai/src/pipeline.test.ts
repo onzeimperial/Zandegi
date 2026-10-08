@@ -262,7 +262,7 @@ describe("generateMission", () => {
     expect(events.some((event) => event.chapter)).toBe(false);
   });
 
-  it("fails closed when a grounding rewrite remains ungrounded", async () => {
+  it("omits a claim the grounding rewrite could not fix, so it never ships", async () => {
     detailChapterMock.mockResolvedValueOnce({
       steps: [step({ approach: "This costs $500.", sources: [] }), step()],
     });
@@ -271,6 +271,7 @@ describe("generateMission", () => {
         rewrites: [
           {
             issueId: "ground:0:0:guide.approach:scalar",
+            // The rewrite model kept a price -- the failure seen on a real run.
             rewrittenText: "This still costs $400.",
           },
         ],
@@ -279,10 +280,20 @@ describe("generateMission", () => {
       usage: { inputTokens: 0, outputTokens: 0 },
     });
     const events: { chapter?: unknown }[] = [];
-    await expect(
-      generateMissionDraft({ rawText: "run" }, (event) => events.push(event)),
-    ).rejects.toThrow("grounding rewrite did not resolve");
-    expect(events.some((event) => event.chapter)).toBe(false);
+
+    // This used to discard the whole mission. Neither price may ship, but the
+    // rest of the mission now survives.
+    const result = await generateMissionDraft({ rawText: "run" }, (event) => events.push(event));
+
+    const shipped = JSON.stringify(result.draft?.mission);
+    expect(shipped).not.toContain("$500");
+    expect(shipped).not.toContain("$400");
+    expect(result.draft?.mission.chapters[0]?.steps[0]?.guide.approach).toBe(
+      "Work through this step at a pace that suits you.",
+    );
+    expect(result.draft?.grounding).toMatchObject({ rewritten: 1, dropped: 1 });
+    expect(result.draft?.grounding.ungroundedClaims).toEqual([]);
+    expect(events.some((event) => event.chapter)).toBe(true);
   });
 
   it("rewrites the exact unsafe field and fails closed if it remains unsafe", async () => {
@@ -310,7 +321,7 @@ describe("generateMission", () => {
     expect(events.some((event) => event.chapter)).toBe(false);
   });
 
-  it("fails closed when a successful safety rewrite introduces an ungrounded claim", async () => {
+  it("omits an ungrounded claim a safety rewrite introduces, so it never ships", async () => {
     resolveMock.mockResolvedValue({ ...baseResolved, safetyClass: "CLINICAL" });
     detailChapterMock.mockResolvedValueOnce({
       steps: [step({ approach: "Eat 1200 kcal each day." }), step()],
@@ -328,11 +339,16 @@ describe("generateMission", () => {
       model: "test-model",
       usage: { inputTokens: 0, outputTokens: 0 },
     });
-    const events: { chapter?: unknown }[] = [];
-    await expect(
-      generateMissionDraft({ rawText: "run" }, (event) => events.push(event)),
-    ).rejects.toThrow("safety rewrite introduced an ungrounded finding");
-    expect(events.some((event) => event.chapter)).toBe(false);
+    // Previously this discarded the whole mission. The invariant that matters is
+    // narrower and still holds: the unsourced price never reaches the user.
+    const result = await generateMissionDraft({ rawText: "run" });
+
+    expect(JSON.stringify(result.draft?.mission)).not.toContain("$500");
+    expect(result.draft?.mission.chapters[0]?.steps[0]?.guide.approach).toBe(
+      "Work through this step at a pace that suits you.",
+    );
+    expect(result.draft?.grounding.dropped).toBeGreaterThan(0);
+    expect(result.draft?.grounding.ungroundedClaims).toEqual([]);
   });
 
   it("preserves initial safety redactions after a successful rewrite", async () => {

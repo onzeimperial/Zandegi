@@ -5,6 +5,9 @@ import {
   validateStepGrounding,
   validateMissionGrounding,
   isFullyGrounded,
+  omitUngroundedClaims,
+  withoutClaims,
+  OMISSION_FALLBACK,
 } from "./grounding";
 import type { DraftStep, DraftMission, Source } from "./types";
 
@@ -195,5 +198,78 @@ describe("validateMissionGrounding", () => {
       "ground:0:0:guide.approach:scalar",
       "ground:0:0:guide.materials:0",
     ]);
+  });
+});
+
+describe("omitting what a rewrite could not fix", () => {
+  function mission(steps: DraftStep[]): DraftMission {
+    return {
+      title: "Half marathon",
+      goalType: "METRIC",
+      primaryDomain: "Body",
+      chapters: [{ index: 0, title: "Base", exitCondition: "Run 5km", steps }],
+    };
+  }
+
+  it("never uses fallback wording that would itself be flagged as a claim", () => {
+    // If a fallback ever matched a claim pattern, omission would loop or ship a claim.
+    for (const text of Object.values(OMISSION_FALLBACK)) {
+      expect(detectFactualClaims(text), text).toEqual([]);
+    }
+  });
+
+  it("removes only the flagged sentences and keeps the rest of the advice", () => {
+    expect(withoutClaims("Start easy. The entry fee is $85. Build up slowly.")).toBe(
+      "Start easy. Build up slowly.",
+    );
+  });
+
+  it("leaves nothing unsourced in the mission, and keeps every unflagged sentence", () => {
+    const m = mission([
+      step({
+        guide: {
+          approach: "Run three times a week. Registration closes in February 2027.",
+          materials: ["Running shoes", "A race entry costing $85"],
+          commonMistakes: ["On average, beginners overtrain."],
+          whatGoodLooksLike: "You finish feeling fresh.",
+        },
+      }),
+    ]);
+
+    const report = validateMissionGrounding(m, NOW);
+    expect(report.ungroundedClaims.length).toBeGreaterThan(0);
+
+    omitUngroundedClaims(m.chapters, report.ungroundedClaims);
+
+    expect(validateMissionGrounding(m, NOW).ungroundedClaims).toEqual([]);
+    const serialized = JSON.stringify(m);
+    for (const unsourced of ["February 2027", "$85", "On average"]) {
+      expect(serialized, unsourced).not.toContain(unsourced);
+    }
+    const guide = m.chapters[0]!.steps[0]!.guide;
+    expect(guide.approach).toBe("Run three times a week.");
+    // A list item left empty is dropped rather than shipped as a blank bullet.
+    expect(guide.materials).toEqual(["Running shoes"]);
+    expect(guide.commonMistakes).toEqual([]);
+    expect(guide.whatGoodLooksLike).toBe("You finish feeling fresh.");
+  });
+
+  it("falls back to neutral wording when a required field would be left empty", () => {
+    const m = mission([step({ guide: { ...step().guide, approach: "The fee is $40." } })]);
+    omitUngroundedClaims(m.chapters, validateMissionGrounding(m, NOW).ungroundedClaims);
+    expect(m.chapters[0]!.steps[0]!.guide.approach).toBe(OMISSION_FALLBACK["guide.approach"]);
+  });
+
+  it("removes list items in place without disturbing the indices of later findings", () => {
+    const m = mission([
+      step({
+        guide: {
+          ...step().guide,
+          materials: ["A $20 belt", "Water", "A $15 cap", "Watch"],
+        },
+      }),
+    ]);
+    omitUngroundedClaims(m.chapters, validateMissionGrounding(m, NOW).ungroundedClaims);
+    expect(m.chapters[0]!.steps[0]!.guide.materials).toEqual(["Water", "Watch"]);
   });
 });
