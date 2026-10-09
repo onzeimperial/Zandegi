@@ -53,17 +53,19 @@ export const runtime = "nodejs";
  * GENERATION_TIMEOUT frame (AD-8: the application deadline is shorter than the
  * host deadline).
  */
-export const maxDuration = 90;
+export const maxDuration = 150;
 
 const MAX_BODY_BYTES = 16 * 1024;
 /**
- * Measured on real generations: one chapter of detail takes 18-22s even at low
- * effort, and roughly 6s pass before the first chapter starts. A 7-chapter
- * mission at four chapters in parallel therefore needs two waves, around 50s.
- * NFR1's p95 target of 25s is not achievable with rich chapter detail on the
- * current model, so the demo runs at 60s -- a known, recorded deviation.
+ * Measured on real generations: plan and the first stages take about 6s, one
+ * chapter of detail 18-22s at low effort, and a 6-7 chapter mission needs two
+ * waves of four, then a grounding rewrite pass. Real missions landed at 56s,
+ * 64s and 68s -- straddling a 60s deadline, so some failed after being paid
+ * for. 120s sits clear of every observed run. NFR1's p95 target of 25s is not
+ * achievable with rich chapter detail on the current model; this is a
+ * recorded, deliberate deviation for the demo.
  */
-const GENERATION_TIMEOUT_MS = 60_000;
+const GENERATION_TIMEOUT_MS = 120_000;
 
 class RequestFailure extends Error {
   constructor(
