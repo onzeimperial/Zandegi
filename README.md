@@ -79,28 +79,64 @@ A healthy log is empty or missing. Repeated rejections of one field mean a stage
 even when retries are keeping missions alive. Hosted deployments log the same entries to the
 platform under the `[generate]` prefix.
 
-## Deploying the demo
+## Deploying the two-person test
 
-The demo deploys to Vercel. `vercel.json` pins the Sydney region. Set these on the
-project before the first deploy — two of them fail closed, so the app looks broken
-rather than misconfigured if they are missing:
+The test runs on Vercel, Neon and Clerk. `vercel.json` pins Sydney, and its build
+command applies migrations before building, never inside a request. Nothing below is
+needed to run `pnpm verify`, which uses no network and no credentials.
 
-| Variable                            | Why it matters                                                                                                                                                                                               |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ANTHROPIC_API_KEY`                 | Generation cannot run without it.                                                                                                                                                                            |
-| `ENABLE_UNAUTHENTICATED_GENERATION` | Must be exactly `true`. The generate endpoint is deliberately off in production otherwise, because it spends money for anonymous callers and is not rate limited yet. Without it, every request returns 503. |
-| `UPSTASH_REDIS_REST_URL`            | The deployed store. Without both Upstash values the app falls back to an in-process store, and a serverless deployment runs many processes, so missions would vanish between requests.                       |
-| `UPSTASH_REDIS_REST_TOKEN`          | As above.                                                                                                                                                                                                    |
+1. **Create the database.** In Neon, create a project in AWS Sydney (`ap-southeast-2`).
+   Copy both connection strings: the pooled one and the direct one. Success: both start
+   with `postgresql://`.
+2. **Create the sign-in.** In Clerk, create an application with email sign-in and keep email
+   verification on. Copy the publishable and secret keys. Success: the keys start with
+   `pk_` and `sk_`.
+3. **Set these on the Vercel project**, for Production, before the first deploy:
+
+   | Variable                            | Value                                                                   |
+   | ----------------------------------- | ----------------------------------------------------------------------- |
+   | `ANTHROPIC_API_KEY`                 | Generation cannot run without it.                                       |
+   | `DATABASE_URL`                      | The pooled Neon string. Without it every request answers 503.           |
+   | `DATABASE_URL_UNPOOLED`             | The direct Neon string, used only by migrations.                        |
+   | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | From Clerk. Needed at build time as well as at run time.                |
+   | `CLERK_SECRET_KEY`                  | From Clerk.                                                             |
+   | `ZANDEGI_ALLOWED_EMAILS`            | The two invited emails, comma-separated. Empty means the app stays off. |
+   | `ZANDEGI_DAILY_GENERATION_LIMIT`    | Optional. Builds per person per UTC day. Defaults to 5.                 |
+
+   `ENABLE_UNAUTHENTICATED_GENERATION` no longer does anything. Remove it if it is set.
+
+4. **Deploy,** then check each of these yourself, because the test suite cannot reach them:
+   - Sign in with an invited email. Success: you land on your path.
+   - Sign in with an email that is not invited. Success: the invite-only screen, and nothing else.
+   - Build a mission with details filled in, then open it on a second device. Success: the same
+     mission and XP.
+   - Redeploy, then read it again. Success: nothing has changed.
+
+To apply migrations to a database by hand:
+
+```powershell
+# from repo root, with DATABASE_URL_UNPOOLED set in this terminal
+pnpm --filter @zandegi/db db:deploy
+```
+
+Success looks like `All migrations have been successfully applied`.
 
 `ZANDEGI_ALLOWED_ORIGINS` is normally not needed on Vercel: the app derives its own
 origin from `X-Forwarded-Host`, which the platform sets. Off the platform those headers
 are ignored, since a caller could forge them.
 
-After the first deploy, confirm two things the test suite cannot: that a generation
-really reaches the model, and that a mission is still readable after the server restarts.
+### How the app decides what to run on
+
+| Clerk keys | Environment    | Allowlist | Result                                                        |
+| ---------- | -------------- | --------- | ------------------------------------------------------------- |
+| Present    | Any            | Has names | Sign-in required; only invited, verified emails get in.       |
+| Absent     | Not production | Any       | Guest mode: a browser cookie, no sign-in. For local work.     |
+| Absent     | Production     | Any       | Off: `/` says so and every API answers `GENERATION_DISABLED`. |
+| Present    | Production     | Empty     | Off, as above.                                                |
+
+Screens with fixture data (crew, shop, profile, builder, customise, complete) are out of the nav.
+With Clerk on, they redirect to the path. They stay reachable in guest mode for design work.
 
 ## Status
 
-Monorepo scaffold complete. Next: BUILD-PROMPTS **session 1** — prove the mission
-generator produces genuinely good missions across 60 goals. Needs `ANTHROPIC_API_KEY`
-in `.env`.
+In a two-person test. See the newest entry in `docs/BUILD-LOG.md` for what shipped and what is next.

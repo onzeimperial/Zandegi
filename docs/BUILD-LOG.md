@@ -4,6 +4,85 @@ Newest first.
 
 ---
 
+## 2026-11-04 - two-person test: detailed goals, Postgres, Clerk sign-in
+
+**Shipped**
+
+- **Details that shape the plan.** Optional starting point, reason, target date, what they can put
+  toward it, what to plan around, weekly hours and location. They reach every stage that writes or
+  classifies a plan, and stage 1 now knows today's date. Stated hours, date and location override the
+  model by plain assignment in `withStatedContext`.
+- **Details are data.** They go into prompts inside `<person_details>` as JSON with `<` escaped, so
+  a person's text cannot close the block. They are redacted with the goal text from every diagnostic
+  and kept only on the deletable mission record, as `goalContext`.
+- **A durable store.** `packages/db/src/postgres.ts` on Prisma 7, as a sibling behind `DemoStore`.
+  `LedgerEntry` rejects UPDATE and DELETE by trigger. One contract suite runs against memory and
+  against PGlite over the wire protocol with the real `@prisma/adapter-pg`, needing no network.
+- **Real identity.** Clerk at the web adapter, with the allow decision and the principal in
+  `packages/api/src/identity/account.ts`. A match needs a verified email. One Clerk user is one
+  principal on every device.
+- **A daily cap.** `ZANDEGI_DAILY_GENERATION_LIMIT` (default 5) per person per UTC day, checked before
+  any model call, answered with `DAILY_LIMIT_REACHED` and nothing to buy.
+- **Failing closed.** Production with no Clerk keys or no allowlist serves nothing, whatever
+  `ENABLE_UNAUTHENTICATED_GENERATION` says. Production refuses the memory store, and will not infer
+  expiring Redis.
+- **Honest screens.** The fake login is gone from `/`. The nav holds only Path and New mission, and
+  with Clerk on the fixture boards redirect to the path. `/` and the generate flow now work at 375px;
+  they were fixed-width desktop layouts that clipped on a phone.
+
+**Learned**
+
+- **The worrying-detail row failed on its first real run, and only a real run could show it.** Every
+  mocked test passed. The fast model broke character and answered in prose, so stage 1 died on invalid
+  JSON and a person in distress saw "we couldn't finish that mission". Structured output fixed that,
+  then exposed a second bug: a `z.partialRecord` reaches the wire as an object with no properties, the
+  model answered `domains: {}`, and the weight check threw. The wire now names every domain, and a
+  blocked goal skips the weight check.
+- The classifier now runs before the clarify refusal. Free text in a detail must reach support even if
+  the goal also looks impossible.
+- The contract suite earned its keep immediately: a raw `RETURNING` timestamp came back shifted by the
+  machine's UTC offset. Principal creation now uses `createMany` with `skipDuplicates`, then reads.
+- `beforeEach(() => mock.mockClear())` returns the mock, and Vitest calls a returned function as
+  cleanup. Use braces.
+
+**Verified**
+
+- Three real generations with details, read by eye. Bench press: prehab for the stated shoulder click,
+  safety arms for no spotter, sessions fitted to rotating shifts. Reading: Kindle after 8pm, around two
+  small kids. Farsi: offline lessons for the no-signal train, the cousin's Sunday calls.
+- Three real worrying-detail wordings, each only in a detail field: `support` refusal, no plan or
+  detail call.
+- A production build against file-backed PGlite: generate, complete a step, restart the server and the
+  database, read the mission and XP back. With the database stopped: `STORE_UNAVAILABLE` 503, and the
+  log holds `P1001` with no URL or password.
+- `next start` in production with no keys: `/` says closed, pages redirect, all three APIs answer
+  `GENERATION_DISABLED`. With placeholder Clerk keys, the real middleware and SDK: pages redirect and
+  all three APIs answer `SIGN_IN_REQUIRED`.
+- Real Chrome: no document overflow at 375px on `/`, `/generate` and `/path`, inline errors with focus
+  moved to the first one, and tab order through every field.
+
+**Not verified, because it needs the owner's accounts**
+
+- **Clerk sign-in end to end**: the embedded form, a real session, `currentUser()`, sign-out, two real
+  devices. The allowed, not-invited and two-device paths are tested with Clerk's session mocked.
+- **Neon**: everything ran on PGlite, which is real Postgres but one process. `prisma migrate deploy`
+  and the pooled and direct connections have not run against Neon, and true parallel transactions
+  have not been exercised.
+- **A Vercel deploy.**
+
+**Deferred**
+
+See `_bmad-output/implementation-artifacts/deferred-work.md`: the rest of the intake brainstorm, real
+help on the support screen, the verbatim goal in the classifier, whether a failed run returns its
+slot, and caching the Clerk lookup. Claim then append stays non-atomic until Story 2.2.
+
+**Next step**
+
+Follow "Deploying the two-person test" in `README.md`, then run its four checks with real Clerk and
+Neon accounts.
+
+---
+
 ## 2026-11-04 - generation failures: real enums, one retry, and a record that survives
 
 **Shipped**

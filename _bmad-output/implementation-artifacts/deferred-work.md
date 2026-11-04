@@ -32,3 +32,27 @@
   summary: Strengthen the terminal-frame guard in `apps/web/src/app/generate/sse.ts` to validate step shape, not just that `steps` is an array.
   evidence: `mission-review.tsx` dereferences `step.guide.approach`, `step.estimatedMinutes` and `step.verification`, so a malformed frame passes `isProgress`/the terminal guard and throws during render. Not a regression — the previous `isMissionGeneratedEvent` was weaker — and frames originate from our own server, so this is hardening rather than a live defect.
 
+
+- source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-two-person-mvp-test.md`
+  summary: Intake fields from the 2026-10-10 brainstorm that this test left out: finish-line type with current and target numbers, deadline kind (hard, soft or none), shape of the time (one long block or short daily sessions, time of day), benchmarks and how they were measured, past attempts, parts of the goal, an explicit budget, how predictable life is, and strengths.
+  evidence: The spec allows five free-text and date fields plus hours and location. `_bmad-output/brainstorming/brainstorm-ambition-intake-fields-2026-10-10/.memlog.md` holds the rest. Structured baseline and goal numbers belong to Story 7.3, and its rule keeping them out of prompts still stands.
+
+- source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-two-person-mvp-test.md`
+  summary: Give the support refusal real help. A person routed to support sees "This needs a person, not a mission." and a button to change their ambition, with no crisis line or next step.
+  evidence: Details make this path easier to reach, since free text now goes to the classifier. The copy predates this work, and what to show, in which country, is a product and clinical decision rather than a code change.
+
+- source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-two-person-mvp-test.md`
+  summary: Hand the classifier the person's own goal text, not only the model's summary of it. Details reach stage 2 verbatim; `rawText` still reaches it only as stage 1's `intent`.
+  evidence: The spec's verbatim rule names details, and "ambition only generates as today". Worrying wording in the goal itself depends on stage 1 restating it faithfully.
+
+- source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-two-person-mvp-test.md`
+  summary: Decide whether a failed generation should give its daily slot back. Today it does not, because its model calls were still paid for, so five failures in a row lock a person out until the next UTC day.
+  evidence: Acceptable for two people and a default of 5. `ZANDEGI_DAILY_GENERATION_LIMIT` can be raised without a deploy of code. Revisit before a wider test.
+
+- source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-two-person-mvp-test.md`
+  summary: Cache the Clerk user lookup. Every API request and page load calls `currentUser()`, one Backend API round trip, to read verified emails.
+  evidence: Harmless for two people. A session claim holding the verified addresses would avoid it, at the cost of Clerk dashboard configuration that cannot be tested here.
+
+- source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-two-person-mvp-test.md`
+  summary: `.env.example` still names the legacy AI, rate-limit and knowledge variables that nothing current reads. The SQLite and NextAuth blocks are gone, which closes that part of the Story 1.2 config item; fail-fast validation stays with it.
+  evidence: Only variables this spec touched were changed.
