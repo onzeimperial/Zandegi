@@ -1,3 +1,4 @@
+import type { MissionGoalContext } from "./ports";
 import { StoreUnavailableError, createInMemoryDemoStore } from "@zandegi/db";
 import { describe, expect, it } from "vitest";
 import type { GenerationSafetyClass, MissionDraft } from "./client";
@@ -163,7 +164,7 @@ describe("the port adapter", () => {
 
 describe("generate then read, against the twin", () => {
   it("stores the mission against the minted principal and reads it back", async () => {
-    const store = createInMemoryDemoStore<MissionDraft, GenerationSafetyClass>({
+    const store = createInMemoryDemoStore<MissionDraft, GenerationSafetyClass, MissionGoalContext>({
       retentionSeconds: THIRTY_DAYS,
     });
     const ports = demoPortsFromStore(store);

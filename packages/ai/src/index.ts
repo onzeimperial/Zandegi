@@ -34,3 +34,4 @@ export { plan } from "./stages/04-plan";
 export { detailChapter, type DetailChapterInput } from "./stages/05-detail";
 export { safetyPass, type SafetyPassResult } from "./stages/08-safety";
 export { generateMissionDraft, type GenerateMissionDraftOptions } from "./pipeline";
+export { localDate } from "./person-context";

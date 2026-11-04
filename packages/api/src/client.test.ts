@@ -41,6 +41,9 @@ describe("generation client contract", () => {
       // branch on them, so a rename or reorder above must fail this test.
       "STEP_NOT_CURRENT",
       "EVIDENCE_REJECTED",
+      "SIGN_IN_REQUIRED",
+      "ACCOUNT_NOT_ALLOWED",
+      "DAILY_LIMIT_REACHED",
     ]);
     for (const code of GENERATION_ERROR_CODES) {
       expect(GENERATION_ERROR_MESSAGES[code]).toBeTruthy();

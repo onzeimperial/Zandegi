@@ -37,7 +37,7 @@ describe("generation orchestration", () => {
         ),
       );
     await expect(
-      runGeneration("goal", new AbortController().signal, progress, fetcher),
+      runGeneration({ rawText: "goal" }, new AbortController().signal, progress, fetcher),
     ).resolves.toEqual(refusal);
     expect(progress).toHaveBeenCalledWith({
       stage: "hydrate",
@@ -57,7 +57,7 @@ describe("generation orchestration", () => {
       .fn<GenerationFetch>()
       .mockResolvedValue(response({ type: "result", result, requestId: "r-result" }));
     await expect(
-      runGeneration("goal", new AbortController().signal, vi.fn(), fetcher),
+      runGeneration({ rawText: "goal" }, new AbortController().signal, vi.fn(), fetcher),
     ).resolves.toEqual(result);
   });
   it("surfaces SSE and HTTP errors for the page error state", async () => {
@@ -68,14 +68,27 @@ describe("generation orchestration", () => {
       }),
     );
     await expect(
-      runGeneration("goal", new AbortController().signal, vi.fn(), streamError),
+      runGeneration({ rawText: "goal" }, new AbortController().signal, vi.fn(), streamError),
     ).rejects.toThrow("Try again");
     const httpError = vi
       .fn<GenerationFetch>()
       .mockResolvedValue(Response.json({ error: { message: "Unavailable" } }, { status: 503 }));
     await expect(
-      runGeneration("goal", new AbortController().signal, vi.fn(), httpError),
+      runGeneration({ rawText: "goal" }, new AbortController().signal, vi.fn(), httpError),
     ).rejects.toThrow("Unavailable");
+  });
+  it("keeps the stable code from an HTTP refusal, so the screen can answer it", async () => {
+    const limited = vi
+      .fn<GenerationFetch>()
+      .mockResolvedValue(
+        Response.json(
+          { error: { code: "DAILY_LIMIT_REACHED", message: "Tomorrow", requestId: "r3" } },
+          { status: 429 },
+        ),
+      );
+    await expect(
+      runGeneration({ rawText: "goal" }, new AbortController().signal, vi.fn(), limited),
+    ).rejects.toMatchObject({ code: "DAILY_LIMIT_REACHED", requestId: "r3" });
   });
   it("passes abort through to active work", async () => {
     const controller = new AbortController();
@@ -87,7 +100,7 @@ describe("generation orchestration", () => {
           { once: true },
         ),
       );
-    const pending = runGeneration("goal", controller.signal, vi.fn(), fetcher);
+    const pending = runGeneration({ rawText: "goal" }, controller.signal, vi.fn(), fetcher);
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });

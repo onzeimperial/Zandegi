@@ -1,3 +1,4 @@
+import type { MissionGoalContext } from "../ports";
 import { createInMemoryDemoStore } from "@zandegi/db";
 import { describe, expect, it } from "vitest";
 import type { GenerationSafetyClass, MissionDraft, MissionStep } from "../client";
@@ -38,7 +39,7 @@ const MISSION: MissionDraft = {
 };
 
 async function setup(mission: MissionDraft = MISSION) {
-  const store = createInMemoryDemoStore<MissionDraft, GenerationSafetyClass>();
+  const store = createInMemoryDemoStore<MissionDraft, GenerationSafetyClass, MissionGoalContext>();
   const demo = demoPortsFromStore(store);
   await demo.persistence.record({
     missionId: "m-1",

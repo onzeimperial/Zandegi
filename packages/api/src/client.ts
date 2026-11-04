@@ -22,6 +22,32 @@ import type { GoalType } from "@zandegi/core/contracts";
 
 // ── Request ────────────────────────────────────────────────
 
+/**
+ * What a person chose to tell us about their goal, in their own words. Every
+ * field is optional. This text is personal content: it never reaches the
+ * ledger, a log or an incident record.
+ */
+export interface GenerateMissionDetails {
+  /** Where they are starting from. */
+  startingPoint?: string;
+  /** Why this matters to them. */
+  why?: string;
+  /** The date they are aiming for, as YYYY-MM-DD. Today or later. */
+  targetDate?: string;
+  /** What they can put toward it: kit, money, people, places. */
+  resources?: string;
+  /** What the plan has to work around. */
+  planAround?: string;
+}
+
+export const GENERATE_MISSION_DETAIL_FIELDS = [
+  "startingPoint",
+  "why",
+  "targetDate",
+  "resources",
+  "planAround",
+] as const;
+
 /** The only fields a client may send. The adapter rejects any other key. */
 export interface GenerateMissionRequest {
   /** The user's words, preserved verbatim. */
@@ -30,6 +56,7 @@ export interface GenerateMissionRequest {
   timezone?: string;
   location?: string;
   weeklyTimeBudgetMinutes?: number;
+  details?: GenerateMissionDetails;
 }
 
 export const GENERATE_MISSION_REQUEST_FIELDS = [
@@ -37,11 +64,14 @@ export const GENERATE_MISSION_REQUEST_FIELDS = [
   "timezone",
   "location",
   "weeklyTimeBudgetMinutes",
+  "details",
 ] as const;
 
 export const GENERATE_MISSION_LIMITS = {
   maxGoalLength: 2_000,
   maxLocationLength: 200,
+  /** Each free-text detail field. */
+  maxDetailLength: 500,
   maxTimezoneLength: 100,
   minWeeklyTimeBudgetMinutes: 1,
   /** Minutes in a week. */
@@ -255,6 +285,9 @@ export const GENERATION_ERROR_CODES = [
   "STORE_UNAVAILABLE",
   "STEP_NOT_CURRENT",
   "EVIDENCE_REJECTED",
+  "SIGN_IN_REQUIRED",
+  "ACCOUNT_NOT_ALLOWED",
+  "DAILY_LIMIT_REACHED",
 ] as const;
 
 export type GenerationErrorCode = (typeof GENERATION_ERROR_CODES)[number];
@@ -272,6 +305,10 @@ export const GENERATION_ERROR_MESSAGES: Record<GenerationErrorCode, string> = {
   STORE_UNAVAILABLE: "Your missions are temporarily unavailable. Try again.",
   STEP_NOT_CURRENT: "Finish the earlier steps in this mission first.",
   EVIDENCE_REJECTED: "That file isn't a photo we can accept. Try a JPEG, PNG, WebP or HEIC.",
+  SIGN_IN_REQUIRED: "Sign in to continue.",
+  ACCOUNT_NOT_ALLOWED: "Zandegi is invite-only for now, and this account isn't on the list.",
+  DAILY_LIMIT_REACHED:
+    "You've built today's missions. Your existing missions are ready, and you can build more tomorrow.",
 };
 
 export interface GenerationErrorBody {

@@ -16,6 +16,8 @@ export interface GeneratorState {
   error: string | null;
   /** The server's request id, so a person can quote the failure they saw. */
   errorReference: string | null;
+  /** The stable code, when the server sent one. */
+  errorCode: string | null;
 }
 export const initialGeneratorState: GeneratorState = {
   status: "idle",
@@ -25,6 +27,7 @@ export const initialGeneratorState: GeneratorState = {
   result: null,
   error: null,
   errorReference: null,
+  errorCode: null,
 };
 export function canSubmitGeneration(rawText: string, status: GeneratorStatus) {
   return rawText.trim().length > 0 && status !== "generating";
@@ -45,7 +48,7 @@ export type GeneratorAction =
   | { type: "start" }
   | { type: "progress"; event: GenerationProgress }
   | { type: "result"; result: GenerationResult }
-  | { type: "error"; message: string; reference?: string }
+  | { type: "error"; message: string; reference?: string; code?: string }
   | { type: "reset" };
 
 export function generatorReducer(state: GeneratorState, action: GeneratorAction): GeneratorState {
@@ -57,6 +60,7 @@ export function generatorReducer(state: GeneratorState, action: GeneratorAction)
       status: "error",
       error: action.message,
       errorReference: action.reference ?? null,
+      errorCode: action.code ?? null,
     };
   if (action.type === "result")
     return {

@@ -5,6 +5,8 @@ vi.mock("../router", () => ({ complete: (...args: unknown[]) => complete(...args
 
 const { interpret } = await import("./01-interpret");
 
+const NOW = new Date("2026-11-04T01:00:00Z");
+
 function mockText(obj: unknown) {
   complete.mockResolvedValueOnce({
     text: JSON.stringify(obj),
@@ -22,7 +24,7 @@ describe("interpret", () => {
       timeBudgetMinutesPerWeek: 240,
       notes: {},
     });
-    const result = await interpret({ rawText: "run a half marathon in april" });
+    const result = await interpret({ rawText: "run a half marathon in april" }, NOW);
     expect(result.goalType).toBe("METRIC");
     expect(result.pursuitMatches).toEqual([]);
   });
@@ -42,7 +44,7 @@ describe("interpret", () => {
       model: "test",
       usage: { inputTokens: 0, outputTokens: 0 },
     });
-    const result = await interpret({ rawText: "meditate daily" });
+    const result = await interpret({ rawText: "meditate daily" }, NOW);
     expect(result.goalType).toBe("HABIT");
   });
 
@@ -54,12 +56,12 @@ describe("interpret", () => {
       model: "test",
       usage: { inputTokens: 0, outputTokens: 0 },
     });
-    await expect(interpret({ rawText: "x" })).rejects.toThrow(/\[interpret\]/);
+    await expect(interpret({ rawText: "x" }, NOW)).rejects.toThrow(/\[interpret\]/);
   });
 
   it("throws on schema violation (missing required field)", async () => {
     mockText({ intent: "x" });
-    await expect(interpret({ rawText: "x" })).rejects.toThrow(/\[interpret\]/);
+    await expect(interpret({ rawText: "x" }, NOW)).rejects.toThrow(/\[interpret\]/);
   });
 
   it("flags impossible scope when the model says so", async () => {
@@ -70,7 +72,33 @@ describe("interpret", () => {
       timeBudgetMinutesPerWeek: 180,
       notes: { isImpossibleScope: true },
     });
-    const result = await interpret({ rawText: "become a billionaire by march" });
+    const result = await interpret({ rawText: "become a billionaire by march" }, NOW);
     expect(result.notes.isImpossibleScope).toBe(true);
+  });
+
+  it("gives the stage today's date where the person is", async () => {
+    mockText({
+      intent: "x",
+      goalType: "HABIT",
+      constraints: {},
+      timeBudgetMinutesPerWeek: 60,
+      notes: {},
+    });
+    await interpret({ rawText: "x", timezone: "Pacific/Pago_Pago" }, NOW);
+    const { user } = complete.mock.calls.at(-1)![0] as { user: string };
+    expect(JSON.parse(user)).toMatchObject({ today: "2026-11-03" });
+  });
+
+  it("sends no details block for a goal on its own", async () => {
+    mockText({
+      intent: "x",
+      goalType: "HABIT",
+      constraints: {},
+      timeBudgetMinutesPerWeek: 60,
+      notes: {},
+    });
+    await interpret({ rawText: "x" }, NOW);
+    const { user } = complete.mock.calls.at(-1)![0] as { user: string };
+    expect(user).not.toContain("person_details");
   });
 });

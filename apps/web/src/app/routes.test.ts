@@ -49,6 +49,11 @@ describe("designed route contract", () => {
       }
     }
   });
+  it("promises nothing the product does not do on the generate screen", () => {
+    const source = readFileSync(join(appDirectory, "generate", "page.tsx"), "utf8");
+    expect(source).not.toContain("time blocks");
+    expect(source).not.toContain("/builder");
+  });
   it("keeps the responsive canvas, focus, and reduced-motion contracts", () => {
     const globalCss = readFileSync(join(appDirectory, "globals.css"), "utf8");
     expect(globalCss).toMatch(/prefers-reduced-motion:\s*reduce/);

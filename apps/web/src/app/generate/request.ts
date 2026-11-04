@@ -1,8 +1,13 @@
-export function generationRequestInit(rawText: string, signal: AbortSignal): RequestInit {
+import type { GenerateMissionRequest } from "@zandegi/api/client";
+
+export function generationRequestInit(
+  request: GenerateMissionRequest,
+  signal: AbortSignal,
+): RequestInit {
   return {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ rawText }),
+    body: JSON.stringify(request),
     signal,
   };
 }

@@ -2,7 +2,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useReducer, useRef, useState } from "react";
-import { GENERATION_STAGES, type GenerationStage } from "@zandegi/api/client";
+import {
+  GENERATE_MISSION_LIMITS,
+  GENERATION_STAGES,
+  type GenerationStage,
+} from "@zandegi/api/client";
 import { FlowHeader } from "@/components/flow-header";
 import { Icon } from "@/components/icons";
 import { MissionReview } from "@/components/mission-review";
@@ -12,6 +16,18 @@ import {
   initialGeneratorState,
   visibleStageState,
 } from "./generator-state";
+import {
+  FIELD_ORDER,
+  MAX_HOURS_PER_WEEK,
+  browserTimezone,
+  browserToday,
+  emptyDetailsForm,
+  toGenerationRequest,
+  validateDetailsForm,
+  type DetailsFormErrors,
+  type DetailsFormField,
+  type DetailsFormValues,
+} from "./details-form";
 import { runGeneration } from "./generation-flow";
 import { GenerationStreamError } from "./sse";
 
@@ -46,8 +62,47 @@ const suggestions = [
   "Start a business",
 ] as const;
 
+/* Each question asks what a person can bring, never what they lack. */
+const TEXT_FIELDS: ReadonlyArray<{
+  field: "startingPoint" | "why" | "resources" | "planAround";
+  label: string;
+  placeholder: string;
+}> = [
+  {
+    field: "startingPoint",
+    label: "Where are you starting from?",
+    placeholder: "e.g. I bench 60 kg for five reps",
+  },
+  {
+    field: "why",
+    label: "Why does this matter to you?",
+    placeholder: "e.g. I want to feel strong again",
+  },
+  {
+    field: "resources",
+    label: "What can you put toward it?",
+    placeholder: "e.g. a gym membership and a friend who lifts",
+  },
+  {
+    field: "planAround",
+    label: "What should the plan work around?",
+    placeholder: "e.g. night shifts and school pick-ups",
+  },
+];
+
+function FieldError({ id, message }: { id: string; message: string | undefined }) {
+  return message === undefined ? null : (
+    <p className="field-error" id={id}>
+      {message}
+    </p>
+  );
+}
+
 export default function GeneratePage() {
   const [rawText, setRawText] = useState("");
+  const [details, setDetails] = useState<DetailsFormValues>(emptyDetailsForm);
+  const [errors, setErrors] = useState<DetailsFormErrors>({});
+  const [detailsOpen, setDetailsOpen] = useState(true);
   const [state, dispatch] = useReducer(generatorReducer, initialGeneratorState);
   const controller = useRef<AbortController | null>(null);
   const reviewRegion = useRef<HTMLDivElement | null>(null);
@@ -57,24 +112,60 @@ export default function GeneratePage() {
     if (state.status === "done") reviewRegion.current?.focus();
   }, [state.status]);
 
+  function setDetail(field: DetailsFormField, value: string) {
+    setDetails((current) => ({ ...current, [field]: value }));
+    setErrors((current) => {
+      if (current[field] === undefined) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
   async function startGeneration(ambition: string) {
     if (!canSubmitGeneration(ambition, state.status)) return;
+    const found = validateDetailsForm(details, browserToday());
+    setErrors(found);
+    const firstInvalid = FIELD_ORDER.find((field) => found[field] !== undefined);
+    if (firstInvalid !== undefined) {
+      // The section may be collapsed, and a closed field cannot take focus.
+      setDetailsOpen(true);
+      requestAnimationFrame(() => document.getElementById(`detail-${firstInvalid}`)?.focus());
+      return;
+    }
     setRawText(ambition);
     controller.current?.abort();
     controller.current = new AbortController();
     dispatch({ type: "start" });
     try {
-      const result = await runGeneration(ambition, controller.current.signal, (progress) =>
-        dispatch({ type: "progress", event: progress }),
+      const result = await runGeneration(
+        toGenerationRequest(ambition, details, browserTimezone()),
+        controller.current.signal,
+        (progress) => dispatch({ type: "progress", event: progress }),
       );
       dispatch({ type: "result", result });
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError")) {
+        if (
+          error instanceof GenerationStreamError &&
+          (error.code === "SIGN_IN_REQUIRED" || error.code === "ACCOUNT_NOT_ALLOWED")
+        ) {
+          // The session lapsed or was never allowed. The home page says which.
+          window.location.assign("/");
+          return;
+        }
         dispatch({
           type: "error",
-          message: error instanceof Error ? error.message : "Mission generation failed. Try again.",
-          ...(error instanceof GenerationStreamError && error.requestId !== undefined
-            ? { reference: error.requestId }
+          message: !navigator.onLine
+            ? "You look offline. Check your connection and try again."
+            : error instanceof Error
+              ? error.message
+              : "Mission generation failed. Try again.",
+          ...(error instanceof GenerationStreamError
+            ? {
+                code: error.code,
+                ...(error.requestId === undefined ? {} : { reference: error.requestId }),
+              }
             : {}),
         });
       }
@@ -159,14 +250,86 @@ export default function GeneratePage() {
               </div>
             </div>
 
+            <details
+              className="detail-block"
+              open={detailsOpen}
+              onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
+            >
+              <summary className="d">Tell us more, if you like</summary>
+              <p className="detail-note">
+                All optional. The more we know, the more this plan fits your life.
+              </p>
+              <div className="detail-fields">
+                {TEXT_FIELDS.map(({ field, label, placeholder }) => (
+                  <div className="ambition-field" key={field}>
+                    <label htmlFor={`detail-${field}`}>{label}</label>
+                    <textarea
+                      id={`detail-${field}`}
+                      rows={2}
+                      maxLength={GENERATE_MISSION_LIMITS.maxDetailLength}
+                      value={details[field]}
+                      onChange={(event) => setDetail(field, event.target.value)}
+                      placeholder={placeholder}
+                      aria-invalid={errors[field] !== undefined}
+                      aria-describedby={errors[field] ? `detail-${field}-error` : undefined}
+                    />
+                    <FieldError id={`detail-${field}-error`} message={errors[field]} />
+                  </div>
+                ))}
+                <div className="detail-row">
+                  <div className="ambition-field">
+                    <label htmlFor="detail-hoursPerWeek">Hours a week you can give this</label>
+                    <input
+                      id="detail-hoursPerWeek"
+                      type="number"
+                      inputMode="decimal"
+                      min={0.5}
+                      max={MAX_HOURS_PER_WEEK}
+                      step={0.5}
+                      value={details.hoursPerWeek}
+                      onChange={(event) => setDetail("hoursPerWeek", event.target.value)}
+                      placeholder="e.g. 3"
+                      aria-invalid={errors.hoursPerWeek !== undefined}
+                      aria-describedby={errors.hoursPerWeek ? "detail-hours-error" : undefined}
+                    />
+                    <FieldError id="detail-hours-error" message={errors.hoursPerWeek} />
+                  </div>
+                  <div className="ambition-field">
+                    <label htmlFor="detail-targetDate">A date you&#39;re aiming for</label>
+                    <input
+                      id="detail-targetDate"
+                      type="date"
+                      value={details.targetDate}
+                      onChange={(event) => setDetail("targetDate", event.target.value)}
+                      aria-invalid={errors.targetDate !== undefined}
+                      aria-describedby={errors.targetDate ? "detail-date-error" : undefined}
+                    />
+                    <FieldError id="detail-date-error" message={errors.targetDate} />
+                  </div>
+                </div>
+                <div className="ambition-field">
+                  <label htmlFor="detail-location">Where you&#39;re based</label>
+                  <input
+                    id="detail-location"
+                    type="text"
+                    autoComplete="address-level2"
+                    maxLength={GENERATE_MISSION_LIMITS.maxLocationLength}
+                    value={details.location}
+                    onChange={(event) => setDetail("location", event.target.value)}
+                    placeholder="e.g. Melbourne"
+                    aria-invalid={errors.location !== undefined}
+                    aria-describedby={errors.location ? "detail-location-error" : undefined}
+                  />
+                  <FieldError id="detail-location-error" message={errors.location} />
+                </div>
+              </div>
+            </details>
+
             <div className="ambition-actions">
-              <p>We&#39;ll break it into chapters, steps and time blocks in your week.</p>
+              <p>We&#39;ll break it into chapters and steps you can start today.</p>
               <button className="d flow-primary" type="submit" disabled={!rawText.trim()}>
                 Build my mission
               </button>
-              <Link className="flow-secondary" href="/builder">
-                I&#39;d rather plan it myself
-              </Link>
             </div>
           </form>
         </div>
@@ -182,7 +345,9 @@ export default function GeneratePage() {
       ? (state.detail ?? "Give me a sec. I’m planning your mission.")
       : state.status === "refusal"
         ? "Let’s find a safer next step."
-        : "The build hit a snag.";
+        : state.errorCode === "DAILY_LIMIT_REACHED"
+          ? "Good work today."
+          : "The build hit a snag.";
 
   return (
     <main className="flow-page">
@@ -254,12 +419,24 @@ export default function GeneratePage() {
 
             {state.status === "error" && (
               <div className="alert" role="alert">
-                <h2>We couldn&rsquo;t finish that mission.</h2>
-                <p>{state.error}</p>
-                {state.errorReference !== null && <p>Reference: {state.errorReference}</p>}
-                <button className="button button-secondary" type="button" onClick={retry}>
-                  Try again
-                </button>
+                {state.errorCode === "DAILY_LIMIT_REACHED" ? (
+                  <>
+                    <h2>That&rsquo;s today&rsquo;s missions built.</h2>
+                    <p>{state.error}</p>
+                    <Link className="button button-secondary" href="/path">
+                      Go to your path
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <h2>We couldn&rsquo;t finish that mission.</h2>
+                    <p>{state.error}</p>
+                    {state.errorReference !== null && <p>Reference: {state.errorReference}</p>}
+                    <button className="button button-secondary" type="button" onClick={retry}>
+                      Try again
+                    </button>
+                  </>
+                )}
               </div>
             )}
 

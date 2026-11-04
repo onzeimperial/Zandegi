@@ -3,6 +3,7 @@
  */
 
 import { complete } from "../router";
+import { localDate, personDetailsBlock, PERSON_DETAILS_RULE } from "../person-context";
 import { parseStageJson, interpretationOutputSchema } from "../schemas";
 import type { GoalInput, Interpretation } from "../types";
 
@@ -18,8 +19,9 @@ object, no prose, no markdown fence, matching exactly this shape:
   "location"?: string,
   "notes": {
     "isVague"?: boolean (true if there's no concrete target or timeframe at all),
-    "isImpossibleScope"?: boolean (true if literally impossible in the stated/implied timeframe —
-      e.g. "become a billionaire by March"),
+    "isImpossibleScope"?: boolean (true only if the goal itself is literally impossible in the
+      stated/implied timeframe — e.g. "become a billionaire by March". A tight date or few hours
+      is not impossible: leave this unset and let the plan make the most of what they have),
     "dependsOnVolatileFacts"?: boolean (true if it depends on facts that change over time —
       application windows, prices, eligibility rules, exam dates)
   }
@@ -30,21 +32,34 @@ Goal type guide (SPEC §1.3) — pick honestly, never force a metric onto someth
 - METRIC: a real measurable number ("bench 100kg", "save $30,000")
 - HABIT: a recurring behaviour ("meditate daily")
 - PROJECT: finite defined scope ("ship my app")
-- EXPERIENCE: a one-off ("see the northern lights")`;
+- EXPERIENCE: a one-off ("see the northern lights")
 
-export async function interpret(input: GoalInput, signal?: AbortSignal): Promise<Interpretation> {
-  const user = JSON.stringify({
-    rawText: input.rawText,
-    timezone: input.timezone,
-    location: input.location,
-    weeklyTimeBudgetMinutes: input.weeklyTimeBudgetMinutes,
-  });
+"today" in the input is today's date: resolve relative dates against it, and never output a deadline
+before it. If the person states their hours, date or location, use those values. If they describe
+their starting point or resources, reflect them in currentLevel and resources.
+
+${PERSON_DETAILS_RULE}`;
+
+export async function interpret(
+  input: GoalInput,
+  asOf: Date,
+  signal?: AbortSignal,
+): Promise<Interpretation> {
+  const user =
+    JSON.stringify({
+      today: localDate(asOf, input.timezone),
+      rawText: input.rawText,
+      timezone: input.timezone,
+      location: input.location,
+      weeklyTimeBudgetMinutes: input.weeklyTimeBudgetMinutes,
+    }) + personDetailsBlock(input.details);
   const res = await complete({
     stage: "interpret",
     system: SYSTEM,
     user,
     maxTokens: 1024,
     temperature: 0.2,
+    schema: interpretationOutputSchema,
     signal,
   });
   const parsed = parseStageJson("interpret", res.text, interpretationOutputSchema);

@@ -17,6 +17,16 @@ import type {
 
 // ── Stage 1: Interpret ─────────────────────────────────────
 
+/** What the person chose to add, in their own words. All optional. */
+export interface GoalDetails {
+  startingPoint?: string;
+  why?: string;
+  /** YYYY-MM-DD, already validated as today or later. */
+  targetDate?: string;
+  resources?: string;
+  planAround?: string;
+}
+
 export interface GoalInput {
   /** The user's words, preserved verbatim forever (SPEC §2.1). */
   rawText: string;
@@ -25,6 +35,7 @@ export interface GoalInput {
   location?: string;
   /** Minutes per week the user can realistically give this. */
   weeklyTimeBudgetMinutes?: number;
+  details?: GoalDetails;
 }
 
 export interface Interpretation {
@@ -45,6 +56,11 @@ export interface Interpretation {
     isImpossibleScope?: boolean;
     dependsOnVolatileFacts?: boolean;
   };
+  /**
+   * The person's own words, attached by the pipeline rather than the model so
+   * every later stage reads exactly what they wrote.
+   */
+  details?: GoalDetails;
 }
 
 // ── Stage 2: Resolve ───────────────────────────────────────

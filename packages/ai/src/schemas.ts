@@ -48,6 +48,23 @@ export const resolveClassificationSchema = z.object({
 });
 export type ResolveClassification = z.infer<typeof resolveClassificationSchema>;
 
+/**
+ * What the API is asked to produce. A partial record does not survive the trip
+ * to the wire: it arrives as an object with no properties and the model answers
+ * `{}`. So the wire names every domain, and the response is still validated by
+ * the stricter schema above.
+ */
+export const resolveClassificationWireSchema = z.object({
+  domains: z.object(
+    Object.fromEntries(DOMAINS.map((domain) => [domain, z.number().optional()])) as Record<
+      (typeof DOMAINS)[number],
+      z.ZodOptional<z.ZodNumber>
+    >,
+  ),
+  effortBand: effortBandEnum,
+  safetyClass: safetyClassEnum,
+});
+
 // ── Stage 4: Plan ──────────────────────────────────────────
 
 export const planOutputSchema = z.object({

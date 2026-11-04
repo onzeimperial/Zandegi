@@ -1,5 +1,6 @@
 import { createInMemoryDemoStore } from "@zandegi/db";
 import type { GenerationSafetyClass, MissionDraft } from "../client";
+import type { MissionGoalContext } from "../ports";
 import { describe, expect, it } from "vitest";
 import { demoPortsFromStore } from "../demo-store";
 import { fixedClock, sequentialIdGenerator } from "../ports";
@@ -12,13 +13,15 @@ const POLICY: GuestCookiePolicy = { retentionSeconds: 30 * 24 * 60 * 60, secure:
 
 interface Harness {
   ports: GuestIdentityPorts;
-  store: ReturnType<typeof createInMemoryDemoStore<MissionDraft, GenerationSafetyClass>>;
+  store: ReturnType<
+    typeof createInMemoryDemoStore<MissionDraft, GenerationSafetyClass, MissionGoalContext>
+  >;
   now: () => number;
 }
 
 function harness(options: { tokens?: readonly string[]; now?: () => number } = {}): Harness {
   const now = options.now ?? (() => NOW.getTime());
-  const store = createInMemoryDemoStore<MissionDraft, GenerationSafetyClass>({
+  const store = createInMemoryDemoStore<MissionDraft, GenerationSafetyClass, MissionGoalContext>({
     retentionSeconds: POLICY.retentionSeconds,
     now,
   });

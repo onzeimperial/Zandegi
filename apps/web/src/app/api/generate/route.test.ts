@@ -86,7 +86,7 @@ describe("POST /api/generate", () => {
     const malformed = await POST(request("{"));
     await expectPublicError(malformed, 400, "INVALID_JSON", "Send a valid JSON body.");
 
-    const oversized = await POST(request(JSON.stringify({ rawText: "x".repeat(17_000) })));
+    const oversized = await POST(request(JSON.stringify({ rawText: "x".repeat(33_000) })));
     await expectPublicError(oversized, 413, "PAYLOAD_TOO_LARGE", "The request body is too large.");
 
     const unknown = await POST(request(JSON.stringify({ rawText: "run", extra: true })));
@@ -101,6 +101,12 @@ describe("POST /api/generate", () => {
       { rawText: "x", weeklyTimeBudgetMinutes: Number.NaN },
       { rawText: "x", timezone: "not/a-zone" },
       { rawText: "x", location: "x".repeat(201) },
+      { rawText: "x", details: { unknown: "y" } },
+      { rawText: "x", details: "not an object" },
+      { rawText: "x", details: { why: "x".repeat(501) } },
+      { rawText: "x", details: { targetDate: "2020-01-01" } },
+      { rawText: "x", details: { targetDate: "next week" } },
+      { rawText: "x", details: { targetDate: "2099-02-31" } },
     ]) {
       const response = await POST(request(JSON.stringify(body)));
       await expectPublicError(response, 400, "INVALID_REQUEST", "The request fields are invalid.");
@@ -286,7 +292,7 @@ describe("POST /api/generate", () => {
     const cancel = vi.fn().mockRejectedValue(new Error("cancel failed"));
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
-        controller.enqueue(new Uint8Array(17_000));
+        controller.enqueue(new Uint8Array(33_000));
       },
       cancel,
     });

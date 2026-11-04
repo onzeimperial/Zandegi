@@ -90,13 +90,8 @@ export function MissionReview({ result }: { result: GenerationResult }) {
                 Planned by Zandegi AI. Times are planning estimates, not targets. You earn XP by
                 completing verified work, never by generating a plan.
               </p>
-              <p className="preview-note">
-                Saved to your path. Tweak opens a clearly labelled local example.
-              </p>
+              <p className="preview-note">Saved to your path.</p>
               <div className="row">
-                <Link href="/builder" className="d button-tweak">
-                  Tweak
-                </Link>
                 <Link
                   href={`/path?mission=${encodeURIComponent(result.missionId)}`}
                   className="d button-start"

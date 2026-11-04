@@ -6,6 +6,7 @@
  */
 
 import { complete } from "../router";
+import { personDetailsBlock, PERSON_DETAILS_RULE } from "../person-context";
 import { parseStageJson, detailChapterOutputSchema } from "../schemas";
 import type { Interpretation, ResolvedPursuit } from "../types";
 
@@ -52,7 +53,14 @@ them unless you are citing one:
   date" or "in the weeks ahead" instead
 - percentages, prices, and statistics such as "on average", "studies show", "X out of Y"
 For example, write "Aim for three easy runs a week" rather than "You need a minimum of three runs
-a week", and "Build up gradually before your goal date" rather than "Be race-ready by April".`;
+a week", and "Build up gradually before your goal date" rather than "Be race-ready by April".
+
+Write steps for this person, not for anyone with this goal. Pitch each step from their starting
+point, use what they can put toward this and name it where it helps, fit sittings to their weekly
+time, and work around what they say the plan must work around. If time is tight, say the plan is
+tight; the person is never judged, and nothing says the goal is out of reach.
+
+${PERSON_DETAILS_RULE}`;
 
 export interface DetailChapterInput {
   chapterTitle: string;
@@ -65,14 +73,18 @@ export async function detailChapter(input: DetailChapterInput, signal?: AbortSig
   const res = await complete({
     stage: "detail",
     system: SYSTEM,
-    user: JSON.stringify({
-      chapterTitle: input.chapterTitle,
-      exitCondition: input.exitCondition,
-      goalIntent: input.interpretation.intent,
-      timeBudgetMinutesPerWeek: input.interpretation.timeBudgetMinutesPerWeek,
-      currentLevel: input.interpretation.constraints.currentLevel,
-      domains: input.resolved.domains,
-    }),
+    user:
+      JSON.stringify({
+        chapterTitle: input.chapterTitle,
+        exitCondition: input.exitCondition,
+        goalIntent: input.interpretation.intent,
+        timeBudgetMinutesPerWeek: input.interpretation.timeBudgetMinutesPerWeek,
+        currentLevel: input.interpretation.constraints.currentLevel,
+        deadline: input.interpretation.constraints.deadline,
+        resources: input.interpretation.constraints.resources,
+        location: input.interpretation.location,
+        domains: input.resolved.domains,
+      }) + personDetailsBlock(input.interpretation.details),
     maxTokens: 6000,
     schema: detailChapterOutputSchema,
     signal,

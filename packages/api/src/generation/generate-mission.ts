@@ -34,6 +34,7 @@ import type {
   GenerationPersistencePort,
   IdGenerator,
   KnowledgePort,
+  MissionGoalContext,
 } from "../ports";
 import { toGroundingSummary, toMissionDraft, toProgress, toSafetyNotice } from "./mapping";
 import { parseGenerateMissionRequest } from "./request";
@@ -95,14 +96,46 @@ function toGoalInput(request: GenerateMissionRequest): GoalInput {
     ...(request.weeklyTimeBudgetMinutes === undefined
       ? {}
       : { weeklyTimeBudgetMinutes: request.weeklyTimeBudgetMinutes }),
+    ...(request.details === undefined ? {} : { details: { ...request.details } }),
   };
+}
+
+/**
+ * Every value in the request that a person typed or that places them. Each is
+ * stripped from anything headed for a log or an incident record, so a personal
+ * field added to the contract must be added here.
+ */
+export function personalContent(request: GenerateMissionRequest): string[] {
+  const { rawText, location, timezone, details } = request;
+  return [
+    rawText,
+    ...(location === undefined ? [] : [location]),
+    ...(timezone === undefined ? [] : [timezone]),
+    ...Object.values(details ?? {}),
+  ];
+}
+
+/** What was stated beyond the goal itself, kept with the mission. Absent when nothing was. */
+function toGoalContext(request: GenerateMissionRequest): MissionGoalContext | undefined {
+  const { timezone, location, weeklyTimeBudgetMinutes, details } = request;
+  const context: MissionGoalContext = {
+    ...(timezone === undefined ? {} : { timezone }),
+    ...(location === undefined ? {} : { location }),
+    ...(weeklyTimeBudgetMinutes === undefined ? {} : { weeklyTimeBudgetMinutes }),
+    ...(details === undefined ? {} : { details }),
+  };
+  return Object.keys(context).length === 0 ? undefined : context;
 }
 
 export async function generateMission(
   input: GenerateMissionInput,
   ports: GenerateMissionPorts,
 ): Promise<GenerationResult> {
-  const request = parseGenerateMissionRequest(input.request);
+  // One request-scoped instant: the same one judges a target date, freshness
+  // and the run's start.
+  const startedAt = ports.clock.now();
+  const request = parseGenerateMissionRequest(input.request, startedAt);
+  const personal = personalContent(request);
   const generate = ports.draftGenerator ?? generateMissionDraft;
   const { signal } = ports.cancellation;
 
@@ -110,7 +143,6 @@ export async function generateMission(
   signal.throwIfAborted();
 
   const runId = ports.ids.newId();
-  const startedAt = ports.clock.now();
 
   // One request-scoped evaluation instant for every fact this run uses
   // (epic 1 freshness rule). Story 1.17 gives this port a real resolver; the
@@ -140,7 +172,7 @@ export async function generateMission(
                   issues: rejection.issues.map((issue) =>
                     issue.received === undefined
                       ? issue
-                      : { ...issue, received: redactDiagnostic(issue.received, [request.rawText]) },
+                      : { ...issue, received: redactDiagnostic(issue.received, personal) },
                   ),
                 }),
             }),
@@ -149,7 +181,7 @@ export async function generateMission(
   } catch (error) {
     // A cancelled run has no terminal result: the abort is the outcome.
     if (signal.aborted) throw error;
-    throw new GenerationError("GENERATION_FAILED", describeFailure(error, [request.rawText]), {
+    throw new GenerationError("GENERATION_FAILED", describeFailure(error, personal), {
       cause: error,
     });
   }
@@ -180,6 +212,7 @@ export async function generateMission(
   // Server-assigned, from the id port. The client learns it from the terminal
   // frame and cannot have influenced it.
   const missionId = ports.ids.newId();
+  const goalContext = toGoalContext(request);
 
   // Law 4: a relational record, not a ledger fact — no event type, no
   // `occurredAt`, nothing appended.
@@ -197,11 +230,12 @@ export async function generateMission(
       pursuitSlug: draft.pursuitSlug,
       mission,
       safetyClass: draft.safety.safetyClass,
+      ...(goalContext === undefined ? {} : { goalContext }),
     });
   } catch (error) {
     if (signal.aborted) throw error;
     if (isGenerationError(error)) throw error;
-    throw new GenerationError("STORE_UNAVAILABLE", describeFailure(error, [request.rawText]), {
+    throw new GenerationError("STORE_UNAVAILABLE", describeFailure(error, personal), {
       cause: error,
     });
   }

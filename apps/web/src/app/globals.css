@@ -2518,6 +2518,58 @@ h3 {
   color: var(--violet-deep);
   outline-color: var(--violet);
 }
+.ambition-field textarea {
+  min-height: 72px;
+  border-radius: 16px;
+  border: 2px solid var(--line-strong);
+  background: #fff;
+  padding: 12px 16px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--violet-deep);
+  outline-color: var(--violet);
+  resize: vertical;
+}
+.ambition-field input[aria-invalid="true"],
+.ambition-field textarea[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.field-error {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--danger);
+}
+.detail-block {
+  background: #fff;
+  border: 2px solid var(--line);
+  border-radius: 18px;
+  padding: 14px 18px;
+}
+.detail-block summary {
+  min-height: 32px;
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--violet-deep);
+  cursor: pointer;
+}
+.detail-note {
+  margin: 6px 0 16px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.detail-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.detail-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
 .chip-block {
   display: flex;
   flex-direction: column;
@@ -3575,4 +3627,10 @@ h3 {
   height: 100%;
   border-radius: inherit;
   background: var(--violet);
+}
+
+@media (max-width: 440px) {
+  .detail-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

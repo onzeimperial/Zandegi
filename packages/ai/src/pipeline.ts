@@ -1,6 +1,7 @@
 /** Mission generation orchestration with fail-closed validation. */
 
 import { isGenerationBlocked } from "@zandegi/core";
+import { withStatedContext } from "./person-context";
 import { interpret } from "./stages/01-interpret";
 import { resolve } from "./stages/02-resolve";
 import { hydrate } from "./stages/03-hydrate";
@@ -172,21 +173,19 @@ export async function generateMissionDraft(
     }
   }
 
-  const interpretation = await runStage("interpret", () =>
-    retry({ stage: "interpret", ...outerSignal }, () => interpret(input, options.signal)),
+  const interpretation = withStatedContext(
+    await runStage("interpret", () =>
+      retry({ stage: "interpret", ...outerSignal }, () =>
+        interpret(input, options.asOf, options.signal),
+      ),
+    ),
+    input,
   );
   modelsUsed.interpret = modelForStage("interpret");
 
-  if (interpretation.notes.isImpossibleScope) {
-    return {
-      draft: null,
-      refusal: {
-        reason: "The goal as stated isn't achievable in the implied timeframe.",
-        route: "clarify",
-      },
-    };
-  }
-
+  // The classifier runs before any clarify refusal: details are free text, and
+  // a worrying one must reach the support route even when the goal also looks
+  // impossible.
   const resolved = await runStage("resolve", () =>
     retry({ stage: "resolve", ...outerSignal }, () => resolve(interpretation, options.signal)),
   );
@@ -196,6 +195,17 @@ export async function generateMissionDraft(
     return {
       draft: null,
       refusal: { reason: "This needs a person, not a mission.", route: "support" },
+    };
+  }
+
+  if (interpretation.notes.isImpossibleScope) {
+    return {
+      draft: null,
+      refusal: {
+        reason:
+          "That timeframe doesn't leave room for a plan yet. Try a later date or a first milestone.",
+        route: "clarify",
+      },
     };
   }
 

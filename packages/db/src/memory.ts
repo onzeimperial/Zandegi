@@ -43,15 +43,18 @@ export interface InMemoryStoreOptions {
 export interface InMemoryDemoStore<
   TMission = unknown,
   TSafetyClass extends string = string,
-> extends DemoStore<TMission, TSafetyClass> {
+  TContext = unknown,
+> extends DemoStore<TMission, TSafetyClass, TContext> {
   /** Test and development affordance. Not part of `DemoStore`. */
   size(): number;
   clear(): void;
 }
 
-export function createInMemoryDemoStore<TMission = unknown, TSafetyClass extends string = string>(
-  options: InMemoryStoreOptions = {},
-): InMemoryDemoStore<TMission, TSafetyClass> {
+export function createInMemoryDemoStore<
+  TMission = unknown,
+  TSafetyClass extends string = string,
+  TContext = unknown,
+>(options: InMemoryStoreOptions = {}): InMemoryDemoStore<TMission, TSafetyClass, TContext> {
   const retentionSeconds = options.retentionSeconds ?? DEMO_RETENTION_SECONDS;
   const now = options.now ?? (() => Date.now());
   const entries = new Map<string, Entry>();
@@ -95,12 +98,12 @@ export function createInMemoryDemoStore<TMission = unknown, TSafetyClass extends
     async listMissions(ownerId) {
       const indexKey = ownerIndexKey(ownerId);
       const index = parseOwnerIndex(read(indexKey));
-      const missions: StoredMission<TMission, TSafetyClass>[] = [];
+      const missions: StoredMission<TMission, TSafetyClass, TContext>[] = [];
       for (const entry of index) {
         const found = read(missionKey(ownerId, entry.missionId));
         // An expired mission drops out rather than appearing as a gap.
         if (found !== null) {
-          missions.push(structuredClone(found) as StoredMission<TMission, TSafetyClass>);
+          missions.push(structuredClone(found) as StoredMission<TMission, TSafetyClass, TContext>);
         }
       }
       // Listing is a request from the principal, so it renews the index window.
@@ -117,7 +120,7 @@ export function createInMemoryDemoStore<TMission = unknown, TSafetyClass extends
       // mission the owner never looks at still expires on its own window;
       // richer renewal semantics are product-owned and deliberately deferred.
       entries.set(key, { value: found, expiresAt: expiryFrom() });
-      return structuredClone(found) as StoredMission<TMission, TSafetyClass>;
+      return structuredClone(found) as StoredMission<TMission, TSafetyClass, TContext>;
     },
 
     async findGuest(tokenHash) {

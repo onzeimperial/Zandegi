@@ -28,14 +28,14 @@ import type { GenerationSafetyClass, MissionDraft } from "./client";
 import { GenerationError } from "./errors";
 import type { GuestCookiePolicy } from "./identity/cookie";
 import type { GuestPrincipalStorePort } from "./identity/ports";
-import type { GenerationPersistencePort } from "./ports";
+import type { GenerationPersistencePort, MissionGoalContext } from "./ports";
 
 /**
  * The store as this package instantiates it. Naming the mission payload and
  * the safety class here is what makes the two packages' record shapes line up
  * at compile time instead of by convention.
  */
-export type StoredDemoStore = DemoStore<MissionDraft, GenerationSafetyClass>;
+export type StoredDemoStore = DemoStore<MissionDraft, GenerationSafetyClass, MissionGoalContext>;
 
 export type DemoStoreDriver = "memory" | "redis";
 
@@ -158,7 +158,7 @@ export function demoPortsFromStore(store: StoredDemoStore): DemoPorts {
 
 export async function createDemoStore(config: DemoStoreConfig): Promise<StoredDemoStore> {
   if (config.driver === "memory") {
-    return createInMemoryDemoStore<MissionDraft, GenerationSafetyClass>({
+    return createInMemoryDemoStore<MissionDraft, GenerationSafetyClass, MissionGoalContext>({
       retentionSeconds: config.retentionSeconds,
     });
   }
@@ -166,7 +166,7 @@ export async function createDemoStore(config: DemoStoreConfig): Promise<StoredDe
     throw new GenerationError("STORE_UNAVAILABLE", "redis driver selected with no credentials");
   }
   try {
-    return await createUpstashDemoStore<MissionDraft, GenerationSafetyClass>({
+    return await createUpstashDemoStore<MissionDraft, GenerationSafetyClass, MissionGoalContext>({
       url: config.redis.url,
       token: config.redis.token,
       retentionSeconds: config.retentionSeconds,

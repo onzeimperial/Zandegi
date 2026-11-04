@@ -7,7 +7,7 @@
  * able to mint an authoritative timestamp, identifier, identity or fact.
  */
 
-import type { GenerationSafetyClass, MissionDraft } from "./client";
+import type { GenerateMissionDetails, GenerationSafetyClass, MissionDraft } from "./client";
 
 /** The one source of "now" a use case may read. */
 export interface Clock {
@@ -83,6 +83,18 @@ export const emptyKnowledge: KnowledgePort = {
 };
 
 /**
+ * What the person stated beyond the goal text. Personal content: it lives on
+ * the deletable mission record, is never returned by a read, and never enters
+ * the ledger or a log.
+ */
+export interface MissionGoalContext {
+  timezone?: string;
+  location?: string;
+  weeklyTimeBudgetMinutes?: number;
+  details?: GenerateMissionDetails;
+}
+
+/**
  * An accepted mission, as persistence receives it.
  *
  * `missionId` and `ownerId` are both server-assigned: the id comes from the
@@ -108,6 +120,8 @@ export interface GeneratedMissionRecord {
   pursuitSlug: string;
   mission: MissionDraft;
   safetyClass: GenerationSafetyClass;
+  /** Absent when the person gave only the goal. */
+  goalContext?: MissionGoalContext;
 }
 
 /**

@@ -58,7 +58,8 @@ export const runtime = "nodejs";
  */
 export const maxDuration = 150;
 
-const MAX_BODY_BYTES = 16 * 1024;
+/** Room for the goal and every detail field at their limits, in multi-byte text. */
+const MAX_BODY_BYTES = 32 * 1024;
 /**
  * Measured on real generations: plan and the first stages take about 6s, one
  * chapter of detail 18-22s at low effort, and a 6-7 chapter mission needs two
@@ -185,7 +186,7 @@ export async function POST(req: Request) {
   // non-2xx JSON body before any stream is opened and before any model call.
   let request: GenerateMissionRequest;
   try {
-    request = parseGenerateMissionRequest(await readBoundedJson(req));
+    request = parseGenerateMissionRequest(await readBoundedJson(req), systemClock.now());
   } catch (error) {
     if (error instanceof RequestFailure) return jsonError(error.status, error.code, requestId);
     if (error instanceof GenerationError) return jsonError(400, error.code, requestId);

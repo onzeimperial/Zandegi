@@ -18,10 +18,16 @@ const META = {
 describe("generator UI state", () => {
   it("sends the protected exact request shape", () => {
     const signal = new AbortController().signal;
-    const init = generationRequestInit("Learn Farsi", signal);
+    const init = generationRequestInit(
+      { rawText: "Learn Farsi", details: { why: "family" } },
+      signal,
+    );
     expect(init.method).toBe("POST");
     expect(init.headers).toEqual({ "Content-Type": "application/json" });
-    expect(JSON.parse(String(init.body))).toEqual({ rawText: "Learn Farsi" });
+    expect(JSON.parse(String(init.body))).toEqual({
+      rawText: "Learn Farsi",
+      details: { why: "family" },
+    });
     expect(init.signal).toBe(signal);
   });
   it("disables submission for blank ambitions and while generation is active", () => {

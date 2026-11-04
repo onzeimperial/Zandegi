@@ -78,9 +78,11 @@ function sanitise(text: string, secrets: readonly string[]): string {
     .slice(0, 300);
 }
 
-export function createRedisDemoStore<TMission = unknown, TSafetyClass extends string = string>(
-  options: RedisStoreOptions,
-): DemoStore<TMission, TSafetyClass> {
+export function createRedisDemoStore<
+  TMission = unknown,
+  TSafetyClass extends string = string,
+  TContext = unknown,
+>(options: RedisStoreOptions): DemoStore<TMission, TSafetyClass, TContext> {
   const { client } = options;
   const retentionSeconds = options.retentionSeconds ?? DEMO_RETENTION_SECONDS;
   const secrets = options.secrets ?? [];
@@ -142,7 +144,7 @@ export function createRedisDemoStore<TMission = unknown, TSafetyClass extends st
 
       const found = await Promise.all(
         index.map(async (entry) =>
-          decode<StoredMission<TMission, TSafetyClass>>(
+          decode<StoredMission<TMission, TSafetyClass, TContext>>(
             await guard("listMissions", () => client.get(missionKey(ownerId, entry.missionId))),
           ),
         ),
@@ -154,7 +156,7 @@ export function createRedisDemoStore<TMission = unknown, TSafetyClass extends st
       // An expired mission drops out rather than appearing as a gap.
       return newestFirst(
         found.filter(
-          (mission): mission is StoredMission<TMission, TSafetyClass> => mission !== null,
+          (mission): mission is StoredMission<TMission, TSafetyClass, TContext> => mission !== null,
         ),
       );
     },
@@ -162,7 +164,7 @@ export function createRedisDemoStore<TMission = unknown, TSafetyClass extends st
     async findMission(ownerId, missionId) {
       const key = missionKey(ownerId, missionId);
       const raw = await guard("findMission", () => client.get(key));
-      const found = decode<StoredMission<TMission, TSafetyClass>>(raw);
+      const found = decode<StoredMission<TMission, TSafetyClass, TContext>>(raw);
       if (found === null) return null;
       // Touching a record renews its window. A failure to renew must not fail
       // the read: the caller already has the mission.
@@ -232,7 +234,8 @@ export interface UpstashStoreOptions {
 export async function createUpstashDemoStore<
   TMission = unknown,
   TSafetyClass extends string = string,
->(options: UpstashStoreOptions): Promise<DemoStore<TMission, TSafetyClass>> {
+  TContext = unknown,
+>(options: UpstashStoreOptions): Promise<DemoStore<TMission, TSafetyClass, TContext>> {
   const url = options.url.trim();
   const token = options.token.trim();
   if (url.length === 0 || token.length === 0) {
@@ -248,7 +251,7 @@ export async function createUpstashDemoStore<
     throw new StoreUnavailableError("configure", `upstash client unavailable (${raw})`);
   }
 
-  return createRedisDemoStore<TMission, TSafetyClass>({
+  return createRedisDemoStore<TMission, TSafetyClass, TContext>({
     client,
     ...(options.retentionSeconds === undefined
       ? {}

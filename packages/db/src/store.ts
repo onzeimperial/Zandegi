@@ -15,7 +15,11 @@
  */
 
 /** A generated mission, owned by exactly one principal. Not a ledger fact. */
-export interface StoredMission<TMission = unknown, TSafetyClass extends string = string> {
+export interface StoredMission<
+  TMission = unknown,
+  TSafetyClass extends string = string,
+  TContext = unknown,
+> {
   /** Server-assigned. A client never supplies or influences it. */
   missionId: string;
   /** The guest principal that owns this record. */
@@ -27,6 +31,8 @@ export interface StoredMission<TMission = unknown, TSafetyClass extends string =
   pursuitSlug: string;
   mission: TMission;
   safetyClass: TSafetyClass;
+  /** What the person stated beyond the goal. Absent when there was nothing. */
+  goalContext?: TContext;
 }
 
 /** A guest principal. The token itself is never stored, only its hash. */
@@ -44,20 +50,24 @@ export interface StoredGuest {
  * together, so an ownership-checked read is a single lookup and a miss is
  * indistinguishable from "owned by somebody else".
  */
-export interface DemoStore<TMission = unknown, TSafetyClass extends string = string> {
-  recordMission(record: StoredMission<TMission, TSafetyClass>): Promise<void>;
+export interface DemoStore<
+  TMission = unknown,
+  TSafetyClass extends string = string,
+  TContext = unknown,
+> {
+  recordMission(record: StoredMission<TMission, TSafetyClass, TContext>): Promise<void>;
   /** `null` when the id is unknown *or* owned by another principal. */
   findMission(
     ownerId: string,
     missionId: string,
-  ): Promise<StoredMission<TMission, TSafetyClass> | null>;
+  ): Promise<StoredMission<TMission, TSafetyClass, TContext> | null>;
   /**
    * The owner's missions, newest first, at most `MAX_LISTED_MISSIONS`.
    *
    * Read through a per-owner index rather than a scan, keeping "every read is
    * keyed" true. A mission that has expired drops out of the list silently.
    */
-  listMissions(ownerId: string): Promise<StoredMission<TMission, TSafetyClass>[]>;
+  listMissions(ownerId: string): Promise<StoredMission<TMission, TSafetyClass, TContext>[]>;
   findGuest(tokenHash: string): Promise<StoredGuest | null>;
   saveGuest(tokenHash: string, guest: StoredGuest): Promise<void>;
   /** Renews the retention window. A no-op when the hash is unknown. */

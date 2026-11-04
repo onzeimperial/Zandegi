@@ -406,3 +406,127 @@ describe("generateMission use case", () => {
     });
   });
 });
+
+describe("generateMission with details", () => {
+  const principal = { id: "guest-1", createdAt: START.toISOString() };
+  const details = {
+    startingPoint: "private starting point",
+    why: "private reason",
+    targetDate: "2030-05-06",
+    resources: "private resources",
+    planAround: "private constraint",
+  };
+  const request = {
+    rawText: "private goal",
+    location: "private suburb",
+    timezone: "Australia/Melbourne",
+    weeklyTimeBudgetMinutes: 150,
+    details,
+  };
+
+  it("passes them to the pipeline and keeps them on the record, never on the result", async () => {
+    let seen: unknown;
+    const deps = ports({
+      draftGenerator: async (input) => {
+        seen = input;
+        return draftOutcome();
+      },
+    });
+    const result = await generateMission({ request, principal }, deps);
+
+    expect(seen).toEqual(request);
+    expect(deps.records[0]?.goalContext).toEqual({
+      timezone: "Australia/Melbourne",
+      location: "private suburb",
+      weeklyTimeBudgetMinutes: 150,
+      details,
+    });
+    expect(JSON.stringify(result)).not.toContain("private");
+  });
+
+  it("stores no context for a goal on its own", async () => {
+    const deps = ports();
+    await generateMission({ request: { rawText: GOAL }, principal }, deps);
+    expect(deps.records[0]).not.toHaveProperty("goalContext");
+  });
+
+  it("redacts every personal field from a failure's diagnostic", async () => {
+    const failure = await generateMission(
+      { request, principal },
+      ports({
+        draftGenerator: async () => {
+          throw new Error(Object.values({ ...request, ...details }).join(" | "));
+        },
+      }),
+    ).catch((error: GenerationError) => error);
+
+    expect((failure as GenerationError).diagnostic).not.toContain("private");
+    expect((failure as GenerationError).diagnostic).not.toContain("2030-05-06");
+    expect((failure as GenerationError).diagnostic).not.toContain("Australia/Melbourne");
+  });
+
+  it("redacts them from a rejected model value too", async () => {
+    const reported: ModelOutputRejection[] = [];
+    await generateMission(
+      { request, principal },
+      ports({
+        onOutputRejected: (rejection) => reported.push(rejection),
+        draftGenerator: async (_input, _onEvent, options) => {
+          options.onOutputRejected?.({
+            stage: "detail",
+            attempt: 1,
+            willRetry: true,
+            kind: "schema_mismatch",
+            model: "m",
+            issues: [{ path: "x", code: "invalid_value", received: "private reason" }],
+          });
+          return draftOutcome();
+        },
+      }),
+    );
+    expect(reported[0]?.issues[0]?.received).toBe("[redacted]");
+  });
+
+  it.each([
+    ["an unknown nested key", { nope: "x" }],
+    ["text over the limit", { why: "x".repeat(501) }],
+    ["blank text", { why: "   " }],
+    ["a date that is not a date", { targetDate: "soon" }],
+    ["a date that rolls", { targetDate: "2030-02-31" }],
+    ["a past date", { targetDate: "2020-01-01" }],
+  ])("rejects %s before any model call", async (_label, bad) => {
+    const draftGenerator = vi.fn(async () => draftOutcome());
+    await expect(
+      generateMission(
+        { request: { rawText: "x", details: bad }, principal },
+        ports({ draftGenerator }),
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+    expect(draftGenerator).not.toHaveBeenCalled();
+  });
+
+  it("judges a past date where the person is, not in UTC", async () => {
+    const instant = new Date("2026-11-04T20:00:00Z");
+    const deps = ports({ clock: fixedClock(instant) });
+    // Already the 5th in Melbourne, still the 4th in UTC.
+    await expect(
+      generateMission(
+        {
+          request: {
+            rawText: "x",
+            timezone: "Australia/Melbourne",
+            details: { targetDate: "2026-11-04" },
+          },
+          principal,
+        },
+        deps,
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+    await expect(
+      generateMission(
+        { request: { rawText: "x", details: { targetDate: "2026-11-04" } }, principal },
+        deps,
+      ),
+    ).resolves.toMatchObject({ outcome: "mission" });
+  });
+});

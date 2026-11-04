@@ -263,7 +263,7 @@ describe("generateMission", () => {
     expect(events.findIndex((e) => e.hasChapter)).toBeGreaterThan(safetyDone);
   });
 
-  it("short-circuits to a clarify refusal for impossible scope, without calling resolve", async () => {
+  it("short-circuits to a clarify refusal for impossible scope, without planning", async () => {
     interpretMock.mockResolvedValue({
       ...baseInterpretation,
       notes: { isImpossibleScope: true },
@@ -271,7 +271,49 @@ describe("generateMission", () => {
     const result = await generateMissionDraft({ rawText: "become a billionaire by march" });
     expect(result.draft).toBeNull();
     expect(result.refusal?.route).toBe("clarify");
-    expect(resolveMock).not.toHaveBeenCalled();
+    expect(planMock).not.toHaveBeenCalled();
+  });
+
+  it("routes worrying details to support even when the goal also looks impossible", async () => {
+    interpretMock.mockResolvedValue({ ...baseInterpretation, notes: { isImpossibleScope: true } });
+    resolveMock.mockResolvedValue({ ...baseResolved, safetyClass: "SELF_HARM_ADJACENT" });
+    const details = { why: "so the pain finally stops" };
+    const result = await generateMissionDraft({ rawText: "run a half marathon", details });
+
+    expect(result.refusal?.route).toBe("support");
+    expect(resolveMock.mock.calls[0]![0]).toMatchObject({ details });
+    expect(planMock).not.toHaveBeenCalled();
+    expect(detailChapterMock).not.toHaveBeenCalled();
+  });
+
+  it("overrides the model with stated hours, date and location, and passes details on", async () => {
+    interpretMock.mockResolvedValue({
+      ...baseInterpretation,
+      constraints: { deadline: "2030-01-01", currentLevel: "new" },
+      timeBudgetMinutesPerWeek: 999,
+      location: "Mars",
+    });
+    const details = { targetDate: "2027-04-01", startingPoint: "I can jog 2km" };
+    await generateMissionDraft({
+      rawText: "run a half marathon",
+      weeklyTimeBudgetMinutes: 150,
+      location: "Melbourne",
+      details,
+    });
+
+    const expected = {
+      timeBudgetMinutesPerWeek: 150,
+      location: "Melbourne",
+      constraints: { deadline: "2027-04-01", currentLevel: "new" },
+      details,
+    };
+    expect(planMock.mock.calls[0]![0]).toMatchObject(expected);
+    expect(detailChapterMock.mock.calls[0]![0].interpretation).toMatchObject(expected);
+  });
+
+  it("leaves the model's inference alone for a goal on its own", async () => {
+    await generateMissionDraft({ rawText: "run a half marathon" });
+    expect(planMock.mock.calls[0]![0]).toEqual(baseInterpretation);
   });
 
   it("short-circuits to a support refusal for SELF_HARM_ADJACENT, without planning/detailing", async () => {

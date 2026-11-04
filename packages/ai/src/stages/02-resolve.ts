@@ -11,8 +11,13 @@
  */
 
 import { complete } from "../router";
-import { assertDomainWeights, type DomainWeight } from "@zandegi/core";
-import { parseStageJson, resolveClassificationSchema } from "../schemas";
+import { assertDomainWeights, isGenerationBlocked, type DomainWeight } from "@zandegi/core";
+import { personDetailsBlock, PERSON_DETAILS_RULE } from "../person-context";
+import {
+  parseStageJson,
+  resolveClassificationSchema,
+  resolveClassificationWireSchema,
+} from "../schemas";
 import type { Interpretation, ResolvedPursuit } from "../types";
 
 const SYSTEM = `You classify a user's goal for Zandegi, a life-RPG app with 8 life domains: Mind
@@ -38,7 +43,13 @@ safetyClass — be careful and conservative here, this gates real safety behavio
 - LEGAL: anything involving legal process or rights
 - SELF_HARM_ADJACENT: any goal expressing self-harm, suicidal ideation, or wanting to disappear/die —
   even phrased indirectly or minimised ("i want to die less", "make the pain stop")
-- NORMAL: everything else`;
+- NORMAL: everything else
+
+Classify the goal and the person's details together, and let the most serious signal decide the
+safetyClass. A harmless goal with worrying details is not NORMAL: self-harm wording anywhere in
+<person_details> makes it SELF_HARM_ADJACENT.
+
+${PERSON_DETAILS_RULE}`;
 
 function slugify(text: string): string {
   return (
@@ -57,19 +68,23 @@ export async function resolve(
   const res = await complete({
     stage: "resolve",
     system: SYSTEM,
-    user: JSON.stringify({
-      intent: interpretation.intent,
-      goalType: interpretation.goalType,
-      constraints: interpretation.constraints,
-    }),
+    user:
+      JSON.stringify({
+        intent: interpretation.intent,
+        goalType: interpretation.goalType,
+        constraints: interpretation.constraints,
+      }) + personDetailsBlock(interpretation.details),
     maxTokens: 512,
     temperature: 0.1,
+    schema: resolveClassificationWireSchema,
     signal,
   });
   const parsed = parseStageJson("resolve", res.text, resolveClassificationSchema);
 
   const domains = parsed.domains as DomainWeight;
-  assertDomainWeights(domains);
+  // A blocked goal goes to support and never uses its weights, so a malformed
+  // set must not turn that answer into a generic failure.
+  if (!isGenerationBlocked(parsed.safetyClass)) assertDomainWeights(domains);
 
   return {
     slug: slugify(interpretation.intent),
