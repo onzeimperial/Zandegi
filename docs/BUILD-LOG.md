@@ -42,6 +42,9 @@ Newest first.
   the goal also looks impossible.
 - The contract suite earned its keep immediately: a raw `RETURNING` timestamp came back shifted by the
   machine's UTC offset. Principal creation now uses `createMany` with `skipDuplicates`, then reads.
+- `pnpm add` quietly wrote a `minimumReleaseAgeExclude` entry to `pnpm-workspace.yaml` for a Clerk
+  release under a day old, so the local install passed while a clean clone refused the lockfile. Clerk
+  is pinned one release back instead of relaxing the policy. Only a real clone showed this.
 - `beforeEach(() => mock.mockClear())` returns the mock, and Vitest calls a returned function as
   cleanup. Use braces.
 
@@ -58,6 +61,8 @@ Newest first.
 - `next start` in production with no keys: `/` says closed, pages redirect, all three APIs answer
   `GENERATION_DISABLED`. With placeholder Clerk keys, the real middleware and SDK: pages redirect and
   all three APIs answer `SIGN_IN_REQUIRED`.
+- A fresh `git clone`, `pnpm install --frozen-lockfile` and `pnpm verify` with no credentials.
+- `prisma migrate deploy` from an empty PGlite database: applied, and `migrate status` is up to date.
 - Real Chrome: no document overflow at 375px on `/`, `/generate` and `/path`, inline errors with focus
   moved to the first one, and tab order through every field.
 
