@@ -81,32 +81,41 @@ platform under the `[generate]` prefix.
 
 ## Deploying the two-person test
 
-The test runs on Vercel, Neon and Clerk. `vercel.json` pins Sydney, and its build
-command applies migrations before building, never inside a request. Nothing below is
-needed to run `pnpm verify`, which uses no network and no credentials.
+The test runs on Vercel, Neon and Clerk. `vercel.json` pins Sydney, and on production
+builds its build command applies migrations before building, never inside a request.
+Preview builds do not migrate. Nothing below is needed to run `pnpm verify`, which uses no
+network and no credentials.
+
+Vercel builds Production only from the production branch, so that branch must hold this work.
 
 1. **Create the database.** In Neon, create a project in AWS Sydney (`ap-southeast-2`).
    Copy both connection strings: the pooled one and the direct one. Success: both start
    with `postgresql://`.
 2. **Create the sign-in.** In Clerk, create an application with email sign-in and keep email
-   verification on. Copy the publishable and secret keys. Success: the keys start with
-   `pk_` and `sk_`.
+   verification on. Use its development instance: a production instance needs a domain you own
+   with DNS records, and `*.vercel.app` does not allow them. Expect Clerk's development banner on
+   the sign-in screens. Copy the publishable and secret keys. Success: the keys start with
+   `pk_test_` and `sk_test_`.
 3. **Set these on the Vercel project**, for Production, before the first deploy:
 
-   | Variable                            | Value                                                                   |
-   | ----------------------------------- | ----------------------------------------------------------------------- |
-   | `ANTHROPIC_API_KEY`                 | Generation cannot run without it.                                       |
-   | `DATABASE_URL`                      | The pooled Neon string. Without it every request answers 503.           |
-   | `DATABASE_URL_UNPOOLED`             | The direct Neon string, used only by migrations.                        |
-   | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | From Clerk. Needed at build time as well as at run time.                |
-   | `CLERK_SECRET_KEY`                  | From Clerk.                                                             |
-   | `ZANDEGI_ALLOWED_EMAILS`            | The two invited emails, comma-separated. Empty means the app stays off. |
-   | `ZANDEGI_DAILY_GENERATION_LIMIT`    | Optional. Builds per person per UTC day. Defaults to 5.                 |
+   | Variable                            | Value                                                                                                                                                     |
+   | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `ANTHROPIC_API_KEY`                 | Generation cannot run without it.                                                                                                                         |
+   | `ENABLE_EXPERIMENTAL_COREPACK`      | `1`. Without it Vercel picks pnpm from the lockfile version rather than `packageManager`.                                                                 |
+   | `DATABASE_URL`                      | The pooled Neon string. With neither URL set, the production build fails at migration. If it is lost after a successful build, every request answers 503. |
+   | `DATABASE_URL_UNPOOLED`             | The direct Neon string, used only by migrations.                                                                                                          |
+   | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | From Clerk. Needed at build time as well as at run time.                                                                                                  |
+   | `CLERK_SECRET_KEY`                  | From Clerk.                                                                                                                                               |
+   | `ZANDEGI_ALLOWED_EMAILS`            | The two invited emails, comma-separated. Empty means the app stays off.                                                                                   |
+   | `ZANDEGI_DAILY_GENERATION_LIMIT`    | Optional. Builds per person per UTC day. Defaults to 5.                                                                                                   |
 
    `ENABLE_UNAUTHENTICATED_GENERATION` no longer does anything. Remove it if it is set.
 
+   Changing the invite list or the daily limit needs a redeploy before it takes effect.
+
 4. **Deploy,** then check each of these yourself, because the test suite cannot reach them:
    - Sign in with an invited email. Success: you land on your path.
+   - Sign up for the first time with an invited email. Success: you land on your path.
    - Sign in with an email that is not invited. Success: the invite-only screen, and nothing else.
    - Build a mission with details filled in, then open it on a second device. Success: the same
      mission and XP.
@@ -133,6 +142,7 @@ are ignored, since a caller could forge them.
 | Absent     | Not production | Any       | Guest mode: a browser cookie, no sign-in. For local work.     |
 | Absent     | Production     | Any       | Off: `/` says so and every API answers `GENERATION_DISABLED`. |
 | Present    | Production     | Empty     | Off, as above.                                                |
+| Present    | Not production | Empty     | Clerk on, and nobody is allowed in.                           |
 
 Screens with fixture data (crew, shop, profile, builder, customise, complete) are out of the nav.
 With Clerk on, they redirect to the path. They stay reachable in guest mode for design work.

@@ -47,7 +47,7 @@
 
 - source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-two-person-mvp-test.md`
   summary: Decide whether a failed generation should give its daily slot back. Today it does not, because its model calls were still paid for, so five failures in a row lock a person out until the next UTC day.
-  evidence: Acceptable for two people and a default of 5. `ZANDEGI_DAILY_GENERATION_LIMIT` can be raised without a deploy of code. Revisit before a wider test.
+  evidence: Acceptable for two people and a default of 5. `ZANDEGI_DAILY_GENERATION_LIMIT` raises the cap on the next redeploy. Revisit before a wider test.
 
 - source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-two-person-mvp-test.md`
   summary: Cache the Clerk user lookup. Every API request and page load calls `currentUser()`, one Backend API round trip, to read verified emails.

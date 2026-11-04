@@ -308,7 +308,7 @@ export const GENERATION_ERROR_MESSAGES: Record<GenerationErrorCode, string> = {
   SIGN_IN_REQUIRED: "Sign in to continue.",
   ACCOUNT_NOT_ALLOWED: "Zandegi is invite-only for now, and this account isn't on the list.",
   DAILY_LIMIT_REACHED:
-    "You've built today's missions. Your existing missions are ready, and you can build more tomorrow.",
+    "You've reached today's build limit. Your existing missions are ready. More builds open within 24 hours.",
 };
 
 export interface GenerationErrorBody {

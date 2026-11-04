@@ -28,7 +28,7 @@ import {
   type DetailsFormField,
   type DetailsFormValues,
 } from "./details-form";
-import { runGeneration } from "./generation-flow";
+import { responseToErrorCode, runGeneration } from "./generation-flow";
 import { GenerationStreamError } from "./sse";
 
 const mascotSrc =
@@ -148,9 +148,8 @@ export default function GeneratePage() {
       if (!(error instanceof DOMException && error.name === "AbortError")) {
         if (
           error instanceof GenerationStreamError &&
-          (error.code === "SIGN_IN_REQUIRED" || error.code === "ACCOUNT_NOT_ALLOWED")
+          responseToErrorCode(error.code) === "go-home"
         ) {
-          // The session lapsed or was never allowed. The home page says which.
           window.location.assign("/");
           return;
         }
@@ -346,8 +345,8 @@ export default function GeneratePage() {
       ? (state.detail ?? "Give me a sec. I’m planning your mission.")
       : state.status === "refusal"
         ? "Let’s find a safer next step."
-        : state.errorCode === "DAILY_LIMIT_REACHED"
-          ? "Good work today."
+        : responseToErrorCode(state.errorCode) === "show-daily-limit"
+          ? "Your missions are still here."
           : "The build hit a snag.";
 
   return (
@@ -420,9 +419,9 @@ export default function GeneratePage() {
 
             {state.status === "error" && (
               <div className="alert" role="alert">
-                {state.errorCode === "DAILY_LIMIT_REACHED" ? (
+                {responseToErrorCode(state.errorCode) === "show-daily-limit" ? (
                   <>
-                    <h2>That&rsquo;s today&rsquo;s missions built.</h2>
+                    <h2>Today&rsquo;s build limit</h2>
                     <p>{state.error}</p>
                     <Link className="button button-secondary" href="/path">
                       Go to your path

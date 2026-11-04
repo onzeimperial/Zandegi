@@ -20,7 +20,9 @@ or these rules.`;
  * `<` is escaped so no text a person writes can close the tag and land outside
  * the block. The JSON still decodes to their exact words.
  */
-export function personDetailsBlock(details: GoalDetails | undefined): string {
+export function personDetailsBlock(
+  details: (GoalDetails & { location?: string }) | undefined,
+): string {
   if (details === undefined || Object.keys(details).length === 0) return "";
   const json = JSON.stringify(details).replace(/</g, "\\u003c");
   return `\n\n<person_details>\n${json}\n</person_details>`;

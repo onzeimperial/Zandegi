@@ -1,6 +1,6 @@
 import type { MissionGoalContext } from "./ports";
 import { StoreUnavailableError, createInMemoryDemoStore } from "@zandegi/db";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { GenerationSafetyClass, MissionDraft } from "./client";
 import {
   createDemoStore,
@@ -289,5 +289,19 @@ describe("generate then read, against the twin", () => {
         { persistence: ports.persistence },
       ),
     ).rejects.toMatchObject({ code: "MISSION_NOT_FOUND" });
+  });
+});
+
+describe("the ports cache", () => {
+  it("survives the module being re-evaluated, as a dev recompile does", async () => {
+    vi.resetModules();
+    const first = await import("./demo-store");
+    first.resetDemoPortsCache();
+    vi.resetModules();
+    const second = await import("./demo-store");
+
+    expect(second.demoPortsFromEnv).not.toBe(first.demoPortsFromEnv);
+    expect(second.demoPortsFromEnv({})).toBe(first.demoPortsFromEnv({}));
+    first.resetDemoPortsCache();
   });
 });

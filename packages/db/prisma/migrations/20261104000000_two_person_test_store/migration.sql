@@ -89,3 +89,7 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER "LedgerEntry_append_only"
 BEFORE UPDATE OR DELETE ON "LedgerEntry"
 FOR EACH ROW EXECUTE FUNCTION "reject_ledger_change"();
+
+CREATE TRIGGER "LedgerEntry_no_truncate"
+BEFORE TRUNCATE ON "LedgerEntry"
+FOR EACH STATEMENT EXECUTE FUNCTION "reject_ledger_change"();

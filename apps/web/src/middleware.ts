@@ -7,7 +7,7 @@ const production = process.env.NODE_ENV === "production";
 // packages, and getting this wrong only moves a redirect: each route and page
 // still checks for itself.
 const clerk = Boolean(
-  process.env.CLERK_SECRET_KEY && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+  process.env.CLERK_SECRET_KEY?.trim() && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim(),
 );
 
 function follow(request: NextRequest, target: string | null): NextResponse {

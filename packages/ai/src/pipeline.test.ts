@@ -123,6 +123,24 @@ describe("parseStageJson", () => {
     expect(failure.message).toContain('steps.1.verification invalid_value received "PRACTICE"');
   });
 
+  it("omits a long received value rather than logging a truncated copy of it", () => {
+    const echoed = "a detail the person wrote, echoed by the model into a closed-set field";
+    const failure = (() => {
+      try {
+        return parseStageJson(
+          "detail",
+          JSON.stringify({ steps: [{ verification: echoed }] }),
+          schema,
+        );
+      } catch (error) {
+        return error;
+      }
+    })() as InstanceType<typeof ModelOutputError>;
+
+    expect(failure.issues).toEqual([{ path: "steps.0.verification", code: "invalid_value" }]);
+    expect(failure.message).not.toContain(echoed.slice(0, 20));
+  });
+
   it("keeps model prose out of the message, because messages reach the logs", () => {
     const prose = "my private medical history";
     expect(() => parseStageJson("detail", `not json ${prose}`, schema)).toThrow(ModelOutputError);
@@ -641,17 +659,18 @@ describe("generateMission", () => {
 
   it("propagates one AbortSignal to active model work and does not run later stages", async () => {
     const controller = new AbortController();
-    interpretMock.mockImplementation((_input: unknown, signal: AbortSignal) => {
+    interpretMock.mockImplementation((_input: unknown, _asOf: Date, signal: AbortSignal) => {
       expect(signal).toBe(controller.signal);
       return new Promise((_resolve, reject) => {
         signal.addEventListener("abort", () => reject(signal.reason), { once: true });
       });
     });
     const pending = generateMissionDraft({ rawText: "run" }, undefined, {
+      asOf: NOW,
       signal: controller.signal,
     });
     controller.abort();
-    await expect(pending).rejects.toThrow();
+    await expect(pending).rejects.toBe(controller.signal.reason);
     expect(resolveMock).not.toHaveBeenCalled();
     expect(planMock).not.toHaveBeenCalled();
   });

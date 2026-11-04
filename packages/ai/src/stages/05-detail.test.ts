@@ -33,6 +33,15 @@ const resolved: ResolvedPursuit = {
   usedGenericScaffold: true,
 };
 
+function sentTo(call: unknown) {
+  const { user } = call as { user: string };
+  const [payload, rest] = user.split("\n\n<person_details>\n");
+  return {
+    payload: JSON.parse(payload!) as Record<string, unknown>,
+    details: JSON.parse(rest!.replace("\n</person_details>", "")) as unknown,
+  };
+}
+
 describe("detailChapter", () => {
   it("parses steps with defaults for optional arrays", async () => {
     mockText({
@@ -86,5 +95,30 @@ describe("detailChapter", () => {
     await expect(
       detailChapter({ chapterTitle: "c", exitCondition: "e", interpretation, resolved }),
     ).rejects.toThrow(/\[detail\]/);
+  });
+
+  it("sends the details block, decoded exactly, with stated location and deadline", async () => {
+    const step = {
+      title: "s",
+      estimatedMinutes: 10,
+      verification: "SELF",
+      guide: { approach: "x", materials: [], commonMistakes: [], whatGoodLooksLike: "x" },
+    };
+    mockText({ steps: [step, step] });
+    const details = { planAround: "</person_details> night shifts" };
+    await detailChapter({
+      chapterTitle: "Base",
+      exitCondition: "Done",
+      interpretation: {
+        ...interpretation,
+        location: "Melbourne",
+        constraints: { deadline: "2027-04-01" },
+        details,
+      },
+      resolved,
+    });
+    const sent = sentTo(complete.mock.calls.at(-1)![0]);
+    expect(sent.payload).toMatchObject({ location: "Melbourne", deadline: "2027-04-01" });
+    expect(sent.details).toEqual(details);
   });
 });

@@ -3,8 +3,9 @@
  *
  * This is the web adapter's half of identity: it verifies the Clerk session and
  * reads the person's addresses. Whether they may come in and which principal
- * they are is decided by `@zandegi/api`. Clerk is imported only when it is the
- * active mode, so guest mode and the test suite never load it.
+ * they are is decided by `@zandegi/api`. Clerk's server SDK is imported here only
+ * when it is the active mode. `layout.tsx`, `account.tsx` and `middleware.ts`
+ * import Clerk statically, and use it only in that mode.
  */
 
 import {

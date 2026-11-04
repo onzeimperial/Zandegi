@@ -73,7 +73,12 @@ export async function resolve(
         intent: interpretation.intent,
         goalType: interpretation.goalType,
         constraints: interpretation.constraints,
-      }) + personDetailsBlock(interpretation.details),
+      }) +
+      personDetailsBlock({
+        ...interpretation.details,
+        // Free text too, so it is classified with the rest of what they wrote.
+        ...(interpretation.location === undefined ? {} : { location: interpretation.location }),
+      }),
     maxTokens: 512,
     temperature: 0.1,
     schema: resolveClassificationWireSchema,

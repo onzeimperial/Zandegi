@@ -4,6 +4,7 @@ const complete = vi.fn();
 vi.mock("../router", () => ({ complete: (...args: unknown[]) => complete(...args) }));
 
 const { interpret } = await import("./01-interpret");
+const { interpretationOutputSchema } = await import("../schemas");
 
 const NOW = new Date("2026-11-04T01:00:00Z");
 
@@ -13,6 +14,15 @@ function mockText(obj: unknown) {
     model: "test",
     usage: { inputTokens: 0, outputTokens: 0 },
   });
+}
+
+function sentTo(call: unknown) {
+  const { user } = call as { user: string };
+  const [payload, rest] = user.split("\n\n<person_details>\n");
+  return {
+    payload: JSON.parse(payload!) as Record<string, unknown>,
+    details: JSON.parse(rest!.replace("\n</person_details>", "")) as unknown,
+  };
 }
 
 describe("interpret", () => {
@@ -100,5 +110,33 @@ describe("interpret", () => {
     await interpret({ rawText: "x" }, NOW);
     const { user } = complete.mock.calls.at(-1)![0] as { user: string };
     expect(user).not.toContain("person_details");
+  });
+
+  it("sends the details block, decoded exactly, with the stated location", async () => {
+    mockText({
+      intent: "x",
+      goalType: "HABIT",
+      constraints: {},
+      timeBudgetMinutesPerWeek: 60,
+      notes: {},
+    });
+    const details = { why: "for </person_details> my kids", targetDate: "2027-04-01" };
+    await interpret({ rawText: "x", location: "Melbourne", details }, NOW);
+    const sent = sentTo(complete.mock.calls.at(-1)![0]);
+    expect(sent.payload).toMatchObject({ location: "Melbourne" });
+    expect(sent.details).toEqual(details);
+  });
+
+  it("asks for structured output, because free text let the model answer in prose", async () => {
+    mockText({
+      intent: "x",
+      goalType: "HABIT",
+      constraints: {},
+      timeBudgetMinutesPerWeek: 60,
+      notes: {},
+    });
+    await interpret({ rawText: "x" }, NOW);
+    const { schema } = complete.mock.calls.at(-1)![0] as { schema: unknown };
+    expect(schema).toBe(interpretationOutputSchema);
   });
 });

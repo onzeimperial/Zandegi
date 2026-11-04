@@ -51,7 +51,7 @@ model CompletionClaim {
   @@id([ownerId, completionId])
 }
 
-/// Append-only (law 4). A database trigger rejects UPDATE and DELETE; see the migration.
+/// Append-only (law 4). Database triggers reject UPDATE, DELETE and TRUNCATE; see the migration.
 model LedgerEntry {
   position   BigInt   @id @default(autoincrement())
   ownerId    String

@@ -185,7 +185,9 @@ function toIssue(raw: unknown, issue: z.core.$ZodIssue): ModelOutputIssue {
   const entry: ModelOutputIssue = { path: issue.path.join("."), code: issue.code };
   if (issue.code !== "invalid_value") return entry;
   const received = JSON.stringify(valueAt(raw, issue.path)) ?? "undefined";
-  return { ...entry, received: received.slice(0, MAX_RECEIVED_LENGTH) };
+  // Closed-set labels are short. Anything longer may be a person's words echoed
+  // back, and a truncated copy would slip past exact-match redaction.
+  return received.length > MAX_RECEIVED_LENGTH ? entry : { ...entry, received };
 }
 
 /**

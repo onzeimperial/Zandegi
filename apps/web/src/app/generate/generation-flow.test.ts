@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { runGeneration, type GenerationFetch } from "./generation-flow";
+import { GENERATION_ERROR_CODES } from "@zandegi/api/client";
+import { responseToErrorCode, runGeneration, type GenerationFetch } from "./generation-flow";
 
 const encoder = new TextEncoder();
 function response(...messages: unknown[]) {
@@ -103,5 +104,21 @@ describe("generation orchestration", () => {
     const pending = runGeneration({ rawText: "goal" }, controller.signal, vi.fn(), fetcher);
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  });
+});
+
+describe("what the screen does about each error code", () => {
+  const SPECIAL: Record<string, string> = {
+    SIGN_IN_REQUIRED: "go-home",
+    ACCOUNT_NOT_ALLOWED: "go-home",
+    DAILY_LIMIT_REACHED: "show-daily-limit",
+  };
+
+  it.each([...GENERATION_ERROR_CODES])("answers %s", (code) => {
+    expect(responseToErrorCode(code)).toBe(SPECIAL[code] ?? "offer-retry");
+  });
+
+  it.each([null, undefined, "INVALID_STREAM", "PREMATURE_EOF"])("offers a retry for %s", (code) => {
+    expect(responseToErrorCode(code)).toBe("offer-retry");
   });
 });

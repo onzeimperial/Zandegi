@@ -11,6 +11,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { responseToErrorCode } from "@/app/generate/generation-flow";
 import {
   MAX_EVIDENCE_PHOTO_BYTES,
   type AwardView,
@@ -103,8 +104,12 @@ export function CompleteStepPanel({
       });
       const body = (await response.json().catch(() => null)) as {
         result?: CompleteStepResult;
-        error?: { message?: string };
+        error?: { code?: string; message?: string };
       } | null;
+      if (responseToErrorCode(body?.error?.code) === "go-home") {
+        window.location.assign("/");
+        return;
+      }
       if (!response.ok || body?.result === undefined) {
         setPhase({
           kind: "error",

@@ -37,9 +37,10 @@ describe("the detail fields", () => {
     });
   });
 
-  it("never rounds a small stated budget down to zero minutes", () => {
-    const request = toGenerationRequest("x", { ...emptyDetailsForm, hoursPerWeek: "0.001" }, "UTC");
-    expect(request.weeklyTimeBudgetMinutes).toBe(1);
+  it("accepts the smallest stated budget the error message promises", () => {
+    expect(validateDetailsForm({ ...emptyDetailsForm, hoursPerWeek: "0.5" }, TODAY)).toEqual({});
+    const request = toGenerationRequest("x", { ...emptyDetailsForm, hoursPerWeek: "0.5" }, "UTC");
+    expect(request.weeklyTimeBudgetMinutes).toBe(30);
   });
 
   it("flags a past date but allows today", () => {
@@ -49,7 +50,7 @@ describe("the detail fields", () => {
     expect(validateDetailsForm({ ...emptyDetailsForm, targetDate: TODAY }, TODAY)).toEqual({});
   });
 
-  it.each(["0", "-1", "169", "lots"])("flags %s hours", (hoursPerWeek) => {
+  it.each(["0", "0.001", "0.49", "-1", "169", "lots"])("flags %s hours", (hoursPerWeek) => {
     expect(validateDetailsForm({ ...emptyDetailsForm, hoursPerWeek }, TODAY)).toHaveProperty(
       "hoursPerWeek",
     );

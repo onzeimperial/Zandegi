@@ -268,7 +268,7 @@ describe("the daily cap", () => {
     expect(capped.status).toBe(429);
     const body = (await capped.json()) as { error: { code: string; message: string } };
     expect(body.error.code).toBe("DAILY_LIMIT_REACHED");
-    expect(body.error.message).not.toMatch(/upgrade|buy|premium|hurry|only|left/i);
+    expect(body.error.message).not.toMatch(/upgrade|buy|premium|hurry|only|left|tomorrow|built/i);
     expect(pipeline.calls).toBe(2);
 
     expect((await getMission(id)).status).toBe(200);

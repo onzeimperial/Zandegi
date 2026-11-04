@@ -1,10 +1,25 @@
 import { GenerationError } from "@zandegi/api";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const resolveRequestSession = vi.fn();
 const redirect = vi.fn((target: string) => {
   throw new Error(`redirect:${target}`);
 });
+
+const clerk = vi.hoisted(() => ({
+  userId: null as string | null,
+  email: "invited@example.com",
+  failure: null as Error | null,
+}));
+vi.mock("@clerk/nextjs/server", () => ({
+  auth: async () => {
+    if (clerk.failure !== null) throw clerk.failure;
+    return { userId: clerk.userId };
+  },
+  currentUser: async () => ({
+    emailAddresses: [{ emailAddress: clerk.email, verification: { status: "verified" } }],
+  }),
+}));
 
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("next/navigation", () => ({ redirect: (target: string) => redirect(target) }));
@@ -62,5 +77,43 @@ describe("the generate page's guard", () => {
     vi.stubEnv("CLERK_SECRET_KEY", "");
     await expect(GenerateLayout({ children })).rejects.toThrow("redirect:/");
     vi.unstubAllEnvs();
+  });
+});
+
+describe("the generate page's guard with Clerk active", () => {
+  const children = "the form";
+
+  beforeEach(() => {
+    clerk.userId = null;
+    clerk.email = "invited@example.com";
+    clerk.failure = null;
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("CLERK_SECRET_KEY", "sk_test_x");
+    vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "pk_test_x");
+    vi.stubEnv("ZANDEGI_ALLOWED_EMAILS", "invited@example.com");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("renders the form for an invited person", async () => {
+    clerk.userId = "user_a";
+    await expect(GenerateLayout({ children })).resolves.toBe(children);
+  });
+
+  it("sends someone not invited home", async () => {
+    clerk.userId = "user_b";
+    clerk.email = "stranger@example.com";
+    await expect(GenerateLayout({ children })).rejects.toThrow("redirect:/");
+  });
+
+  it("sends a signed-out person home", async () => {
+    await expect(GenerateLayout({ children })).rejects.toThrow("redirect:/");
+  });
+
+  it("sends everyone home when Clerk cannot answer", async () => {
+    clerk.failure = new Error("clerk down");
+    await expect(GenerateLayout({ children })).rejects.toThrow("redirect:/");
   });
 });

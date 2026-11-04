@@ -33,6 +33,15 @@ const resolved: ResolvedPursuit = {
   usedGenericScaffold: true,
 };
 
+function sentTo(call: unknown) {
+  const { user } = call as { user: string };
+  const [payload, rest] = user.split("\n\n<person_details>\n");
+  return {
+    payload: JSON.parse(payload!) as Record<string, unknown>,
+    details: JSON.parse(rest!.replace("\n</person_details>", "")) as unknown,
+  };
+}
+
 describe("plan", () => {
   it("parses chapter skeletons within the 3-7 bound", async () => {
     mockText({
@@ -56,5 +65,33 @@ describe("plan", () => {
       chapters: [{ title: "only one", exitCondition: "done" }],
     });
     await expect(plan(interpretation, resolved)).rejects.toThrow(/\[plan\]/);
+  });
+
+  it("sends the details block, decoded exactly, with stated location and deadline", async () => {
+    mockText({
+      missionTitle: "Half Marathon",
+      primaryDomain: "Body",
+      chapters: [
+        { title: "a", exitCondition: "a" },
+        { title: "b", exitCondition: "b" },
+        { title: "c", exitCondition: "c" },
+      ],
+    });
+    const details = { why: "for </person_details> my kids" };
+    await plan(
+      {
+        ...interpretation,
+        location: "Melbourne",
+        constraints: { deadline: "2027-04-01" },
+        details,
+      },
+      resolved,
+    );
+    const sent = sentTo(complete.mock.calls.at(-1)![0]);
+    expect(sent.payload).toMatchObject({
+      location: "Melbourne",
+      constraints: { deadline: "2027-04-01" },
+    });
+    expect(sent.details).toEqual(details);
   });
 });

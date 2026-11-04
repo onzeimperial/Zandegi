@@ -33,6 +33,7 @@ export const emptyDetailsForm: DetailsFormValues = {
 };
 
 const MINUTES_PER_HOUR = 60;
+export const MIN_HOURS_PER_WEEK = 0.5;
 export const MAX_HOURS_PER_WEEK = LIMITS.maxWeeklyTimeBudgetMinutes / MINUTES_PER_HOUR;
 
 const FREE_TEXT = ["startingPoint", "why", "resources", "planAround"] as const;
@@ -67,8 +68,8 @@ export function validateDetailsForm(values: DetailsFormValues, today: string): D
   const hours = values.hoursPerWeek.trim();
   if (hours !== "") {
     const parsed = Number(hours);
-    if (!Number.isFinite(parsed) || parsed <= 0 || parsed > MAX_HOURS_PER_WEEK) {
-      errors.hoursPerWeek = `Enter a number of hours from 0.5 to ${MAX_HOURS_PER_WEEK}.`;
+    if (!Number.isFinite(parsed) || parsed < MIN_HOURS_PER_WEEK || parsed > MAX_HOURS_PER_WEEK) {
+      errors.hoursPerWeek = `Enter a number of hours from ${MIN_HOURS_PER_WEEK} to ${MAX_HOURS_PER_WEEK}.`;
     }
   }
   return errors;
@@ -98,10 +99,7 @@ export function toGenerationRequest(
     ...(hours === ""
       ? {}
       : {
-          weeklyTimeBudgetMinutes: Math.max(
-            LIMITS.minWeeklyTimeBudgetMinutes,
-            Math.round(Number(hours) * MINUTES_PER_HOUR),
-          ),
+          weeklyTimeBudgetMinutes: Math.round(Number(hours) * MINUTES_PER_HOUR),
         }),
     ...(Object.keys(details).length === 0 ? {} : { details }),
   };

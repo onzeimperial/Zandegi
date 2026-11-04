@@ -46,6 +46,9 @@ beforeAll(async () => {
   await server.start();
   url = `postgresql://postgres:postgres@127.0.0.1:${port}/postgres?sslmode=disable`;
   store = await createPostgresDemoStore({ url });
+  // The first query loads the client and connects, which can outlast the default
+  // timeout of whichever test happens to run first.
+  await store.listMissions("warm-up");
 }, SLOW);
 
 afterAll(async () => {
@@ -97,6 +100,7 @@ describe("postgres durability and integrity", () => {
       (owner: string) => `UPDATE "LedgerEntry" SET "entry" = '{}' WHERE "ownerId" = '${owner}'`,
     ],
     ["DELETE", (owner: string) => `DELETE FROM "LedgerEntry" WHERE "ownerId" = '${owner}'`],
+    ["TRUNCATE", () => `TRUNCATE "LedgerEntry"`],
   ])("rejects %s on the ledger in the database itself", async (operation, sql) => {
     const owner = await ownerWithLedgerEntry();
     await expect(database.query(sql(owner))).rejects.toThrow(`append-only: ${operation}`);

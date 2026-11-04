@@ -6,6 +6,17 @@ import type {
 import { consumeGenerationStream, GenerationStreamError } from "./sse";
 import { generationRequestInit } from "./request";
 
+export type ErrorResponse = "go-home" | "show-daily-limit" | "offer-retry";
+
+/**
+ * What the screen does about a refusal. A lapsed session or removed invite can
+ * never succeed on retry, and the home page explains which it was.
+ */
+export function responseToErrorCode(code: string | null | undefined): ErrorResponse {
+  if (code === "SIGN_IN_REQUIRED" || code === "ACCOUNT_NOT_ALLOWED") return "go-home";
+  return code === "DAILY_LIMIT_REACHED" ? "show-daily-limit" : "offer-retry";
+}
+
 export type GenerationFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 export async function runGeneration(
   request: GenerateMissionRequest,

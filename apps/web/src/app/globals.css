@@ -2299,10 +2299,17 @@ h3 {
   font-weight: 700;
   color: var(--muted);
 }
-.auth-loading {
-  min-height: 420px;
+.auth-sign-in {
+  /* Clerk's email card with its footer. Loading and failed states share this box. */
+  min-height: 480px;
   width: 400px;
   max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.auth-loading {
   display: flex;
   align-items: center;
   justify-content: center;

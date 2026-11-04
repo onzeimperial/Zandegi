@@ -1,6 +1,6 @@
 "use client";
 
-import { SignIn, SignOutButton } from "@clerk/nextjs";
+import { ClerkFailed, ClerkLoading, SignIn, SignOutButton } from "@clerk/nextjs";
 import { createContext, useContext } from "react";
 
 /**
@@ -25,18 +25,29 @@ export function SignOut({ className }: { className: string }) {
   );
 }
 
-/** One form for signing in and for an invited person's first visit. */
+/**
+ * One form for signing in and for an invited person's first visit. Loading, the
+ * form and a failed load share one reserved box, so nothing jumps when Clerk
+ * arrives. The retry is a full page load, because that is what reloads Clerk.
+ */
 export function SignInCard() {
   return (
-    <SignIn
-      routing="hash"
-      withSignUp
-      forceRedirectUrl="/path"
-      fallback={
+    <div className="auth-sign-in">
+      <ClerkLoading>
         <p className="auth-loading" role="status">
           Loading sign-in
         </p>
-      }
-    />
+      </ClerkLoading>
+      <ClerkFailed>
+        <div className="auth-card" role="alert">
+          <h1 className="d">Sign-in didn&#39;t load</h1>
+          <p>Check your connection, then try again.</p>
+          <a className="d flow-primary" href="/">
+            Try again
+          </a>
+        </div>
+      </ClerkFailed>
+      <SignIn routing="hash" withSignUp forceRedirectUrl="/path" />
+    </div>
   );
 }

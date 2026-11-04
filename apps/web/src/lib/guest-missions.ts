@@ -2,8 +2,9 @@
  * Server-side loading of the current person's missions, for server components.
  *
  * It is the page-level twin of `GET /api/missions/[id]`: the same session
- * resolution, the same rule that a read never mints a principal, and the same
- * ownership-checked use case behind it. In guest mode, visiting a page without a
+ * resolution, the same rule that a read never mints a guest, and the same
+ * ownership-checked use case behind it. An invited person's first read does create
+ * their account principal. In guest mode, visiting a page without a
  * cookie is visiting it without any missions, not an error. Someone who may not
  * be here at all goes home, which explains why.
  *
