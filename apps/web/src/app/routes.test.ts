@@ -54,6 +54,14 @@ describe("designed route contract", () => {
     expect(source).not.toContain("time blocks");
     expect(source).not.toContain("/builder");
   });
+  it("keeps fixture screens out of the nav, so no invented number reaches a real person", () => {
+    const shell = readFileSync(join(appDirectory, "..", "components", "app-shell.tsx"), "utf8");
+    for (const hidden of ["/crew", "/shop", "/profile", "/builder", "/customise", "/complete"]) {
+      expect(shell, hidden).not.toContain(hidden);
+    }
+    expect(shell).toContain('href: "/path"');
+    expect(shell).toContain('href="/generate"');
+  });
   it("keeps the responsive canvas, focus, and reduced-motion contracts", () => {
     const globalCss = readFileSync(join(appDirectory, "globals.css"), "utf8");
     expect(globalCss).toMatch(/prefers-reduced-motion:\s*reduce/);

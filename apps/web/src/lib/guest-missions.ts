@@ -1,31 +1,23 @@
 /**
- * Server-side loading of the current guest's missions, for server components.
+ * Server-side loading of the current person's missions, for server components.
  *
- * It is the page-level twin of `GET /api/missions/[id]`: the same guest
+ * It is the page-level twin of `GET /api/missions/[id]`: the same session
  * resolution, the same rule that a read never mints a principal, and the same
- * ownership-checked use case behind it. Visiting a page without a cookie is
- * visiting it without any missions, not an error.
+ * ownership-checked use case behind it. In guest mode, visiting a page without a
+ * cookie is visiting it without any missions, not an error. Someone who may not
+ * be here at all goes home, which explains why.
  *
  * One thing a page cannot do that the route can: write a cookie. A server
- * component renders after headers are committed, so viewing the path renews the
+ * component renders after headers are committed, so viewing the path renews a
  * guest's window in the store but not the browser cookie's own expiry.
  * Generating a mission does both.
  */
 
 import { headers } from "next/headers";
-import {
-  demoPortsFromEnv,
-  foldProgress,
-  guestCookiePolicyFromEnv,
-  listMissions,
-  randomIdGenerator,
-  randomTokenSource,
-  readProgress,
-  resolveGuest,
-  sha256TokenHasher,
-  systemClock,
-} from "@zandegi/api";
+import { redirect } from "next/navigation";
+import { GenerationError, foldProgress, listMissions, readProgress } from "@zandegi/api";
 import type { ProgressView, StoredMissionView } from "@zandegi/api/client";
+import { isAccessRefusal, resolveRequestSession } from "./session";
 
 export type GuestMissions =
   | { status: "ready"; missions: StoredMissionView[]; progress: ProgressView }
@@ -33,27 +25,18 @@ export type GuestMissions =
 
 export async function loadGuestMissions(): Promise<GuestMissions> {
   try {
-    const ports = await demoPortsFromEnv();
-    const guest = await resolveGuest(
-      (await headers()).get("cookie"),
-      guestCookiePolicyFromEnv(process.env),
-      {
-        clock: systemClock,
-        ids: randomIdGenerator,
-        tokens: randomTokenSource,
-        hasher: sha256TokenHasher,
-        guests: ports.guests,
-      },
-    );
+    const session = await resolveRequestSession((await headers()).get("cookie"), { mint: false });
     // No guest means a brand-new character: level 1, no XP, nothing done.
-    if (guest === null) return { status: "ready", missions: [], progress: foldProgress([]) };
+    if (session === null) return { status: "ready", missions: [], progress: foldProgress([]) };
 
     const [missions, progress] = await Promise.all([
-      listMissions({ principal: guest.principal }, { persistence: ports.persistence }),
-      readProgress({ principal: guest.principal }, { ledger: ports.ledger }),
+      listMissions({ principal: session.principal }, { persistence: session.ports.persistence }),
+      readProgress({ principal: session.principal }, { ledger: session.ports.ledger }),
     ]);
     return { status: "ready", missions, progress };
   } catch (error) {
+    // `redirect` works by throwing, so it belongs here rather than in the try.
+    if (error instanceof GenerationError && isAccessRefusal(error.code)) redirect("/");
     // The detail stays in the server log. A page only ever learns that the
     // store could not answer, never why.
     console.error(

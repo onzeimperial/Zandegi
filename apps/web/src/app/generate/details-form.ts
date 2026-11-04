@@ -41,10 +41,10 @@ const FREE_TEXT = ["startingPoint", "why", "resources", "planAround"] as const;
 export const FIELD_ORDER: readonly DetailsFormField[] = [
   "startingPoint",
   "why",
-  "targetDate",
-  "hoursPerWeek",
   "resources",
   "planAround",
+  "hoursPerWeek",
+  "targetDate",
   "location",
 ];
 

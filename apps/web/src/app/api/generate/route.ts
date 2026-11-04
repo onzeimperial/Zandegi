@@ -9,15 +9,16 @@
  *
  * The order of the checks below is the security design, not an accident:
  *
- *   1. the feature gate, so a production deploy that has not opted in serves
- *      nothing;
+ *   1. the auth mode, so a production deploy without Clerk keys and an allowlist
+ *      serves nothing;
  *   2. the origin check, so a cross-site caller is turned away before the body
  *      is read, before a principal exists, and long before a model call;
  *   3. the body, so a request that names its own owner is rejected as an
  *      unknown field before any identity is created;
- *   4. the guest principal, whose `Set-Cookie` must be written onto the
- *      `Response` this function constructs — once the stream's body starts,
- *      the headers are gone and there is no `cookies()` mutation left to make.
+ *   4. the session, which refuses a signed-out or uninvited person. A guest's
+ *      `Set-Cookie` must be written onto the `Response` this function
+ *      constructs: once the stream's body starts, the headers are gone;
+ *   5. the daily cap, the last thing before money is spent.
  */
 
 import {
@@ -25,25 +26,29 @@ import {
   GenerationError,
   allowedOriginsFromEnv,
   assertSameSiteRequest,
+  authModeFromEnv,
   trustsForwardedOrigin,
   cancellationFrom,
-  demoPortsFromEnv,
+  claimDailyGeneration,
+  dailyGenerationLimitFromEnv,
   emptyKnowledge,
   generateMission,
   generationErrorBody,
-  guestCookiePolicyFromEnv,
   parseGenerateMissionRequest,
   randomIdGenerator,
-  randomTokenSource,
-  resolveOrMintGuest,
-  sha256TokenHasher,
   systemClock,
   type GenerateMissionRequest,
   type GenerationErrorCode,
   type GenerationProgress,
-  type GuestSession,
   type ModelOutputRejection,
 } from "@zandegi/api";
+
+import {
+  ACCESS_STATUS,
+  isAccessRefusal,
+  resolveRequestSession,
+  type RequestSession,
+} from "@/lib/session";
 
 import { recordIncident } from "./incidents";
 
@@ -156,10 +161,7 @@ async function readBoundedJson(req: Request): Promise<unknown> {
 
 export async function POST(req: Request) {
   const requestId = crypto.randomUUID();
-  if (
-    process.env.NODE_ENV === "production" &&
-    process.env.ENABLE_UNAUTHENTICATED_GENERATION !== "true"
-  ) {
+  if (authModeFromEnv(process.env) === "disabled") {
     return jsonError(503, "GENERATION_DISABLED", requestId);
   }
 
@@ -193,33 +195,30 @@ export async function POST(req: Request) {
     return jsonError(400, "INVALID_REQUEST", requestId);
   }
 
-  // Step 4. A cookie we cannot resolve — tampered, unknown or expired — mints
-  // a fresh principal rather than surfacing an error, because there is no
-  // recovery action an anonymous visitor could take and saying so would only
-  // confirm the server recognised something.
-  let guest: GuestSession;
-  let persistence;
+  // Step 4 and step 5. In guest mode a cookie we cannot resolve mints a fresh
+  // principal rather than surfacing an error, because there is no recovery action
+  // an anonymous visitor could take. Neither step has spent anything yet.
+  let session: RequestSession;
   try {
-    const ports = await demoPortsFromEnv();
-    persistence = ports.persistence;
-    guest = await resolveOrMintGuest(
-      req.headers.get("cookie"),
-      guestCookiePolicyFromEnv(process.env),
-      {
-        clock: systemClock,
-        ids: randomIdGenerator,
-        tokens: randomTokenSource,
-        hasher: sha256TokenHasher,
-        guests: ports.guests,
-      },
+    const resolved = await resolveRequestSession(req.headers.get("cookie"), { mint: true });
+    if (resolved === null) throw new GenerationError("STORE_UNAVAILABLE", "minting returned null");
+    session = resolved;
+    await claimDailyGeneration(
+      { principal: session.principal, limit: dailyGenerationLimitFromEnv(process.env) },
+      { usage: session.ports.usage, clock: systemClock },
     );
   } catch (error) {
-    logDiagnostic(
-      requestId,
-      "STORE_UNAVAILABLE",
-      error instanceof GenerationError ? error.diagnostic : "identity store unreachable",
-    );
-    return jsonError(503, "STORE_UNAVAILABLE", requestId);
+    const code: GenerationErrorCode =
+      error instanceof GenerationError ? error.code : "STORE_UNAVAILABLE";
+    // Someone being turned away, or at the day's cap, is not an incident.
+    if (!isAccessRefusal(code) && code !== "DAILY_LIMIT_REACHED") {
+      logDiagnostic(
+        requestId,
+        code,
+        error instanceof GenerationError ? error.diagnostic : "identity store unreachable",
+      );
+    }
+    return jsonError(ACCESS_STATUS[code] ?? 503, code, requestId);
   }
 
   const encoder = new TextEncoder();
@@ -272,7 +271,7 @@ export async function POST(req: Request) {
         const generation = generateMission(
           {
             request,
-            principal: guest.principal,
+            principal: session.principal,
             onProgress: (event: GenerationProgress) => {
               if (!abortController.signal.aborted) send({ type: "progress", event });
             },
@@ -282,7 +281,7 @@ export async function POST(req: Request) {
             ids: randomIdGenerator,
             cancellation: cancellationFrom(abortController.signal),
             knowledge: emptyKnowledge,
-            persistence,
+            persistence: session.ports.persistence,
             onOutputRejected: (rejection) => logRejection(requestId, rejection),
           },
         );
@@ -331,7 +330,7 @@ export async function POST(req: Request) {
       "X-Request-Id": requestId,
       // Written here because this is the last moment it can be: the stream's
       // body starts the instant this Response is returned.
-      "Set-Cookie": guest.setCookie,
+      ...(session.setCookie === undefined ? {} : { "Set-Cookie": session.setCookie }),
     },
   });
 }

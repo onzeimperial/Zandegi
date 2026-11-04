@@ -84,7 +84,10 @@ async function seedMission(): Promise<{ missionId: string; cookie: string }> {
 
 beforeEach(() => {
   vi.stubEnv("NODE_ENV", "test");
-  vi.stubEnv("ENABLE_UNAUTHENTICATED_GENERATION", "");
+  vi.stubEnv("DATABASE_URL", "");
+  vi.stubEnv("CLERK_SECRET_KEY", "");
+  vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "");
+  vi.stubEnv("ZANDEGI_DAILY_GENERATION_LIMIT", "");
   // No Upstash credentials: the route must work against the in-memory twin.
   vi.stubEnv("UPSTASH_REDIS_REST_URL", "");
   vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "");

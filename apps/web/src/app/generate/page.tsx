@@ -200,6 +200,7 @@ export default function GeneratePage() {
         <div className="flow-body">
           <form
             className="ambition-wrap"
+            noValidate
             onSubmit={(event) => {
               event.preventDefault();
               void startGeneration(rawText);

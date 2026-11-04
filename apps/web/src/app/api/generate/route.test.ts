@@ -56,7 +56,10 @@ beforeEach(() => {
     },
   });
   vi.stubEnv("NODE_ENV", "test");
-  vi.stubEnv("ENABLE_UNAUTHENTICATED_GENERATION", "");
+  vi.stubEnv("DATABASE_URL", "");
+  vi.stubEnv("CLERK_SECRET_KEY", "");
+  vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "");
+  vi.stubEnv("ZANDEGI_DAILY_GENERATION_LIMIT", "");
   // No Upstash credentials: the route must work against the in-memory twin.
   vi.stubEnv("UPSTASH_REDIS_REST_URL", "");
   vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "");
@@ -121,9 +124,45 @@ describe("POST /api/generate", () => {
     expect(await response.json()).toMatchObject({ error: { code: "GENERATION_DISABLED" } });
   });
 
-  it("streams a result with a request ID when explicitly enabled", async () => {
+  it("no longer lets the old switch open production to anonymous callers", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("ENABLE_UNAUTHENTICATED_GENERATION", "true");
+    const response = await POST(request(JSON.stringify({ rawText: "run" })));
+    expect(response.status).toBe(503);
+    expect(generateMission).not.toHaveBeenCalled();
+  });
+
+  it("passes details through to the use case once they validate", async () => {
+    const body = {
+      rawText: "run",
+      timezone: "Australia/Melbourne",
+      location: "Melbourne",
+      weeklyTimeBudgetMinutes: 150,
+      details: {
+        startingPoint: "I jog 2km",
+        why: "my kids",
+        targetDate: "2099-01-01",
+        resources: "shoes",
+        planAround: "shifts",
+      },
+    };
+    await (await POST(request(JSON.stringify(body)))).text();
+    expect((generateMission.mock.calls[0]![0] as { request: unknown }).request).toEqual(body);
+  });
+
+  it("caps a guest's generations before any model call, too", async () => {
+    vi.stubEnv("ZANDEGI_DAILY_GENERATION_LIMIT", "1");
+    const first = await POST(request(JSON.stringify({ rawText: "run" })));
+    await first.text();
+    const cookie = first.headers.get("set-cookie")!.split(";", 1)[0]!;
+    const second = await POST(
+      request(JSON.stringify({ rawText: "run" }), { headers: { Cookie: cookie } }),
+    );
+    expect(second.status).toBe(429);
+    expect(generateMission).toHaveBeenCalledOnce();
+  });
+
+  it("streams a result with a request ID in guest mode", async () => {
     const response = await POST(request(JSON.stringify({ rawText: "run" })));
     const text = await response.text();
     expect(response.status).toBe(200);

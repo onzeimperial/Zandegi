@@ -1,10 +1,10 @@
 /**
  * Complete one step of the caller's own mission.
  *
- * A mutation, so it is guarded like generation: the production gate, then the
- * origin check before the body is read, then the body, then the guest. It
- * never mints a guest -- completing a step means owning a mission, and a
- * caller without a resolvable cookie owns nothing.
+ * A mutation, so it is guarded like generation: the auth mode, then the origin
+ * check before the body is read, then the body, then the session. It never
+ * mints a guest -- completing a step means owning a mission, and a caller
+ * without a resolvable cookie owns nothing.
  *
  * The body is multipart form data: `chapter`, `step`, `evidence` ("SELF" or
  * "ARTIFACT") and, for a photo, `photo`. The photo is checked and fingerprinted
@@ -15,20 +15,17 @@ import {
   GenerationError,
   allowedOriginsFromEnv,
   assertSameSiteRequest,
+  authModeFromEnv,
   completeStep,
-  demoPortsFromEnv,
   generationErrorBody,
-  guestCookiePolicyFromEnv,
   randomIdGenerator,
-  randomTokenSource,
-  resolveGuest,
-  sha256TokenHasher,
   systemClock,
   trustsForwardedOrigin,
   type CompletionEvidenceInput,
   type GenerationErrorCode,
 } from "@zandegi/api";
 import { MAX_EVIDENCE_PHOTO_BYTES } from "@zandegi/api/client";
+import { ACCESS_STATUS, isAccessRefusal, resolveRequestSession } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +34,7 @@ export const dynamic = "force-dynamic";
 const MAX_BODY_BYTES = MAX_EVIDENCE_PHOTO_BYTES + 64 * 1024;
 
 const STATUS: Partial<Record<GenerationErrorCode, number>> = {
+  ...ACCESS_STATUS,
   INVALID_REQUEST: 400,
   CROSS_SITE_REQUEST: 403,
   MISSION_NOT_FOUND: 404,
@@ -44,8 +42,6 @@ const STATUS: Partial<Record<GenerationErrorCode, number>> = {
   PAYLOAD_TOO_LARGE: 413,
   UNSUPPORTED_MEDIA_TYPE: 415,
   EVIDENCE_REJECTED: 422,
-  GENERATION_DISABLED: 503,
-  STORE_UNAVAILABLE: 503,
 };
 
 function jsonError(code: GenerationErrorCode, requestId: string): Response {
@@ -66,10 +62,7 @@ function indexField(value: FormDataEntryValue | null): number | undefined {
 
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
   const requestId = crypto.randomUUID();
-  if (
-    process.env.NODE_ENV === "production" &&
-    process.env.ENABLE_UNAUTHENTICATED_GENERATION !== "true"
-  ) {
+  if (authModeFromEnv(process.env) === "disabled") {
     return jsonError("GENERATION_DISABLED", requestId);
   }
 
@@ -123,25 +116,14 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 
   try {
     const { id } = await context.params;
-    const ports = await demoPortsFromEnv();
-    const guest = await resolveGuest(
-      req.headers.get("cookie"),
-      guestCookiePolicyFromEnv(process.env),
-      {
-        clock: systemClock,
-        ids: randomIdGenerator,
-        tokens: randomTokenSource,
-        hasher: sha256TokenHasher,
-        guests: ports.guests,
-      },
-    );
-    if (guest === null) return jsonError("MISSION_NOT_FOUND", requestId);
+    const session = await resolveRequestSession(req.headers.get("cookie"), { mint: false });
+    if (session === null) return jsonError("MISSION_NOT_FOUND", requestId);
 
     const result = await completeStep(
-      { principal: guest.principal, missionId: id, chapterIndex, stepIndex, evidence },
+      { principal: session.principal, missionId: id, chapterIndex, stepIndex, evidence },
       {
-        persistence: ports.persistence,
-        ledger: ports.ledger,
+        persistence: session.ports.persistence,
+        ledger: session.ports.ledger,
         clock: systemClock,
         ids: randomIdGenerator,
       },
@@ -153,13 +135,13 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
         headers: {
           "X-Request-Id": requestId,
           "Cache-Control": "no-store",
-          "Set-Cookie": guest.setCookie,
+          ...(session.setCookie === undefined ? {} : { "Set-Cookie": session.setCookie }),
         },
       },
     );
   } catch (error) {
     if (error instanceof GenerationError) {
-      logDiagnostic(requestId, error.code, error.diagnostic);
+      if (!isAccessRefusal(error.code)) logDiagnostic(requestId, error.code, error.diagnostic);
       return jsonError(error.code, requestId);
     }
     logDiagnostic(requestId, "STORE_UNAVAILABLE", "non-api failure");

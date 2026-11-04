@@ -9,11 +9,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@clerk/nextjs": "7.9.24",
+    "@zandegi/api": "workspace:*",
+    "@zandegi/core": "workspace:*",
     "next": "15.5.27",
     "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "@zandegi/core": "workspace:*",
-    "@zandegi/api": "workspace:*"
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",

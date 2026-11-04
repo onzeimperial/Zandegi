@@ -115,7 +115,10 @@ async function post(
 
 beforeEach(() => {
   vi.stubEnv("NODE_ENV", "test");
-  vi.stubEnv("ENABLE_UNAUTHENTICATED_GENERATION", "");
+  vi.stubEnv("DATABASE_URL", "");
+  vi.stubEnv("CLERK_SECRET_KEY", "");
+  vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "");
+  vi.stubEnv("ZANDEGI_DAILY_GENERATION_LIMIT", "");
   vi.stubEnv("UPSTASH_REDIS_REST_URL", "");
   vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "");
   vi.stubEnv("ZANDEGI_MISSION_STORE", "");
@@ -227,9 +230,9 @@ describe("POST /api/missions/[id]/complete", () => {
     expect(unsized.status).toBe(400);
   });
 
-  it("is off in production unless explicitly enabled", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+  it("is off in production without Clerk", async () => {
     const { missionId, cookie } = await seedMission();
+    vi.stubEnv("NODE_ENV", "production");
     const response = await post(missionId, form({ chapter: "0", step: "0", evidence: "SELF" }), {
       cookie,
     });
