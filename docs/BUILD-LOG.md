@@ -88,6 +88,17 @@ Neon accounts.
 
 ---
 
+### Independent review of the two-person test
+
+Three separate reviewers read the full diff. Fixes are in `171e8eb`; the triage of every finding is in the spec.
+
+- **Fixed, behaviour:** free-text location now reaches the safety classifier; a `BEFORE TRUNCATE` trigger closes the ledger's last gap; a lapsed session on the step screen goes home instead of dead-ending; daily-cap copy no longer claims missions were built; preview builds no longer migrate; a long echoed value is dropped from diagnostics rather than truncated.
+- **Fixed, tests:** the abort test was passing on its own failed assertion. The middleware, the `/generate` guard, sign-out, the port cache and the details block in each stage prompt now have executing tests.
+- **Verified:** `pnpm verify` passes (631 tests). The Postgres suite passed five runs in a row after one unexplained failure during the fixes, whose cause was never seen. Real runs: worrying text only in location returned `support` with no plan call, and an ordinary location built a full mission.
+- **Still unverified:** everything needing real Clerk, Neon or Vercel accounts, and the 480px reserved height for the sign-in card.
+- **Learned:** Clerk production instances need an owned domain, so the test uses a development instance on `vercel.app`.
+- **Next step:** follow "Deploying the two-person test" in `README.md`, then run its checks.
+
 ## 2026-11-04 - generation failures: real enums, one retry, and a record that survives
 
 **Shipped**

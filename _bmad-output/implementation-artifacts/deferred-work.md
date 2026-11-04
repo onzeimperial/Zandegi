@@ -56,3 +56,11 @@
 - source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-two-person-mvp-test.md`
   summary: `.env.example` still names the legacy AI, rate-limit and knowledge variables that nothing current reads. The SQLite and NextAuth blocks are gone, which closes that part of the Story 1.2 config item; fail-fast validation stays with it.
   evidence: Only variables this spec touched were changed.
+
+- source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-two-person-mvp-test.md`
+  summary: Let the grounding validator recognise prices and dates the person stated themselves, so a step can say "your $200 budget" or "before March 2027" without being rewritten or dropped.
+  evidence: `packages/ai/src/grounding.ts:26,30` flags these wherever they came from, and always has for goal text. Details make it more likely to come up. Exempting a person's own words needs a decision on how law 6 applies to them.
+
+- source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-two-person-mvp-test.md`
+  summary: Unverified, medium if true: when a worrying detail makes stage 1 or 2 fail or the model refuse, the person may see a build failure and a retry instead of the support route.
+  evidence: Three real wordings reached `support`, and no real run has produced this failure. A real run in which a model refuses at stage 1 or 2 with worrying text would settle it.

@@ -2,7 +2,7 @@
 title: 'Two-person MVP test: detailed goals, Postgres, Clerk sign-in'
 type: 'feature'
 created: '2026-11-04'
-status: 'in-progress'
+status: 'done'
 baseline_commit: 'd97b0f3b5fbcfe8f797e0fb6edc06b750dd045e4'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -103,6 +103,54 @@ ext dev` from `appsweb`. No Docker. No Neon or Clerk credentials exist yet.
 ## Spec Change Log
 
 ## Review Triage Log
+
+Loop 1. B = blind, V = verification gap, E = edge case. Verification-gap gaps arrive pre-verified.
+
+| ID | Finding | Verdict | Route | Evidence |
+|----|---------|---------|-------|----------|
+| B1, E4 | Step screen dead-ends on a lapsed session | medium | patch | `complete-step-panel.tsx:108` prints the message only; `generate/page.tsx:149` already redirects. |
+| B2 | No `signUpForceRedirectUrl` on `SignInCard` | maybe-false, low if true | rejected | Clerk's docs disagree on the prop; a person landing on `/` is sent on to `/path` anyway. README check added under B3. |
+| B3 | README does not name the Clerk instance | medium | patch | Clerk's Vercel guide: production needs a domain you control; `*.vercel.app` uses development keys. The sign-up restriction half is low: the server allowlist holds. |
+| B4, E23 | Privacy notice removed | low | rejected | The old links were placeholders and the only users are the operator and their partner. Raised with the human instead. |
+| B5 | No deletion path | low | rejected | Mission rows have no trigger and can be deleted by SQL; a two-person test needs no flow. |
+| B6 | Mission review has no edit action | low | rejected | The spec removed the fixture link deliberately; the screen behind it was never real. |
+| B7 | Refusals and cancels spend a slot | low | rejected | Their model calls were paid for; five in a day is unlikely, and the limit is configurable. |
+| B8, E5 | Cap copy says missions were built when none were | medium | patch | `page.tsx:350,425` and `client.ts:311` assert success unconditionally. |
+| E6 | "Tomorrow" is wrong for a UTC reset | low | patch | `usage.ts:31` counts UTC days; copy-only fix. |
+| B9, E17 | Location never reaches the classifier | high | patch | `02-resolve.ts:72` omits it, while the form exposes it as free text and stages 4 and 5 receive it. |
+| E18 | Goal and location sit outside the data rule | low | rejected | Only invited people can reach it, and only their own plan is affected. |
+| B10, E24 | A long echoed detail can reach logs in `received` | low | patch | `schemas.ts:188` truncates before exact-match redaction, so a long value never matches. |
+| B11 | Grounding strips person-stated prices and dates | low | defer | `grounding.ts:26,30` flag these wherever they come from, and always did for goal text. |
+| B12, E2 | Every preview build runs migrations | medium | patch | `vercel.json:5` runs `db:deploy` unconditionally; Production-only variables fail the build. Rollback notes rejected as low. |
+| E3 | README says a missing URL gives 503 | low | patch | `migrate deploy` fails the build first. Direct doc correction. |
+| B13 | Invite changes and a mode-table row undocumented | low | patch | `authModeFromEnv` returns `clerk` for keys, non-production, empty list. Direct doc correction. |
+| B14 | No post-deploy test plan | false | rejected | A delivery note, not a defect in this diff; the run recommendation covers it. |
+| B15, E7, V-other | Hours validator disagrees with its copy | low | patch | `details-form.ts:70` accepts above 0; the message says from 0.5. |
+| E8 | `badInput` silently blanks hours or a date | low | rejected | Needs a partly typed date or a non-numeric entry on a numeric keypad; adds a branch. |
+| B16 | Sign-in fallback shifts layout, no failed state | medium | patch | `account.tsx:35`; section 6 applies. Theming half rejected: `docs/DESIGN.md` does not exist. |
+| B17, E13 | Middleware does not trim keys; session comment overclaims | low | patch | `middleware.ts:10` against `account.ts:55`; `layout.tsx` imports Clerk statically. |
+| B18, V-other | Spec notes garbled | low | rejected | The fix edits this build's spec. |
+| V1 | Interpret abort test passes on its own failed assertion | medium | patch | `pipeline.test.ts:644` still reads the signal from argument two. |
+| V2 | Details block untested in stages 1, 4 and 5 | medium | patch | Filed evidence. |
+| V3 | Stage 1 structured output unpinned | medium | patch | Filed evidence; this is the fix for a real incident. |
+| V4 | No test runs the middleware | medium | patch | Filed evidence. |
+| V5 | `/generate` guard untested in Clerk mode | medium | patch | Filed evidence. |
+| V6 | Refusal handling on `/generate` has no executing test | medium | patch | Filed evidence; extract the decision, keep the wiring a manual check. |
+| V7 | `globalThis` cache unverified | low | patch | Filed evidence. |
+| V8 | Sign-out provider wiring tested against a stub | medium | patch | Filed evidence. |
+| E1 | NUL or lone surrogate fails the insert after spend | low | rejected | Needs a hand-built request from an invited person. |
+| E9 | Five-digit year gets the wrong message | low | rejected | The server rejects it; only the wording is off. |
+| E10 | Limit above int4 breaks generation | low | rejected | Operator typo, visible at once. |
+| E11 | Store typo downgrades to memory | low | rejected | Outside production only; production refuses memory. |
+| E12 | Cache key misses a password change | low | rejected | Environment changes mean a new deployment and process. |
+| E14 | Midnight between two parses | low | rejected | A window of milliseconds. |
+| E15 | Impossible goal plus bad weights fails generically | low | rejected | Needs both at once; adds a guard. |
+| E16 | Worrying detail plus a stage failure shows a build error | maybe-false, medium if true | defer | Three real wordings reached `support`; a model refusal at stage 1 or 2 is untested. |
+| E19 | Model can infer a past deadline | low | rejected | The prompt forbids it, and stated dates override. |
+| E20 | A read creates a Principal row | low | patch | Harmless behaviour; the `guest-missions.ts` header comment is wrong. Comment fix only. |
+| E21 | Complete route parses the body before identity | low | rejected | Same-site check first and bounded by the photo limit; the order is documented. |
+| E25 | Rewrite pass lacks details | low | rejected | It edits single flagged sentences and keeps their meaning. |
+| E26 | Redis counts refused attempts | low | rejected | Dormant driver; only differs if the limit is raised mid-day. |
 
 ## Design Notes
 
