@@ -13,6 +13,7 @@
     "dev": "pnpm --filter @zandegi/web dev",
     "typecheck": "pnpm -r typecheck && tsc -p tsconfig.tooling.json",
     "test": "vitest run",
+    "incidents": "node scripts/generation-incidents.mjs",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write . \"!_bmad/**\"",
     "format:check": "prettier --check . \"!_bmad/**\"",

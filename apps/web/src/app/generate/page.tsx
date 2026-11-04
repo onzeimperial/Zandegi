@@ -13,6 +13,7 @@ import {
   visibleStageState,
 } from "./generator-state";
 import { runGeneration } from "./generation-flow";
+import { GenerationStreamError } from "./sse";
 
 const mascotSrc =
   "/design/mascot-abe2675ee7fc68d644fa0e93dc74b94ffb85b330e5b5e02bcac4b0ab8c569d29.png";
@@ -72,6 +73,9 @@ export default function GeneratePage() {
         dispatch({
           type: "error",
           message: error instanceof Error ? error.message : "Mission generation failed. Try again.",
+          ...(error instanceof GenerationStreamError && error.requestId !== undefined
+            ? { reference: error.requestId }
+            : {}),
         });
       }
     }
@@ -252,6 +256,7 @@ export default function GeneratePage() {
               <div className="alert" role="alert">
                 <h2>We couldn&rsquo;t finish that mission.</h2>
                 <p>{state.error}</p>
+                {state.errorReference !== null && <p>Reference: {state.errorReference}</p>}
                 <button className="button button-secondary" type="button" onClick={retry}>
                   Try again
                 </button>

@@ -65,6 +65,7 @@ beforeEach(() => {
   // Diagnostics are written to the server log, never to the response, so the
   // test output stays readable while the assertions below check the body.
   vi.spyOn(console, "error").mockImplementation(() => undefined);
+  vi.spyOn(console, "warn").mockImplementation(() => undefined);
 });
 
 afterEach(() => {
@@ -144,6 +145,7 @@ describe("POST /api/generate", () => {
       "clock",
       "ids",
       "knowledge",
+      "onOutputRejected",
       "persistence",
     ]);
     expect((ports.cancellation as { signal: AbortSignal }).signal).toBeInstanceOf(AbortSignal);
@@ -192,6 +194,38 @@ describe("POST /api/generate", () => {
       "[generate]",
       expect.stringContaining("detailChapter"),
     );
+  });
+
+  it("logs a rejected model response even when the retry recovers it", async () => {
+    generateMission.mockImplementation(
+      async (
+        _input: unknown,
+        ports: { onOutputRejected: (rejection: Record<string, unknown>) => void },
+      ) => {
+        ports.onOutputRejected({
+          stage: "detail",
+          chapterIndex: 2,
+          attempt: 1,
+          willRetry: true,
+          kind: "schema_mismatch",
+          model: "claude-sonnet-5",
+          issues: [{ path: "steps.6.verification", code: "invalid_value", received: '"PRACTICE"' }],
+        });
+        return { outcome: "refusal", refusal: { reason: "x", route: "clarify" }, meta: {} };
+      },
+    );
+
+    const response = await POST(request(JSON.stringify({ rawText: "run" })));
+    const text = await response.text();
+
+    expect(console.warn).toHaveBeenCalledWith("[generate]", expect.stringContaining("PRACTICE"));
+    expect(console.warn).toHaveBeenCalledWith(
+      "[generate]",
+      expect.stringContaining(response.headers.get("x-request-id")!),
+    );
+    // None of it reaches the client.
+    expect(text).not.toContain("PRACTICE");
+    expect(text).not.toContain("verification");
   });
 
   it("logs a client disconnect as cancelled rather than as a generation failure", async () => {

@@ -87,3 +87,20 @@ describe("generator UI state", () => {
     expect(visibleStageState("ground", "safety")).toBe("done");
   });
 });
+
+describe("generatorReducer error reference", () => {
+  it("keeps the request id so a person can quote the failure, and clears it on restart", () => {
+    const failed = generatorReducer(initialGeneratorState, {
+      type: "error",
+      message: "Mission generation failed. Try again.",
+      reference: "req-1",
+    });
+    expect(failed.errorReference).toBe("req-1");
+    expect(generatorReducer(failed, { type: "start" }).errorReference).toBeNull();
+  });
+
+  it("has no reference for a failure the server never answered", () => {
+    const failed = generatorReducer(initialGeneratorState, { type: "error", message: "Offline." });
+    expect(failed.errorReference).toBeNull();
+  });
+});

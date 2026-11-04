@@ -27,6 +27,7 @@ export {
   generateMission,
   type GenerateMissionInput,
   type GenerateMissionPorts,
+  type ModelOutputRejection,
   type MissionDraftGenerator,
 } from "./generation/generate-mission";
 export {

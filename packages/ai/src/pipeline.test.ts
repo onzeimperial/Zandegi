@@ -21,6 +21,8 @@ vi.mock("./router", async () => {
 });
 
 const pipeline = await import("./pipeline");
+const { ModelOutputError, parseStageJson, verificationEnum } = await import("./schemas");
+const { z } = await import("zod");
 
 const NOW = new Date("2026-06-15T00:00:00Z");
 
@@ -89,6 +91,148 @@ beforeEach(() => {
     ],
   });
   detailChapterMock.mockResolvedValue({ steps: [step(), step({ title: "Run 4km easy" })] });
+});
+
+function rejectedOutput() {
+  return new ModelOutputError("detail", "schema_mismatch", "bad output", [
+    { path: "steps.6.verification", code: "invalid_value", received: '"PRACTICE"' },
+  ]);
+}
+
+describe("parseStageJson", () => {
+  const schema = z.object({ steps: z.array(z.object({ verification: verificationEnum })) });
+
+  it("names the field and the value the model sent", () => {
+    const failure = (() => {
+      try {
+        return parseStageJson(
+          "detail",
+          JSON.stringify({ steps: [{ verification: "SELF" }, { verification: "PRACTICE" }] }),
+          schema,
+        );
+      } catch (error) {
+        return error;
+      }
+    })() as InstanceType<typeof ModelOutputError>;
+
+    expect(failure).toBeInstanceOf(ModelOutputError);
+    expect(failure.kind).toBe("schema_mismatch");
+    expect(failure.issues).toEqual([
+      { path: "steps.1.verification", code: "invalid_value", received: '"PRACTICE"' },
+    ]);
+    expect(failure.message).toContain('steps.1.verification invalid_value received "PRACTICE"');
+  });
+
+  it("keeps model prose out of the message, because messages reach the logs", () => {
+    const prose = "my private medical history";
+    expect(() => parseStageJson("detail", `not json ${prose}`, schema)).toThrow(ModelOutputError);
+    try {
+      parseStageJson("detail", `not json ${prose}`, schema);
+    } catch (error) {
+      expect((error as Error).message).not.toContain(prose);
+    }
+    try {
+      parseStageJson("detail", JSON.stringify({ steps: prose }), schema);
+    } catch (error) {
+      expect(JSON.stringify(error)).not.toContain(prose);
+      expect((error as Error).message).not.toContain(prose);
+    }
+  });
+});
+
+describe("rejected model output", () => {
+  it("retries a rejected chapter and keeps the mission", async () => {
+    const onOutputRejected = vi.fn();
+    detailChapterMock.mockRejectedValueOnce(rejectedOutput());
+
+    const result = await generateMissionDraft({ rawText: "run" }, undefined, { onOutputRejected });
+
+    expect(result.draft?.mission.chapters).toHaveLength(2);
+    // Two chapters plus the one retry.
+    expect(detailChapterMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("reports a rejection the retry recovered from, so it cannot hide", async () => {
+    const onOutputRejected = vi.fn();
+    detailChapterMock.mockRejectedValueOnce(rejectedOutput());
+
+    await generateMissionDraft({ rawText: "run" }, undefined, { onOutputRejected });
+
+    expect(onOutputRejected).toHaveBeenCalledTimes(1);
+    expect(onOutputRejected).toHaveBeenCalledWith({
+      stage: "detail",
+      chapterIndex: 0,
+      attempt: 1,
+      willRetry: true,
+      kind: "schema_mismatch",
+      model: expect.any(String),
+      issues: [{ path: "steps.6.verification", code: "invalid_value", received: '"PRACTICE"' }],
+    });
+  });
+
+  it("stops after the second rejection and reports that it gave up", async () => {
+    const onOutputRejected = vi.fn();
+    detailChapterMock.mockRejectedValue(rejectedOutput());
+
+    await expect(
+      generateMissionDraft({ rawText: "run" }, undefined, { onOutputRejected }),
+    ).rejects.toBeInstanceOf(ModelOutputError);
+
+    const last = onOutputRejected.mock.calls.at(-1)![0] as { attempt: number; willRetry: boolean };
+    expect(last).toMatchObject({ attempt: 2, willRetry: false });
+    // Bounded: no chapter is ever tried a third time.
+    const attempts = onOutputRejected.mock.calls.map(
+      (call) => (call[0] as { attempt: number }).attempt,
+    );
+    expect(Math.max(...attempts)).toBe(2);
+  });
+
+  it("retries the plan stage too", async () => {
+    planMock.mockRejectedValueOnce(
+      new ModelOutputError("plan", "schema_mismatch", "bad", [
+        { path: "primaryDomain", code: "invalid_value", received: '"Fitness"' },
+      ]),
+    );
+    const result = await generateMissionDraft({ rawText: "run" });
+    expect(result.draft).toBeDefined();
+    expect(planMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry a failure that asking again cannot fix", async () => {
+    const onOutputRejected = vi.fn();
+    planMock.mockRejectedValue(new Error("401 invalid x-api-key"));
+
+    await expect(
+      generateMissionDraft({ rawText: "run" }, undefined, { onOutputRejected }),
+    ).rejects.toThrow("401");
+
+    expect(planMock).toHaveBeenCalledTimes(1);
+    expect(onOutputRejected).not.toHaveBeenCalled();
+  });
+
+  it("does not spend a retry once the run has been cancelled", async () => {
+    const controller = new AbortController();
+    planMock.mockImplementation(async () => {
+      controller.abort();
+      throw rejectedOutput();
+    });
+
+    await expect(
+      generateMissionDraft({ rawText: "run" }, undefined, { signal: controller.signal }),
+    ).rejects.toBeDefined();
+
+    expect(planMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("survives a reporter that throws", async () => {
+    detailChapterMock.mockRejectedValueOnce(rejectedOutput());
+    const result = await generateMissionDraft({ rawText: "run" }, undefined, {
+      onOutputRejected: () => {
+        throw new Error("logging is down");
+      },
+    });
+    expect(result.draft).toBeDefined();
+  });
 });
 
 describe("generateMission", () => {

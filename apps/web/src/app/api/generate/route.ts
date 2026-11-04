@@ -42,7 +42,10 @@ import {
   type GenerationErrorCode,
   type GenerationProgress,
   type GuestSession,
+  type ModelOutputRejection,
 } from "@zandegi/api";
+
+import { recordIncident } from "./incidents";
 
 export const runtime = "nodejs";
 
@@ -90,6 +93,18 @@ function jsonError(status: number, code: GenerationErrorCode, requestId: string)
 /** Server-only. The client gets a stable code; the detail stops here. */
 function logDiagnostic(requestId: string, code: GenerationErrorCode, diagnostic: string): void {
   console.error("[generate]", JSON.stringify({ requestId, code, diagnostic }));
+  recordIncident({ event: "generation_failed", requestId, code, diagnostic });
+}
+
+/**
+ * A warning, not an error, while a retry is still to come: the request may yet
+ * succeed. It is recorded either way, because a stage that needs its retry on
+ * every run is a problem no user will ever report.
+ */
+function logRejection(requestId: string, rejection: ModelOutputRejection): void {
+  const entry = { event: "model_output_rejected", requestId, ...rejection };
+  (rejection.willRetry ? console.warn : console.error)("[generate]", JSON.stringify(entry));
+  recordIncident(entry);
 }
 
 /**
@@ -267,6 +282,7 @@ export async function POST(req: Request) {
             cancellation: cancellationFrom(abortController.signal),
             knowledge: emptyKnowledge,
             persistence,
+            onOutputRejected: (rejection) => logRejection(requestId, rejection),
           },
         );
         const result = await Promise.race([generation, deadline]);

@@ -19,9 +19,14 @@
  */
 
 import { generateMissionDraft } from "@zandegi/ai";
-import type { GoalInput, MissionDraftOutcome, ProgressCallback } from "@zandegi/ai";
+import type {
+  GoalInput,
+  MissionDraftOutcome,
+  ModelOutputRejection,
+  ProgressCallback,
+} from "@zandegi/ai";
 import type { GenerateMissionRequest, GenerationProgress, GenerationResult } from "../client";
-import { GenerationError, describeFailure, isGenerationError } from "../errors";
+import { GenerationError, describeFailure, isGenerationError, redactDiagnostic } from "../errors";
 import type { GuestPrincipal } from "../identity/ports";
 import type {
   CancellationPort,
@@ -44,10 +49,22 @@ export type MissionDraftGenerator = (
   // `asOf` is required: the one request-scoped instant comes from the clock
   // port, so generation never reads an ambient clock. Assigning
   // `generateMissionDraft` as the default below is what keeps this in step.
-  options: { asOf: Date; signal?: AbortSignal },
+  options: {
+    asOf: Date;
+    signal?: AbortSignal;
+    onOutputRejected?: (rejection: ModelOutputRejection) => void;
+  },
 ) => Promise<MissionDraftOutcome>;
 
+export type { ModelOutputRejection };
+
 export interface GenerateMissionPorts {
+  /**
+   * Told about every model response the pipeline rejects, including ones a
+   * retry recovers. Without this a retry would hide a stage going bad until it
+   * started failing outright.
+   */
+  onOutputRejected?: (rejection: ModelOutputRejection) => void;
   clock: Clock;
   ids: IdGenerator;
   cancellation: CancellationPort;
@@ -111,7 +128,23 @@ export async function generateMission(
             if (signal.aborted) return;
             input.onProgress?.(toProgress(event));
           },
-      { signal, asOf: startedAt },
+      {
+        signal,
+        asOf: startedAt,
+        ...(ports.onOutputRejected === undefined
+          ? {}
+          : {
+              onOutputRejected: (rejection: ModelOutputRejection) =>
+                ports.onOutputRejected?.({
+                  ...rejection,
+                  issues: rejection.issues.map((issue) =>
+                    issue.received === undefined
+                      ? issue
+                      : { ...issue, received: redactDiagnostic(issue.received, [request.rawText]) },
+                  ),
+                }),
+            }),
+      },
     );
   } catch (error) {
     // A cancelled run has no terminal result: the abort is the outcome.

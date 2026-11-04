@@ -9,7 +9,12 @@ import { detailChapter } from "./stages/05-detail";
 import { omitUngroundedClaims, validateMissionGrounding } from "./grounding";
 import { safetyPass } from "./stages/08-safety";
 import { complete, modelForStage } from "./router";
-import { parseStageJson, rewriteOutputSchema } from "./schemas";
+import {
+  ModelOutputError,
+  parseStageJson,
+  rewriteOutputSchema,
+  type ModelOutputRejection,
+} from "./schemas";
 import { applyExactRewrites, stepTextFields } from "./rewrite";
 import type {
   DraftChapter,
@@ -27,10 +32,51 @@ function emit(onEvent: ProgressCallback | undefined, event: StageEvent): void {
   onEvent?.(event);
 }
 
+/**
+ * Attempts per model call. A rejected response costs a whole mission otherwise:
+ * every other call in the run is already paid for, and the failure is usually
+ * one value the API cannot constrain, such as a tenth step in a chapter capped
+ * at nine. Two is enough to absorb that without hiding a stage that always fails.
+ */
+const MAX_OUTPUT_ATTEMPTS = 2;
+
+type OutputRetry = <T>(
+  scope: { stage: StageName; chapterIndex?: number; signal?: AbortSignal },
+  call: () => Promise<T>,
+) => Promise<T>;
+
+function createOutputRetry(onRejected?: (rejection: ModelOutputRejection) => void): OutputRetry {
+  return async (scope, call) => {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await call();
+      } catch (error) {
+        if (!(error instanceof ModelOutputError)) throw error;
+        const willRetry = attempt < MAX_OUTPUT_ATTEMPTS && !scope.signal?.aborted;
+        try {
+          onRejected?.({
+            stage: scope.stage,
+            ...(scope.chapterIndex === undefined ? {} : { chapterIndex: scope.chapterIndex }),
+            attempt,
+            willRetry,
+            kind: error.kind,
+            model: modelForStage(scope.stage),
+            issues: error.issues,
+          });
+        } catch {
+          // Reporting a problem must never become a second one.
+        }
+        if (!willRetry) throw error;
+      }
+    }
+  };
+}
+
 async function rewriteFlagged(
   stage: Extract<StageName, "ground" | "safety">,
   chapters: DraftChapter[],
   issues: RewriteIssue[],
+  retry: OutputRetry,
   signal?: AbortSignal,
 ): Promise<void> {
   const system =
@@ -44,25 +90,28 @@ financial, or legal topics, direct the user to a suitable professional; never pr
 or give personal financial or legal directives. Output ONLY JSON: { "rewrites": [{ "issueId":
 string, "rewrittenText": string }] }. Return every supplied issueId exactly once and no other IDs.`;
 
-  const response = await complete({
-    stage,
-    system,
-    user: JSON.stringify({
-      issues: issues.map((entry) => ({
-        issueId: entry.issueId,
-        issue: entry.issue,
-        currentText: stepTextFields(
-          entry.chapterIndex,
-          entry.stepIndex,
-          chapters[entry.chapterIndex]!.steps[entry.stepIndex]!,
-        ).find((field) => field.field === entry.field && field.itemIndex === entry.itemIndex)!.text,
-      })),
-    }),
-    maxTokens: 1536,
-    temperature: 0.3,
-    signal,
+  const parsed = await retry({ stage, ...(signal === undefined ? {} : { signal }) }, async () => {
+    const response = await complete({
+      stage,
+      system,
+      user: JSON.stringify({
+        issues: issues.map((entry) => ({
+          issueId: entry.issueId,
+          issue: entry.issue,
+          currentText: stepTextFields(
+            entry.chapterIndex,
+            entry.stepIndex,
+            chapters[entry.chapterIndex]!.steps[entry.stepIndex]!,
+          ).find((field) => field.field === entry.field && field.itemIndex === entry.itemIndex)!
+            .text,
+        })),
+      }),
+      maxTokens: 1536,
+      temperature: 0.3,
+      signal,
+    });
+    return parseStageJson(stage, response.text, rewriteOutputSchema);
   });
-  const parsed = parseStageJson(stage, response.text, rewriteOutputSchema);
   applyExactRewrites(chapters, issues, parsed.rewrites);
 }
 
@@ -88,6 +137,8 @@ export interface GenerateMissionDraftOptions {
    */
   asOf: Date;
   signal?: AbortSignal;
+  /** Called for every rejected response, including ones a retry then recovers. */
+  onOutputRejected?: (rejection: ModelOutputRejection) => void;
 }
 
 /**
@@ -104,6 +155,8 @@ export async function generateMissionDraft(
   options: GenerateMissionDraftOptions,
 ): Promise<MissionDraftOutcome> {
   const modelsUsed: Partial<Record<StageName, string>> = {};
+  const retry = createOutputRetry(options.onOutputRejected);
+  const outerSignal = options.signal === undefined ? {} : { signal: options.signal };
 
   async function runStage<T>(stage: StageName, fn: () => Promise<T>): Promise<T> {
     options.signal?.throwIfAborted();
@@ -119,7 +172,9 @@ export async function generateMissionDraft(
     }
   }
 
-  const interpretation = await runStage("interpret", () => interpret(input, options.signal));
+  const interpretation = await runStage("interpret", () =>
+    retry({ stage: "interpret", ...outerSignal }, () => interpret(input, options.signal)),
+  );
   modelsUsed.interpret = modelForStage("interpret");
 
   if (interpretation.notes.isImpossibleScope) {
@@ -132,7 +187,9 @@ export async function generateMissionDraft(
     };
   }
 
-  const resolved = await runStage("resolve", () => resolve(interpretation, options.signal));
+  const resolved = await runStage("resolve", () =>
+    retry({ stage: "resolve", ...outerSignal }, () => resolve(interpretation, options.signal)),
+  );
   modelsUsed.resolve = modelForStage("resolve");
 
   if (isGenerationBlocked(resolved.safetyClass)) {
@@ -143,7 +200,9 @@ export async function generateMissionDraft(
   }
 
   await runStage("hydrate", () => hydrate(resolved));
-  const planResult = await runStage("plan", () => plan(interpretation, resolved, options.signal));
+  const planResult = await runStage("plan", () =>
+    retry({ stage: "plan", ...outerSignal }, () => plan(interpretation, resolved, options.signal)),
+  );
   modelsUsed.plan = modelForStage("plan");
 
   const skeletons = planResult.chapters;
@@ -169,14 +228,18 @@ export async function generateMissionDraft(
 
       let detailOutput;
       try {
-        detailOutput = await detailChapter(
-          {
-            chapterTitle: skeleton.title,
-            exitCondition: skeleton.exitCondition,
-            interpretation,
-            resolved,
-          },
-          detailAbort.signal,
+        detailOutput = await retry(
+          { stage: "detail", chapterIndex, signal: detailAbort.signal },
+          () =>
+            detailChapter(
+              {
+                chapterTitle: skeleton.title,
+                exitCondition: skeleton.exitCondition,
+                interpretation,
+                resolved,
+              },
+              detailAbort.signal,
+            ),
         );
         detailAbort.signal.throwIfAborted();
         modelsUsed.detail = modelForStage("detail");
@@ -230,7 +293,7 @@ export async function generateMissionDraft(
     const initial = validateMissionGrounding(draftMission, options.asOf);
     if (initial.ungroundedClaims.length === 0) return initial;
 
-    await rewriteFlagged("ground", draftChapters, initial.ungroundedClaims, options.signal);
+    await rewriteFlagged("ground", draftChapters, initial.ungroundedClaims, retry, options.signal);
     modelsUsed.ground = modelForStage("ground");
     const revalidated = validateMissionGrounding(draftMission, options.asOf);
     // A rewrite pass rarely clears every flagged sentence in a long mission, and
@@ -256,7 +319,7 @@ export async function generateMissionDraft(
     let result = safetyPass(draftMission, resolved.safetyClass);
     const initialRedactions = result.outcome.redactions;
     if (result.needsRewrite.length > 0) {
-      await rewriteFlagged("safety", draftChapters, result.needsRewrite, options.signal);
+      await rewriteFlagged("safety", draftChapters, result.needsRewrite, retry, options.signal);
       modelsUsed.safety = modelForStage("safety");
       result = safetyPass(draftMission, resolved.safetyClass);
       if (result.needsRewrite.length > 0) {

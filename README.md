@@ -64,6 +64,21 @@ runs `npm ci`, `npm run typecheck` and `npm test` directly inside `legacy/`; the
 Current workspace code must never import from `legacy/`; `pnpm lint` fails if it does,
 including through a dynamic `import()`.
 
+## When generation fails
+
+The error screen shows a reference, which is the request id. Development records every failure, and
+every model response the pipeline rejected, in `apps/web/logs/generation-incidents.jsonl`. To see
+them grouped by cause:
+
+```powershell
+# from repo root
+node scripts/generation-incidents.mjs
+```
+
+A healthy log is empty or missing. Repeated rejections of one field mean a stage needs attention,
+even when retries are keeping missions alive. Hosted deployments log the same entries to the
+platform under the `[generate]` prefix.
+
 ## Deploying the demo
 
 The demo deploys to Vercel. `vercel.json` pins the Sydney region. Set these on the

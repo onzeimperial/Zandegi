@@ -39,6 +39,8 @@ Thumbs.db
 # logs
 npm-debug.log*
 pnpm-debug.log*
+# local generation incidents; see scripts/generation-incidents.mjs
+/apps/web/logs/
 
 # personal working files (not part of the codebase)
 /Zandegi.xls*

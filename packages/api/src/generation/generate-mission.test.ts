@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { MissionDraftOutcome } from "@zandegi/ai";
+import type { MissionDraftOutcome, ModelOutputRejection } from "@zandegi/ai";
 import { GENERATION_STAGES, type GenerationProgress, type GenerationResult } from "../client";
 import { GenerationError } from "../errors";
 import {
@@ -99,6 +99,38 @@ function ports(overrides: Partial<GenerateMissionPorts> = {}): TestPorts {
     ...overrides,
   };
 }
+
+describe("generateMission rejection reporting", () => {
+  it("forwards rejections with the person's goal redacted from any received value", async () => {
+    const reported: ModelOutputRejection[] = [];
+    const deps = ports({
+      draftGenerator: async (_input, _onEvent, options) => {
+        options.onOutputRejected?.({
+          stage: "detail",
+          attempt: 1,
+          willRetry: false,
+          kind: "schema_mismatch",
+          model: "m",
+          issues: [
+            { path: "steps.0.verification", code: "invalid_value", received: `"${GOAL}"` },
+            { path: "steps.1.title", code: "too_small" },
+          ],
+        });
+        throw new Error("rejected");
+      },
+      onOutputRejected: (rejection) => reported.push(rejection),
+    });
+
+    await generateMission({ request: { rawText: GOAL }, principal: OWNER }, deps).catch(
+      () => undefined,
+    );
+
+    expect(reported).toHaveLength(1);
+    expect(JSON.stringify(reported)).not.toContain(GOAL);
+    expect(reported[0]?.issues[0]?.received).toContain("[redacted]");
+    expect(reported[0]?.issues[1]).toEqual({ path: "steps.1.title", code: "too_small" });
+  });
+});
 
 describe("generateMission use case", () => {
   it("returns a client-safe mission result with no progression number anywhere", async () => {
