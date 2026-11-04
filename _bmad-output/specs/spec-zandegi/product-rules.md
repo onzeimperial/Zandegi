@@ -26,6 +26,8 @@ An approved confidence threshold controls fallback. The existing proposed thresh
 
 A Goal preserves the person's words for the life of the account, subject to export and deletion. A versioned Mission contains 3-7 Chapters; each Chapter contains 2-9 Steps. Chapters have meaningful exit conditions. Steps may contain a planning estimate, one verification method, applicable tool instances, a guide, and dated sources for factual claims.
 
+Every Chapter and Step has a stable ID that survives edits. The 3-7 and 2-9 limits bind generated Missions. A person may then rewrite, reorder, add, or delete Steps, up to a storage limit. A person cannot add or remove Chapters in the MVP because boss targets depend on their number. An accepted recovery Chapter is the one exception, and it never raises an existing target. Editing a generated Step's text removes its sources and marks it as the person's own. Person-written Steps skip grounding: they are the person's own words, shown only to them, and never sent to a model.
+
 Planning estimates help size work and never determine XP. Generic scaffolds use the same safety, grounding, persistence, and progression rules as catalog-backed Missions.
 
 ### Generation path
@@ -46,6 +48,8 @@ Mission generation does not calculate or promise XP. `MissionGenerated` is not a
 
 Completion and abandonment history may influence the size or sequencing of future Steps. The retained starting policy biases future Steps 15% larger when seven-day completion exceeds 0.85 and 20% smaller, with a recovery Chapter, when it falls below 0.45. It cannot change the award for already completed work. Population learning may propose bounded Pursuit-tuning candidates using the original EWMA starting value of 0.15, but an approved, versioned policy is required before those values affect generation.
 
+Declared busy periods are left out of the completion rate, and person-written Steps are never resized.
+
 ## Tool registry
 
 The intended tool kinds remain `TRACKER`, `TIMER`, `CHECKLIST`, `TEMPLATE`, `CALCULATOR`, `PLANNER`, `LIBRARY`, `DRILL`, `JOURNAL`, and `CAPTURE`.
@@ -56,19 +60,38 @@ The intended tool kinds remain `TRACKER`, `TIMER`, `CHECKLIST`, `TEMPLATE`, `CAL
 - Tool use alone is not rewardable.
 - Tools may produce `TIMER`, `ARTIFACT`, or `METRIC` evidence; simple completion maps to `SELF`.
 
+## Boss fights
+
+Each Chapter has one real-world test, visible from the Chapter's start. A person may attempt it once they finish or choose to skip the remaining Steps. Skipped Steps pay nothing.
+
+| Goal | Boss | Payout |
+| --- | --- | --- |
+| `METRIC` with a registered metric kind | A number from the target formula | Fixed bands on a new personal best: any gain, then reaching the published target |
+| All other goals, including unregistered metrics | A real act based on the Chapter's exit condition | A fixed amount once, with a small addition for an optional photo |
+
+**Target formula.** `target = best + min(remaining / chaptersLeft, cap × best)`, mirrored for lower-is-better metrics and rounded to the metric kind's increment. After a miss, the next target never rises above the one missed. A rematch target sits halfway between the best and the missed target. A person may lower any target, but the top band still requires the published target. If the cap cannot reach the goal, the app says the plan is tight.
+
+**Closing a Chapter.** An attempt and a debrief with at least one answer close the Chapter, whatever the result. A rematch is optional, does not reopen the Chapter, and pays only the difference up to a higher band, so boss XP per Chapter cannot exceed the top band.
+
+**Debrief.** Prompts cover tips, what went well, what didn't, and what the person will improve. The last becomes the next Chapter's opening Step in the person's own words, and they can remove it.
+
+**Real-act safety.** Trials depend only on the person's own actions, never on another person's response. Model-written trial text must pass grounding and safety checks.
+
 ## Progression and economy
 
 `core` owns progression and its versioned policy. `economy` owns Shards, Crowns, commerce, entitlements, and economy tuning only.
 
 | Evidence kind | MVP award input |
 | --- | --- |
-| `SELF` | Fixed neutral completion policy. |
+| `SELF` | Fixed neutral completion policy, with a per-Chapter Step cap. |
 | `TIMER` | Bounded server-observed active time. |
 | `ARTIFACT` | Server-authored reward band after evidence verification. |
 | `METRIC` | Registered server-side metric policy. |
 | `INTEGRATION` | No award in MVP. Requires a future provider-specific attestation policy. |
 
 The exact award constants, caps, level curve, rank thresholds, and provisional-review thresholds require product approval before implementation. The original estimated-minute multipliers are retired.
+
+Boss fights replace the Chapter bonus, and a fixed mission reward replaces the mission bonus. Awards already recorded under `neutral-v1` stay as they are. New awards use a new policy version.
 
 XP is never purchasable or spendable. Any future Shards, Crowns, subscription, boost, or entitlement design must not affect XP, streak repair, rank, leaderboard position, or other earned progression. The old paid Crew XP boost and purchasable streak repair are retired.
 
@@ -77,6 +100,16 @@ Risk evaluation happens synchronously during completion. Provisional awards rema
 ## Internal scheduler
 
 Mission Steps can become internal Blocks. Scheduling considers availability, energy preference, recovery gaps, and deadline pressure. A missed Block is not punished and may be offered a new internal slot within 48 hours. External calendar reading and two-way synchronization are post-MVP.
+
+## Owning the journey
+
+**Log anything.** A one-line note, number, or photo is filed under the current Chapter, and the person can move it. Logs pay no XP and use no model. Photo logs require private evidence storage.
+
+**Busy periods.** A person declares a period with an end date and can extend it without penalty. Boss prompts and boss Blocks move until afterwards. Touch actions pay no XP. When it ends, the app gently offers to resume.
+
+**Titles and badges.** Titles come from published rules over ledger behaviour, pay no XP, and appear in limited profile showcase slots. The midpoint badge marks closing the middle Chapter and compares first and latest results. Saved photos join it once private evidence storage exists. Prompts to use a title as a self-description are optional.
+
+**Past wins.** When a person misses a boss or returns after a gap, the app may show their own earlier results. It never compares them with other people.
 
 ## Safety and age rules
 

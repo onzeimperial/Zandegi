@@ -7,7 +7,7 @@ paradigm: modular monolith with functional core, imperative shell, and bounded e
 scope: Current monorepo, production foundations, and extraction of compatible legacy behaviour
 status: final
 created: '2026-09-25'
-updated: '2026-10-02'
+updated: '2026-11-03'
 binds:
   - mission-generation
   - pursuit-catalog
@@ -65,7 +65,7 @@ flowchart LR
 
 - **Binds:** goals, missions, steps, completion, progression, economy, schedules
 - **Prevents:** applying event-sourcing complexity to every record or mutating earned state as ordinary CRUD
-- **Rule:** Completion, verified effort, XP, levels, ranks, domain stats, streaks, trust, Shards, Crowns, and their corrections are immutable ledger facts with replayable projections. Goals, Pursuits, Missions, Chapters, Steps, Blocks, identity links, subscription references, and generated content are authoritative relational records. Audit/outbox messages never become authoritative merely because they are called events.
+- **Rule:** Completion, verified effort, XP, levels, ranks, domain stats, streaks, trust, Shards, Crowns, and their corrections are immutable ledger facts with replayable projections. Goals, Pursuits, Missions, Chapters, Steps, Blocks, identity links, subscription references, and generated content are authoritative relational records. Audit/outbox messages never become authoritative merely because they are called events. Boss attempts and their awards, and earned titles and badges, are ledger facts. Debriefs, logs, person-written Steps, plan edits, busy periods, and raw boss results are relational records.
 
 ### AD-2 — One application boundary and explicit package ownership [ADOPTED]
 
@@ -77,7 +77,7 @@ flowchart LR
 
 - **Binds:** event producers, event consumers, projection rebuilds, scoring changes
 - **Prevents:** incompatible payloads, duplicate awards, unreadable history, and replay changing past rewards
-- **Rule:** `core` publishes a discriminated `LedgerEnvelopeV1` and event registry with exact field names, scalar/size/nullability rules, JSON fixtures, and a canonical payload hash. The envelope includes event ID, aggregate ID, monotonic aggregate sequence, event type, schema version, subject reference, principal reference, `occurredAt`, server `recordedAt`, correlation ID, causation ID, and idempotency key. Only API use cases append through the DB-owned ledger port, which revalidates the value at the persistence boundary. Rebuilds order by aggregate sequence, never timestamps. Unknown/corrupt versions quarantine and stop only the affected aggregate while other aggregates continue. Upcasters are pure shape transformations and cannot call clocks, current calculators, databases, or providers. Corrections use typed compensation events with `correctsEventId`; a fact cannot be corrected twice. Every award stores accepted inputs, breakdown, amount, calculator version, and progression-policy version. Ledger payloads contain opaque references and minimal facts, never raw goals, mission bodies, provider payloads, or file contents.
+- **Rule:** `core` publishes a discriminated `LedgerEnvelopeV1` and event registry with exact field names, scalar/size/nullability rules, JSON fixtures, and a canonical payload hash. The envelope includes event ID, aggregate ID, monotonic aggregate sequence, event type, schema version, subject reference, principal reference, `occurredAt`, server `recordedAt`, correlation ID, causation ID, and idempotency key. Only API use cases append through the DB-owned ledger port, which revalidates the value at the persistence boundary. Rebuilds order by aggregate sequence, never timestamps. Unknown/corrupt versions quarantine and stop only the affected aggregate while other aggregates continue. Upcasters are pure shape transformations and cannot call clocks, current calculators, databases, or providers. Corrections use typed compensation events with `correctsEventId`; a fact cannot be corrected twice. Every award stores accepted inputs, breakdown, amount, calculator version, and progression-policy version. Ledger payloads contain opaque references and minimal facts, never raw goals, mission bodies, provider payloads, or file contents. Steps and Chapters have stable IDs that are never reused. Payment claims key on those IDs, so deleting and re-adding a Step cannot pay twice. New events carry IDs. A pure upcaster reads older events by deriving the ID from their recorded position, so `neutral-v1` history stays replayable and generated Steps keep position-derived IDs. Person-written Steps get new opaque IDs. Boss award events store an opaque attempt ID, award band, amount, and calculator and policy versions. Folds use the stored amount and never recalculate it. The raw result stays in a deletable record outside the ledger.
 
 ### AD-4 — Atomic earned state and transactional outbox [ADOPTED]
 
@@ -106,7 +106,7 @@ sequenceDiagram
 
 - **Binds:** generation, tools, verification, XP, billing, entitlements, competitive features
 - **Prevents:** pay-to-progress, tap farming, and model-authored reward values
-- **Rule:** AI-produced duration, difficulty, priority, and rarity fields are planning hints only and no pre-completion numeric XP promise is shown. `core` defines exhaustive `AwardEvidenceKind = SELF | TIMER | ARTIFACT | METRIC | INTEGRATION`: SELF uses the fixed neutral completion policy; TIMER uses bounded server-observed active time; ARTIFACT uses the server-authored reward band after evidence verification; METRIC uses the registered server-side metric policy; and INTEGRATION awards nothing until a provider-specific attestation policy is approved after MVP. UI actions such as check, capture, or tool completion map to exactly one evidence kind; tools may produce TIMER, ARTIFACT, or METRIC facts but do not create new kinds. These inputs and all caps live in versioned core progression policy; model estimates never enter the calculator. Merely opening or using a tool is not rewardable. Purchases, subscriptions, Crew Boosts, and purchasable currency cannot increase XP, repair streaks, change rank, or improve leaderboard position. All clients call one server-side entitlement evaluator.
+- **Rule:** AI-produced duration, difficulty, priority, and rarity fields are planning hints only and no pre-completion numeric XP promise is shown. `core` defines exhaustive `AwardEvidenceKind = SELF | TIMER | ARTIFACT | METRIC | INTEGRATION`: SELF uses the fixed neutral completion policy; TIMER uses bounded server-observed active time; ARTIFACT uses the server-authored reward band after evidence verification; METRIC uses the registered server-side metric policy; and INTEGRATION awards nothing until a provider-specific attestation policy is approved after MVP. UI actions such as check, capture, or tool completion map to exactly one evidence kind; tools may produce TIMER, ARTIFACT, or METRIC facts but do not create new kinds. These inputs and all caps live in versioned core progression policy; model estimates never enter the calculator. Merely opening or using a tool is not rewardable. Purchases, subscriptions, Crew Boosts, and purchasable currency cannot increase XP, repair streaks, change rank, or improve leaderboard position. All clients call one server-side entitlement evaluator. In the MVP, a boss result is a `METRIC` or `SELF` fact marked `self-declared`. The server attests that the declaration was made, not that it is true, so the policy may pay only fixed, capped bands and pays metric bands only on a new personal best. The target formula lives in `core` and takes only the person's baseline, goal number, best result, and Chapters left, plus the metric kind's registered rules. Model estimates are rejected as inputs. Targets may be shown before an attempt; the XP they would pay may not.
 
 ### AD-6 — Safety, age, and content release are server-enforced [ADOPTED]
 
@@ -182,7 +182,7 @@ flowchart TB
 
 - **Binds:** goals, missions, evidence, identity, export, deletion, backups
 - **Prevents:** immutable PII, impossible account deletion, and audit loss
-- **Rule:** Personal text and provider data live in deletable relational or object records; ledger entries refer to opaque subjects and minimal facts. Account deletion is a retryable API-owned saga: mark a tombstone and block new work, revoke Clerk/guest credentials, suppress queued jobs, export if requested, delete relational content and Blob evidence, purge caches, irreversibly remove the principal-to-ledger resolver, and emit a completion receipt. Ledger integrity facts retain a salted non-resolvable pseudonym only where approved; re-registration never reconnects them. Projection rebuild ignores erased principals and shared records lose personal attribution. Backup expiry is evidenced against the pre-launch retention policy; “preserved verbatim” means for the life of the account, not beyond a valid erasure request.
+- **Rule:** Personal text and provider data live in deletable relational or object records; ledger entries refer to opaque subjects and minimal facts. Account deletion is a retryable API-owned saga: mark a tombstone and block new work, revoke Clerk/guest credentials, suppress queued jobs, export if requested, delete relational content and Blob evidence, purge caches, irreversibly remove the principal-to-ledger resolver, and emit a completion receipt. Ledger integrity facts retain a salted non-resolvable pseudonym only where approved; re-registration never reconnects them. Projection rebuild ignores erased principals and shared records lose personal attribution. Backup expiry is evidenced against the pre-launch retention policy; “preserved verbatim” means for the life of the account, not beyond a valid erasure request. Debriefs, logs, person-written Steps, and raw boss results are personal content, covered by both export and deletion.
 
 ### AD-13 — Legacy is mined, never merged [ADOPTED]
 
@@ -258,6 +258,8 @@ legacy/             # Read-only extraction source; never imported
 | Goal interpretation and Pursuit catalog | `core`, `db`, `ai`, `admin` | AD-2, AD-6, AD-8 |
 | Mission generation and grounding | `api`, `ai`, `db` | AD-5, AD-6, AD-8 |
 | Completion, XP, levels, ranks, streaks | `api`, `core`, `db` | AD-1 through AD-5 |
+| Boss fights, targets, titles, and badges | `core`, `api`, `db`, `web` | AD-1, AD-3, AD-5, AD-12 |
+| Plan edits, debriefs, logs, and busy periods | `api`, `db`, `web` | AD-1, AD-2, AD-12 |
 | Shards, Crowns, shop, seasons, entitlements | `economy`, `api`, `db` | AD-2 through AD-5 |
 | Tool Registry and evidence | `tools`, `api`, `db`, Blob | AD-2, AD-5, AD-10 |
 | Internal scheduling and blocks | `api`, `core`, `db` | AD-1, AD-2, AD-9 |
@@ -279,3 +281,4 @@ legacy/             # Read-only extraction source; never imported
 - Billing, subscriptions, crews, feeds, duels, leaderboards, and other social/competitive capabilities are post-MVP. The spine constrains them if approved later; their presence in the capability map does not authorize implementation now.
 - Mobile offline policy details: accepted timestamp window, eligible methods, timezone-change rules, expiry, and rejected-command UX. Fix them in `OfflineCompletionCommandV1` before mobile implementation.
 - Physical schema detail, provider plan sizes, and capacity values. Code and infrastructure configuration own them; re-evaluate against current provider limits before production launch.
+- Moving boss fights off the demo ledger. Slice 1 runs on the Redis-backed `ProgressLedgerPort`, whose separate claim and append steps do not meet AD-4's atomic rule. Story 2.2 must replace it before production launch, behind the same port. Decide then whether to migrate or retire demo data.

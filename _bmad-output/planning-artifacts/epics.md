@@ -35,7 +35,7 @@ FR5: An authorized operator can author, review, approve, version, and retire Pur
 
 FR6: The system can validate the complete 140-Pursuit seed catalog for schema correctness, uniqueness, domain weights, safety, sources, meaningful Chapter exits, tool fit, coverage, anti-patterns, and absence of placeholders.
 
-FR7: The system can generate a versioned Mission containing 3-7 meaningful Chapters and 2-9 actionable Steps per Chapter, with exit conditions, guides, planning estimates, evidence methods, tools, and dated sources where factual claims are made.
+FR7: The system can generate a versioned Mission containing 3-7 meaningful Chapters and 2-9 actionable Steps per Chapter, with exit conditions, guides, planning estimates, evidence methods, tools, and dated sources where factual claims are made. Each Chapter has one boss fight.
 
 FR8: The system can build and apply a freshness-approved knowledge snapshot, removing or rewriting unsupported or stale factual claims.
 
@@ -90,6 +90,30 @@ FR32: A person can request account deletion that blocks new work, revokes identi
 FR33: The system can retain only approved non-resolvable ledger-integrity facts after deletion and must not reconnect them if the person registers again.
 
 FR34: The system can present progression as pending until server acceptance and can show earned progression without displaying model-generated XP promises.
+
+FR35: A person can give a baseline and goal number at intake for a registered metric kind, and confirm the goal type.
+
+FR36: The system can publish each Chapter's boss fight from the start, using the core target formula or a real-act trial.
+
+FR37: A person can attempt a boss fight and close the Chapter with a debrief, whatever the result.
+
+FR38: The system can pay boss XP in fixed, capped bands marked self-declared, on a new personal best for metric goals.
+
+FR39: A person can take an optional rematch with a recalibrated target, paid only as the difference up to a higher band.
+
+FR40: The system can turn a debrief's "what I'll improve" into the next Chapter's opening Step in the person's own words.
+
+FR41: A person can rewrite, reorder, add, or delete Steps without changing recorded awards or earning extra XP.
+
+FR42: A person can log a note, number, or photo under a Chapter for no XP.
+
+FR43: A person can declare and extend a busy period that moves boss fights until afterwards, with no penalty.
+
+FR44: A person can earn titles and badges from published behaviour rules and show them in limited profile slots.
+
+FR45: The system can show a person their own earlier results after a miss or a return from a gap.
+
+FR46: The system can measure mid-goal drop-off without personal content.
 
 ### NonFunctional Requirements
 
@@ -204,6 +228,18 @@ FR31: Epic 4 - Export personal account data.
 FR32: Epic 4 - Delete personal data through a retryable workflow.
 FR33: Epic 4 - Retain only non-resolvable integrity facts after deletion.
 FR34: Epic 2 - Present progression as pending until server acceptance.
+FR35: Epic 7 - Capture a baseline and goal number at intake.
+FR36: Epic 7 - Publish each Chapter's boss fight from the start.
+FR37: Epic 7 - Attempt a boss fight and close the Chapter with a debrief.
+FR38: Epic 7 - Pay boss XP in fixed, capped, self-declared bands.
+FR39: Epic 7 - Take an optional, recalibrated rematch.
+FR40: Epic 7 - Turn a debrief into the next Chapter's opening Step.
+FR41: Epic 8 - Edit Steps without changing awards or earning extra XP.
+FR42: Epic 8 - Log progress for no XP.
+FR43: Epic 8 - Declare and extend a busy period.
+FR44: Epic 8 - Earn titles and badges and show them on the profile.
+FR45: Epic 8 - Show a person their own earlier results.
+FR46: Epic 7 - Measure mid-goal drop-off without personal content.
 
 ## Epic List
 
@@ -254,6 +290,22 @@ A person can use the full guest-to-account Zandegi journey through a polished, a
 **FRs covered:** FR28
 
 **Implementation notes:** Begins after the BMad UX contract is created. It integrates prior capabilities through client-safe contracts without moving rules into the UI.
+
+### Epic 7: Prove You Can Change
+
+A person can test what they can now do at the end of each Chapter, reflect on it, and earn progress for real gains.
+
+**FRs covered:** FR35-FR40, FR46
+
+**Implementation notes:** Slice 1. Runs before the remaining Epic 2 stories on the current ledger port. The UX contract must cover boss fights before Story 7.3. Order: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, with 7.7 alongside.
+
+### Epic 8: Make the Plan Yours
+
+A person can shape the plan around real life, record unplanned progress, and see evidence of who they are becoming.
+
+**FRs covered:** FR41-FR45
+
+**Implementation notes:** Slice 2. Starts after the drop-off measure from Story 7.7 is agreed. Photo logs and photo badges depend on Story 2.4.
 
 ## Epic 1: Turn Any Goal into a Safe Mission
 
@@ -420,6 +472,11 @@ So that catalog, generation, API, persistence, and web implementations agree on 
 **Then** apps can import only the documented client-safe entry points
 **And** server-only progression, safety implementation, or infrastructure types cannot enter client bundles.
 
+**Given** a Mission contract
+**When** it is validated
+**Then** Chapters and Steps carry the stable IDs from Story 7.2
+**And** a Chapter carries a boss descriptor and optional registered metric kind.
+
 ### Story 1.5: Create the Pursuit Authoring and Validation Framework
 
 **Requirements:** FR5, FR6
@@ -464,6 +521,11 @@ So that users receive complete, safe Mission foundations rather than inconsisten
 **When** representative valid and invalid fixtures run
 **Then** all validation branches are covered
 **And** the framework can accept later domain catalog stories without changing its validation rules.
+
+**Given** a Chapter exit
+**When** validation runs
+**Then** it works as a real-act trial
+**And** it depends only on the person's own actions.
 
 ### Story 1.6: Author the Mind Pursuit Catalog
 
@@ -1010,6 +1072,11 @@ So that I receive a practical path I can begin following.
 **Then** results are scored for specificity, actionability, grounding, sequencing, tool fit, and honesty
 **And** failure patterns and latency are recorded without exposing personal content.
 
+**Given** a generated Chapter exit
+**When** it is validated
+**Then** it works as a real-act trial
+**And** it depends only on the person's own actions.
+
 ### Story 1.19: Stream and Persist One Accepted Mission
 
 **Requirements:** FR10, FR11
@@ -1074,10 +1141,15 @@ So that my earned progress is consistent and historically explainable.
 
 **Acceptance Criteria:**
 
-**Given** the product owner has approved neutral rewards, authored bands, caps, level curve, and provisional thresholds
-**When** the core progression policy is published
-**Then** it is identified by calculator and policy versions
-**And** every tunable value and rationale is represented in versioned core configuration.
+**Given** the progression-v2 policy from Story 7.1 and approved provisional thresholds
+**When** the ledger contracts are published
+**Then** every award references its calculator and policy versions
+**And** every tunable value and rationale remains in versioned core configuration.
+
+**Given** the event registry
+**When** it is published
+**Then** it includes boss attempt and award events
+**And** their payloads hold only the opaque attempt ID, award band, amount, and versions.
 
 **Given** an award request
 **When** its evidence is classified
@@ -1133,6 +1205,11 @@ So that retries or concurrent actions cannot lose or duplicate progress.
 **When** migrations and compatibility tests run
 **Then** the schema reaches the current state through expand-migrate-contract
 **And** old compatible readers continue working until contraction is permitted.
+
+**Given** the demo `ProgressLedgerPort`
+**When** this story completes
+**Then** Postgres replaces it behind the same port with atomic writes
+**And** the migrate-or-retire decision for demo data is recorded.
 
 ### Story 2.3: Execute Registered Tool State Transitions
 
@@ -1239,6 +1316,11 @@ So that my progression reflects accepted effort rather than client claims.
 **Then** progression is displayed as pending
 **And** no generated or optimistic XP promise is shown.
 
+**Given** a boss attempt command
+**When** it is processed
+**Then** it uses the same idempotent, atomic path
+**And** it pays once.
+
 ### Story 2.6: Promote, Reverse, and Correct Progression Safely
 
 **Requirements:** FR21, FR22
@@ -1288,7 +1370,7 @@ So that I know what to do and when without connecting an external calendar.
 
 **Acceptance Criteria:**
 
-**Given** a person has unscheduled Mission Steps and a valid timezone
+**Given** a person has unscheduled Mission Steps and boss fights and a valid timezone
 **When** they provide availability windows and energy preferences
 **Then** the scheduler proposes internal Blocks within those windows
 **And** each proposal identifies its Step, start, end, timezone, and scheduling rationale.
@@ -1348,6 +1430,16 @@ So that one disruption does not punish me or make the Mission unrealistic.
 **Then** future Steps may be biased 20% smaller and a recovery Chapter may be proposed
 **And** the language remains supportive rather than punitive.
 
+**Given** a person accepts a recovery Chapter
+**When** boss targets are recalculated
+**Then** the formula uses the new number of Chapters left
+**And** no existing target rises.
+
+**Given** a person is in a declared busy period, or a Step is person-written
+**When** adaptive sizing runs
+**Then** busy days are left out of the completion rate
+**And** person-written Steps are never resized.
+
 **Given** population completion data proposes a Pursuit adjustment
 **When** the bounded EWMA policy with starting alpha 0.15 evaluates it
 **Then** it creates a versioned tuning candidate for approval
@@ -1375,7 +1467,7 @@ So that I can continue the same Mission securely.
 **Given** an unclaimed guest completes Clerk signup for a new Zandegi account
 **When** claim commits
 **Then** the Clerk identity is attached to the existing guest principal atomically
-**And** owned Goals, Missions, evidence, tools, events, and projections remain linked once.
+**And** owned Goals, Missions, evidence, tools, debriefs, logs, person-written Steps, boss results, events, and projections remain linked once.
 
 **Given** the Clerk identity already has a canonical Zandegi principal
 **When** an eligible guest claim is requested
@@ -1419,7 +1511,7 @@ So that I can understand and retain the data associated with my account.
 
 **Given** the export job runs
 **When** data is assembled
-**Then** it includes owned profile data, Goals, Missions, schedules, tool state, evidence metadata, award explanations, and applicable settings in a documented machine-readable schema
+**Then** it includes owned profile data, Goals, Missions, schedules, tool state, evidence metadata, debriefs, logs, person-written Steps, raw boss results, award explanations, and applicable settings in a documented machine-readable schema
 **And** it excludes secrets, other people's data, internal security signals, and provider credentials.
 
 **Given** binary evidence is included or referenced
@@ -1454,7 +1546,7 @@ So that leaving the service does not leave identifiable content behind.
 
 **Given** deletion progresses across services
 **When** each step runs
-**Then** personal relational content, private evidence and exports, caches, tool state, schedules, and identity mappings are deleted or irreversibly detached
+**Then** personal relational content, private evidence and exports, caches, tool state, schedules, debriefs, logs, person-written Steps, raw boss results, and identity mappings are deleted or irreversibly detached
 **And** partial failure is recorded for idempotent retry.
 
 **Given** immutable ledger integrity facts must remain where approved
@@ -1707,8 +1799,13 @@ So that I can make real progress without leaving Zandegi.
 
 **Given** an accepted Mission
 **When** the person opens it
-**Then** Chapters, exits, Steps, guides, sources, applicable tools, evidence method, and next action are presented clearly
+**Then** Chapters, exits, boss fights, Steps, guides, sources, applicable tools, evidence method, and next action are presented clearly
 **And** progress display follows the Mission's goal type.
+
+**Given** an accepted Mission
+**When** the person attempts a boss fight, debriefs, edits their plan, logs progress, or declares a busy period
+**Then** commands and server-returned state are rendered through the API client
+**And** the interface shows no XP before completion and never frames a miss as a loss.
 
 **Given** an eligible Step
 **When** the person schedules or reschedules it
@@ -1765,6 +1862,11 @@ So that I can continue confidently or leave cleanly.
 **Then** server-authorized capabilities determine available actions
 **And** hidden controls are not treated as the security boundary.
 
+**Given** a person has earned titles and badges
+**When** they open their profile
+**Then** they can arrange them in limited showcase slots
+**And** gold appears only on earned value.
+
 ### Story 6.5: Prove the Complete Web MVP Journey
 
 **Requirements:** FR28
@@ -1777,7 +1879,7 @@ So that launch represents working user value rather than disconnected green test
 
 **Given** a clean production-like environment
 **When** the primary vertical slice runs
-**Then** a new guest can submit a goal, receive validated Mission previews, obtain one accepted Mission, schedule and complete an eligible Step, receive authoritative progression, and claim an account
+**Then** a new guest can submit a goal, receive validated Mission previews, obtain one accepted Mission, schedule and complete an eligible Step, attempt a boss fight and close a Chapter, receive authoritative progression, and claim an account
 **And** the flow traverses the real API, PostgreSQL ledger and projections, outbox, and client decode paths.
 
 **Given** the claimed account
@@ -1800,3 +1902,370 @@ So that launch represents working user value rather than disconnected green test
 **Then** all required gates pass or have explicit product-owner acceptance
 **And** no MVP flow depends on mobile, billing, social features, or an external integration.
 
+## Epic 7: Prove You Can Change
+
+A person can test what they can now do at the end of each Chapter, reflect on it, and earn progress for real gains.
+
+### Story 7.1: Publish the progression-v2 Reward Policy
+
+**Requirements:** FR38
+
+As a Zandegi participant,
+I want rewards to favour real-world tests over ticks,
+So that XP reflects what I can now do.
+
+**Acceptance Criteria:**
+
+**Given** the product owner has approved the step reward and per-Chapter cap, boss bands, target cap, fixed mission reward, and level curve
+**When** the policy is published in `core`
+**Then** it carries a new calculator version with every tunable value and rationale in versioned configuration
+**And** no value is hard-coded outside that configuration.
+
+**Given** events recorded under `neutral-v1`
+**When** progress is folded
+**Then** their stored amounts are used unchanged
+**And** golden fixtures prove the total is identical before and after this story.
+
+**Given** a person adds Steps to a Chapter
+**When** Step rewards are calculated
+**Then** the per-Chapter cap limits the total
+**And** no Chapter or mission bonus scales with step count.
+
+**Given** the calculator receives model estimates or client totals
+**When** an award is calculated
+**Then** they are rejected as inputs.
+
+### Story 7.2: Give Chapters and Steps Stable IDs
+
+**Requirements:** FR41
+
+As a person following a Mission,
+I want my progress tied to the Step itself rather than its position,
+So that changing my plan can never scramble what I have done.
+
+**Acceptance Criteria:**
+
+**Given** a generated Mission
+**When** it is accepted
+**Then** every Chapter and Step has a stable ID derived from its generated position
+**And** an ID is never reused.
+
+**Given** events recorded with Chapter and Step indices
+**When** they are read
+**Then** a pure upcaster derives their IDs without any database, clock, or calculator call
+**And** folded XP and completion are identical to before.
+
+**Given** a new completion is recorded
+**When** its payment claim is made
+**Then** the claim keys on the stable ID
+**And** a retried request pays once.
+
+**Given** existing Missions stored before this story
+**When** they are read
+**Then** they resolve to position-derived IDs
+**And** their path and next Step are unchanged.
+
+### Story 7.3: Capture Baseline and Goal Number at Intake
+
+**Requirements:** FR35
+
+As a person stating a measurable goal,
+I want to say where I am starting from and where I am heading,
+So that my boss fights are built from my real position.
+
+**Acceptance Criteria:**
+
+**Given** the approved list of registered metric kinds
+**When** a person states a goal
+**Then** they can confirm the goal type and, for a registered kind, give a baseline, goal number, and unit
+**And** these fields are optional and never hint that the goal is out of reach.
+
+**Given** a metric that is body weight, calories, money, or otherwise unregistered
+**When** intake completes
+**Then** no numeric target is offered
+**And** the Mission uses a real-act boss.
+
+**Given** a baseline and goal number
+**When** they are stored
+**Then** they sit in deletable relational records owned by the principal
+**And** they never enter the ledger or a model prompt.
+
+**Given** malformed, out-of-range, or client-forged values
+**When** validation runs
+**Then** the server returns a stable safe error.
+
+### Story 7.4: Show Each Chapter's Boss Fight
+
+**Requirements:** FR36
+
+As a person at the start of a Chapter,
+I want to see the real test ahead of me,
+So that it pulls me forward from the first day.
+
+**Acceptance Criteria:**
+
+**Given** a Chapter of a metric goal with a registered kind
+**When** the target is computed
+**Then** the pure `core` formula uses only the baseline, goal number, best result, Chapters left, and the kind's registered rules
+**And** model estimates are rejected.
+
+**Given** any other goal
+**When** the boss is displayed
+**Then** it presents a real act based on the Chapter's exit condition, depending only on the person's own actions
+**And** an `OUTCOME` goal shows no percentage.
+
+**Given** the cap cannot reach the goal within the Chapters left
+**When** the target is displayed
+**Then** the app says the plan is tight
+**And** the copy never judges the person.
+
+**Given** a person lowers a target
+**When** it is saved
+**Then** their target is shown as theirs
+**And** the published target remains the reference for the top band.
+
+**Given** any boss display or the builder
+**When** it renders before completion
+**Then** no XP amount is promised
+**And** the builder's `+N XP` is removed.
+
+### Story 7.5: Attempt, Debrief, and Close a Chapter
+
+**Requirements:** FR37, FR38, FR40
+
+As a person who has done the real thing,
+I want to record what happened and reflect on it,
+So that any honest attempt moves me forward.
+
+**Acceptance Criteria:**
+
+**Given** a person has finished or chosen to skip the remaining Steps in a Chapter
+**When** they submit a boss attempt with a debrief of at least one answer
+**Then** the Chapter closes whatever the result
+**And** the raw result and debrief are stored as deletable records outside the ledger.
+
+**Given** a metric attempt is a new personal best
+**When** the award is calculated
+**Then** the core policy pays the matching fixed band, marked self-declared
+**And** the top band is paid only at the published target, even if the person lowered their own.
+
+**Given** a real-act attempt is reported as done
+**When** the award is calculated
+**Then** a fixed amount pays once, with a small addition for an optional photo
+**And** no percentage is displayed.
+
+**Given** an attempt shows no gain
+**When** the result is displayed
+**Then** it pays no boss XP and offers a rematch
+**And** the copy never frames it as a loss.
+
+**Given** a debrief answers "what I'll improve"
+**When** the next Chapter opens
+**Then** that answer is its opening Step in the person's own words, removable by the person
+**And** no model call is made.
+
+**Given** the same attempt is retried or submitted twice
+**When** it is processed
+**Then** the award pays once.
+
+### Story 7.6: Rematch and Recalibrate
+
+**Requirements:** FR39
+
+As a person who missed a target,
+I want a fair way to try again,
+So that the next test stays hard but winnable.
+
+**Acceptance Criteria:**
+
+**Given** a person missed a target
+**When** they book a rematch
+**Then** its target sits halfway between their best and the missed target, rounded to the metric kind's increment
+**And** the Chapter stays closed.
+
+**Given** a miss
+**When** the next Chapter's target is computed
+**Then** it never rises above the target missed.
+
+**Given** a rematch reaches a higher band
+**When** the award is calculated
+**Then** it pays only the difference
+**And** total boss XP for that Chapter never exceeds the top band.
+
+**Given** a person declines a rematch
+**When** they continue
+**Then** nothing is lost and no prompt repeats in a pressuring way.
+
+### Story 7.7: Measure Mid-Goal Drop-Off
+
+**Requirements:** FR46
+
+As the Zandegi product owner,
+I want to see where people stop and whether boss fights change it,
+So that the Slice 2 decision rests on evidence.
+
+**Acceptance Criteria:**
+
+**Given** `docs/ANALYTICS.md` does not exist
+**When** this story is complete
+**Then** it defines event names, properties, and the drop-off measure
+**And** `CLAUDE.md`'s analytics requirement can be met by later surfaces.
+
+**Given** a person progresses through a Mission
+**When** events are emitted
+**Then** they show Chapter position, boss attempts, and return after a gap
+**And** they contain no goal text, debrief text, or raw results.
+
+**Given** collected events
+**When** the owner reviews them
+**Then** they can compare where people stop by Chapter position
+**And** the action item for agreeing the measure can be closed.
+
+## Epic 8: Make the Plan Yours
+
+A person can shape the plan around real life, record unplanned progress, and see evidence of who they are becoming.
+
+### Story 8.1: Edit the Plan
+
+**Requirements:** FR41
+
+As a person who knows my own situation,
+I want to rewrite, reorder, add, or delete Steps,
+So that the plan fits my real life.
+
+**Acceptance Criteria:**
+
+**Given** an owned Mission
+**When** a person edits Steps
+**Then** the change is saved through an explicit API use case with a version check
+**And** a stale edit receives a stable conflict.
+
+**Given** a Step already paid
+**When** it is edited or deleted
+**Then** its recorded award is unchanged.
+
+**Given** a person adds Steps
+**When** rewards are calculated
+**Then** the per-Chapter cap applies
+**And** deleting and re-adding a Step cannot pay twice.
+
+**Given** a generated Step's text is edited
+**When** it is saved
+**Then** its sources are removed and it is marked as the person's own
+**And** it is not sent to a model.
+
+**Given** a person attempts to add or remove a Chapter
+**When** the request is processed
+**Then** it is rejected with a stable error.
+
+### Story 8.2: Log Anything
+
+**Requirements:** FR42
+
+As a person who made unplanned progress,
+I want to record it in seconds,
+So that real wins count towards my story.
+
+**Acceptance Criteria:**
+
+**Given** an owned Mission
+**When** a person logs a one-line note or number
+**Then** it is filed under the current Chapter and can be moved
+**And** no model call is made.
+
+**Given** any log
+**When** progress is calculated
+**Then** it pays no XP.
+
+**Given** Story 2.4 is not complete
+**When** a person opens quick capture
+**Then** photo logging is not offered.
+
+**Given** Story 2.4 is complete
+**When** a person logs a photo
+**Then** it follows the private evidence lifecycle.
+
+**Given** logs exist
+**When** a person exports or deletes their data
+**Then** they are included.
+
+### Story 8.3: Declare a Busy Period
+
+**Requirements:** FR43
+
+As a person in a demanding stretch of life,
+I want to scale my goal down without penalty,
+So that I can keep the thread alive and come back.
+
+**Acceptance Criteria:**
+
+**Given** an owned goal
+**When** a person declares a busy period
+**Then** an end date is required
+**And** they can extend it at any time without penalty.
+
+**Given** an active busy period
+**When** boss prompts and boss Blocks fall due
+**Then** they move until after it ends.
+
+**Given** a touch action is completed
+**When** progress is calculated
+**Then** it pays no XP
+**And** model-written touch text must pass grounding and safety checks.
+
+**Given** a busy period ends
+**When** the person returns
+**Then** the app gently offers to resume
+**And** the copy contains no loss framing.
+
+### Story 8.4: Earn Titles and Badges
+
+**Requirements:** FR44
+
+As a person who keeps showing up,
+I want my behaviour recognised with labels I earned,
+So that my identity reflects what I have actually done.
+
+**Acceptance Criteria:**
+
+**Given** published title rules such as three rematches for "The Unbroken"
+**When** ledger facts meet a rule
+**Then** the title is earned once, as a ledger fact
+**And** it pays no XP.
+
+**Given** a person closes the middle Chapter
+**When** the midpoint badge is awarded
+**Then** it compares first and latest results using numbers and text
+**And** photos are included only after Story 2.4.
+
+**Given** earned titles and badges
+**When** a person arranges their profile
+**Then** they choose from limited showcase slots
+**And** gold appears only on earned value.
+
+**Given** prompts to use a title as a self-description
+**When** they appear
+**Then** they are optional.
+
+### Story 8.5: Carry Past Wins Forward
+
+**Requirements:** FR45
+
+As a person finding a new goal hard,
+I want to see what I have already done,
+So that my own history helps me believe I can do this too.
+
+**Acceptance Criteria:**
+
+**Given** a person misses a boss or returns after a gap
+**When** they have earlier results
+**Then** the app may show their own results
+**And** it never compares them with other people.
+
+**Given** a person has no earlier results
+**When** the same moment occurs
+**Then** nothing fabricated is shown.
+
+**Given** a person deleted a result
+**When** past wins are displayed
+**Then** that result does not appear.

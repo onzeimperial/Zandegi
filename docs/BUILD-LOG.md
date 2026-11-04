@@ -4,6 +4,89 @@ Newest first.
 
 ---
 
+## 2026-11-04 - generation failures: real enums, one retry, and a record that survives
+
+**Shipped**
+
+- **Closed sets now reach the API.** SDK 0.131.0's `zodOutputFormat` has no case for `enum` or
+  `const` and moves them into the description as text, so the API never enforced `verification` or
+  `primaryDomain`. `structuredOutputFormat` in `packages/ai/src/router.ts` restores them. Removing
+  it fails 5 tests in `router.test.ts`, which run against the real SDK helper.
+- **`messages.create` replaces `messages.parse`.** `parse` validated first, so a truncated response
+  surfaced as a parse failure and the `stop_reason` check never ran.
+- **One retry per model call** for `ModelOutputError` only (invalid JSON, schema mismatch,
+  truncation). A bad key or rate limit is not retried. Enums are enforceable; string lengths, number
+  ranges and most array bounds are not, so rejected output can still happen.
+- **Every rejection is reported**, including ones the retry recovers, with stage, chapter, field and
+  the value the model sent. No model prose or goal text is logged.
+- **Incidents outlive the terminal.** Development appends to
+  `apps/web/logs/generation-incidents.jsonl`; `node scripts/generation-incidents.mjs` groups them by
+  cause. The error screen shows the request id as a reference to look up.
+
+**Learned**
+
+- "Structured outputs" did not mean what the old router comment claimed. Print the schema that is
+  actually sent before trusting a guarantee about it.
+- The old diagnostic was cut at 500 characters just before the rejected value, so the log could not
+  say what the model had sent.
+
+**Verified**
+
+Three real generations after the fix (bench 100kg, get into medicine, start a business) returned
+missions in 43-60s with every `verification` in the allowed set and no rejections. A run forced to
+fail with an invalid key reached the incident report under the id the client received, with no goal
+text in the file. All tests pass; lint and format are clean.
+
+**Deferred / risky**
+
+- The original failure was intermittent, so three clean runs are evidence rather than proof. The
+  incident report is how to tell if it returns.
+- `next build` was not run locally because it shares `.next` with the dev server. CI runs it.
+- SDK 1.x exists. Upgrading is separate work: API version `2026-10-21` rejects `temperature`, which
+  the Haiku stages still send.
+- Hosted deployments keep incidents only in platform logs. There is no alerting.
+- Still open from this session: missions can vanish on the dev server, because the in-memory store
+  in `packages/api/src/demo-store.ts` is a module variable that recompiles appear to wipe.
+
+**Next step**
+
+Move that store's cache onto `globalThis` and walk the loop in a real browser.
+
+---
+
+## 2026-11-03 - course correction: goal progression rethink (planning only)
+
+**Shipped**
+
+No code. An approved sprint change proposal,
+`_bmad-output/planning-artifacts/sprint-change-proposal-2026-11-03.md`, and its edits to the spec,
+product rules, architecture spine, epics, sprint status and deferred work. It adds boss fights, gain
+XP, rematches, debriefs, editable plans, logs, busy periods, titles and past wins, as Epics 7 and 8.
+
+**Learned**
+
+- Bonuses are 82% of the XP in a 5x5 mission, and they scale with step count. Once plans are
+  editable, one self-written tick could be worth up to 540 XP, so boss fights replace the bonuses.
+- The ledger identifies steps by position, so editing a plan would scramble past completions.
+  Stable IDs (Story 7.2) must come first.
+- A boss result is a number the person types. Under AD-5 it is marked self-declared and pays only
+  fixed, capped bands.
+
+**Deferred / risky**
+
+- Self-declared results must be revisited before any leaderboard.
+- Slice 1 runs on the demo ledger, which is not atomic. Story 2.2 must replace it before production.
+- "People quit mid-goal" is a hypothesis with no user data. Story 7.7 measures it before Epic 8.
+- `CLAUDE.md` law 6 is read as covering generated content, so person-written steps skip grounding.
+- `DESIGN.md`, `EXPERIENCE.md` and `docs/ANALYTICS.md` still do not exist.
+
+**Next step**
+
+Approve the reward numbers: step reward and per-chapter cap, boss bands, target cap, fixed mission
+reward, level curve and provisional thresholds. That unblocks Story 7.1.
+
+---
+
 ## 2026-10-09 - the game loop: real missions on the path, and confirming steps for XP
 
 **Shipped**

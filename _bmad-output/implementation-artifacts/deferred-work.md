@@ -26,6 +26,7 @@
 - source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-1-3-put-mission-generation-behind-the-api-boundary.md`
   summary: Finish AC1 by forbidding `apps/**` from importing `@zandegi/core` root, and migrate the three app files that still do.
   evidence: Story 1.3 enforced four of the five surfaces AC1 names. `apps/web/src/app/builder/builder-state.ts:1` imports the scoring formula `verificationMult` from core root and renders `+N XP` at `builder/page.tsx:274`; `lib/domain-art.ts:1` imports `DOMAINS`; `lib/demo-data.ts:1` imports `GoalType`, which the contracts subpath already carries. Blocked on two things: `DOMAINS` belongs in the contracts surface that story 1.4 owns, and whether a client screen may compute XP from published formulas at all is a product decision, not a refactor.
+  decision: Settled 2026-11-03 in `sprint-change-proposal-2026-11-03.md`. Under AD-5, a client screen may not show XP before completion, and Story 7.4 removes the builder's `+N XP`. The import-boundary work stays open.
 
 - source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-1-3-put-mission-generation-behind-the-api-boundary.md`
   summary: Strengthen the terminal-frame guard in `apps/web/src/app/generate/sse.ts` to validate step shape, not just that `steps` is an array.

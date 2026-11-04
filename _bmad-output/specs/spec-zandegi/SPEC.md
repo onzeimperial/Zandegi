@@ -49,7 +49,7 @@ People can name meaningful goals but often lack a safe, realistic path from inte
 
 - **CAP-8 — Web MVP journey**
   - **intent:** A person can complete the full Zandegi MVP journey on the web.
-  - **success:** A production-like vertical slice covers goal intake, validated Mission reveal, scheduling, trusted completion, progression, account claim, export, and deletion.
+  - **success:** A production-like vertical slice covers goal intake, validated Mission reveal, scheduling, trusted completion, a boss fight, progression, account claim, export, and deletion.
 
 - **CAP-9 — Safe operations**
   - **intent:** An authorized operator can manage catalog candidates, content review, safety failures, evidence states, dead letters, and projection rebuilds.
@@ -58,6 +58,14 @@ People can name meaningful goals but often lack a safe, realistic path from inte
 - **CAP-10 — Export and erasure**
   - **intent:** A person can export and delete their personal information without corrupting ledger integrity.
   - **success:** A retryable deletion workflow revokes identity, suppresses work, deletes content and evidence, removes identity resolution, and returns a completion receipt while only approved non-resolvable integrity facts remain.
+
+- **CAP-11 — Proof of growth**
+  - **intent:** A person can test what they can now do at the end of each Chapter, reflect on the result, and build a record showing they are capable of change.
+  - **success:** Each Chapter has one boss fight with its target visible from the Chapter's start. An attempt plus a debrief closes the Chapter whatever the result. XP comes only from the published core policy, is bounded, and never depends on model output.
+
+- **CAP-12 — Plans that fit real life**
+  - **intent:** A person can rewrite, reorder, add, or delete Steps, log unplanned progress, and declare busy periods.
+  - **success:** Plan edits never change a recorded award or earn extra XP. Logs add to the Goal's story and pay no XP. A busy period moves boss fights until afterwards, with no penalty.
 
 ## Constraints
 
@@ -70,6 +78,10 @@ People can name meaningful goals but often lack a safe, realistic path from inte
 - Outcome goals never display a generic completion percentage. Gold styling denotes earned value only.
 - The MVP runs as the managed Sydney deployment defined by the architecture, using private Vercel Blob for evidence and separate local/preview/production resources.
 - External integrations, including external calendar sync, are not required for any MVP capability.
+- Numeric boss targets come only from the published `core` formula, using the person's own baseline and goal number. They apply only to registered metric kinds; body weight, calories, and money get a real-act boss instead. A person can always lower a target. AI may write real-act trial text, which must pass grounding.
+- Boss results are self-reported in the MVP and labelled as such. Payouts use fixed bands that stop at the target, and metric payouts require a new personal best.
+- Debriefs, logs, and person-written Steps are deletable personal text. They never enter the ledger or a model prompt.
+- A miss is never framed as a loss. The app may call a plan tight; it never judges the person.
 
 ## Non-goals
 
@@ -79,6 +91,7 @@ People can name meaningful goals but often lack a safe, realistic path from inte
 - Health, fitness, GitHub, banking, screen-time, music, or external calendar integrations.
 - Regulated-document storage, clinical care, diagnosis, treatment, personal financial advice, or legal advice.
 - Durable/resumable generation and a permanent staging environment.
+- Video or witness proof, challenge codes, automated plausibility checks, and shareable boss-fight cards.
 
 ## Success signal
 
@@ -87,4 +100,5 @@ A new visitor can state a real goal, watch only validated Mission chapters appea
 ## Open Questions
 
 - Before the persistence schema freezes, what guest-retention duration, renewal activity, warning timing, and evidence-cleanup rule should apply?
-- Before progression implementation, what exact neutral rewards, authored reward bands, caps, level curve, and provisional-review thresholds should product approve?
+- Before progression implementation, what exact step rewards and per-Chapter cap, boss reward bands, target cap, fixed mission reward, level curve, and provisional-review thresholds should product approve?
+- Before Slice 2 starts, which measure shows whether boss fights reduce mid-goal drop-off? The premise is a product hypothesis, not yet backed by user data.
