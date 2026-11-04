@@ -65,3 +65,18 @@ export {
   type DemoStoreDriver,
   type Env,
 } from "./demo-store";
+export {
+  allowedEmailsFromEnv,
+  authModeFromEnv,
+  isAccountAllowed,
+  resolveAccountPrincipal,
+  type AccountEmail,
+  type AccountPrincipalStorePort,
+  type AuthMode,
+} from "./identity/account";
+export {
+  DEFAULT_DAILY_GENERATION_LIMIT,
+  claimDailyGeneration,
+  dailyGenerationLimitFromEnv,
+  type GenerationUsagePort,
+} from "./generation/usage";

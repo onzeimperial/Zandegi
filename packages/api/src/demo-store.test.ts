@@ -95,6 +95,52 @@ describe("store selection", () => {
     expect(error!.diagnostic).toContain("UPSTASH_REDIS_REST_URL");
   });
 
+  const POSTGRES = "postgresql://user:hunter2@db.neon.test/zandegi?sslmode=require";
+
+  it("infers Postgres from a postgres URL, ahead of Redis", () => {
+    expect(demoStoreConfigFromEnv({ ...REDIS_ENV, DATABASE_URL: POSTGRES })).toEqual({
+      driver: "postgres",
+      retentionSeconds: THIRTY_DAYS,
+      postgres: { url: POSTGRES },
+    });
+    expect(demoStoreConfigFromEnv({ DATABASE_URL: "postgres://h/d" }).driver).toBe("postgres");
+  });
+
+  it("does not read the legacy SQLite URL as a database", () => {
+    expect(demoStoreConfigFromEnv({ DATABASE_URL: "file:./dev.db" }).driver).toBe("memory");
+  });
+
+  it("fails closed when Postgres is requested with no postgres URL", () => {
+    for (const DATABASE_URL of [undefined, "file:./dev.db"]) {
+      expect(() =>
+        demoStoreConfigFromEnv({ ZANDEGI_MISSION_STORE: "postgres", DATABASE_URL }),
+      ).toThrow(GenerationError);
+    }
+  });
+
+  describe("in production", () => {
+    const production: Env = { NODE_ENV: "production" };
+
+    it.each<[string, Env]>([
+      ["nothing configured", {}],
+      ["memory asked for by name", { ZANDEGI_MISSION_STORE: "memory" }],
+      ["only a SQLite url", { DATABASE_URL: "file:./dev.db" }],
+      ["Redis merely present", REDIS_ENV],
+    ])("refuses %s", (_label, env) => {
+      expect(() => demoStoreConfigFromEnv({ ...production, ...env })).toThrow(GenerationError);
+    });
+
+    it("accepts Postgres, and Redis only when asked for by name", () => {
+      expect(demoStoreConfigFromEnv({ ...production, DATABASE_URL: POSTGRES }).driver).toBe(
+        "postgres",
+      );
+      expect(
+        demoStoreConfigFromEnv({ ...production, ...REDIS_ENV, ZANDEGI_MISSION_STORE: "redis" })
+          .driver,
+      ).toBe("redis");
+    });
+  });
+
   it("builds the in-memory store without touching a network", async () => {
     const store = await createDemoStore({ driver: "memory", retentionSeconds: 60 });
     await store.recordMission({
@@ -140,6 +186,12 @@ describe("the port adapter", () => {
       },
       saveGuest: async () => undefined,
       renewGuest: async () => undefined,
+      findOrCreateAccountPrincipal: async () => {
+        throw new StoreUnavailableError("findOrCreate", "[redacted]: connection refused");
+      },
+      claimGenerationSlot: async () => {
+        throw new StoreUnavailableError("claimGenerationSlot", "[redacted]: connection refused");
+      },
     };
     const ports = demoPortsFromStore(broken);
 

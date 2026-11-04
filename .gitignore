@@ -11,6 +11,9 @@
 **/dist/
 *.tsbuildinfo
 
+# prisma client (regenerated on install)
+/packages/db/src/generated/
+
 # next-env (regenerated)
 **/next-env.d.ts
 

@@ -1,0 +1,75 @@
+// Relational state for the two-person test. Prisma types never leave @zandegi/db
+// (AD-2): the rest of the system sees the DemoStore interface.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// A person, identified either by a guest token hash or by a Clerk user.
+model Principal {
+  id          String   @id
+  tokenHash   String?  @unique
+  clerkUserId String?  @unique
+  createdAt   DateTime @db.Timestamptz(3)
+
+  missions Mission[]
+  claims   CompletionClaim[]
+  ledger   LedgerEntry[]
+  usage    GenerationUsage[]
+}
+
+/// An accepted mission. Personal content lives here, where it can be deleted.
+model Mission {
+  id          String   @id
+  ownerId     String
+  runId       String
+  generatedAt DateTime @db.Timestamptz(3)
+  goalText    String
+  pursuitSlug String
+  mission     Json
+  safetyClass String
+  goalContext Json?
+
+  owner Principal @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+
+  @@index([ownerId, generatedAt(sort: Desc)])
+}
+
+/// The atomic marker that one step has been paid. Removed if the append fails.
+model CompletionClaim {
+  ownerId      String
+  completionId String
+  claimedAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  owner Principal @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+
+  @@id([ownerId, completionId])
+}
+
+/// Append-only (law 4). A database trigger rejects UPDATE and DELETE; see the migration.
+model LedgerEntry {
+  position   BigInt   @id @default(autoincrement())
+  ownerId    String
+  entry      Json
+  recordedAt DateTime @default(now()) @db.Timestamptz(3)
+
+  owner Principal @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+
+  @@index([ownerId, position])
+}
+
+/// One person's generations in one UTC day. Spend protection, not progression.
+model GenerationUsage {
+  principalId String
+  day         String
+  count       Int
+
+  principal Principal @relation(fields: [principalId], references: [id], onDelete: Restrict)
+
+  @@id([principalId, day])
+}

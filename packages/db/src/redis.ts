@@ -17,6 +17,9 @@
  */
 
 import {
+  accountKey,
+  usageKey,
+  USAGE_RETENTION_SECONDS,
   completionKey,
   guestKey,
   ledgerKey,
@@ -51,6 +54,8 @@ export interface RedisLike {
   /** Atomic append, so two completions at once cannot lose one another. */
   rpush(key: string, value: string): Promise<unknown>;
   lrange(key: string, start: number, stop: number): Promise<unknown[]>;
+  /** Atomic, so two generations at once cannot both take the last slot. */
+  incr(key: string): Promise<number>;
 }
 
 export interface RedisStoreOptions {
@@ -181,6 +186,36 @@ export function createRedisDemoStore<
       await guard("saveGuest", () =>
         client.set(guestKey(tokenHash), JSON.stringify(guest), { ex: retentionSeconds }),
       );
+    },
+
+    async findOrCreateAccountPrincipal(clerkUserId, candidate) {
+      const key = accountKey(clerkUserId);
+      // Write if absent, then read whichever write won.
+      await guard("findOrCreateAccountPrincipal", () =>
+        client.set(key, JSON.stringify(candidate), { ex: retentionSeconds, nx: true }),
+      );
+      const found = decode<StoredGuest>(
+        await guard("findOrCreateAccountPrincipal", () => client.get(key)),
+      );
+      if (found === null) {
+        throw new StoreUnavailableError("findOrCreateAccountPrincipal", "account link unreadable");
+      }
+      await guard("findOrCreateAccountPrincipal", () => client.expire(key, retentionSeconds)).catch(
+        () => undefined,
+      );
+      return found;
+    },
+
+    async claimGenerationSlot(ownerId, day, limit) {
+      if (limit <= 0) return false;
+      const key = usageKey(ownerId, day);
+      const count = await guard("claimGenerationSlot", () => client.incr(key));
+      if (count === 1) {
+        await guard("claimGenerationSlot", () => client.expire(key, USAGE_RETENTION_SECONDS)).catch(
+          () => undefined,
+        );
+      }
+      return count <= limit;
     },
 
     async claimCompletion(ownerId, completionId) {

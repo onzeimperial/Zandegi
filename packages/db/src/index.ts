@@ -1,13 +1,10 @@
 /**
  * @zandegi/db — persistence.
  *
- * Today that is the demo store behind `DemoStore`: an in-memory twin for local
- * development and the test suite, and Upstash Redis for the deployed demo,
- * chosen by configuration. Prisma, Postgres, Neon and migrations are not here
- * yet; when they arrive they are a third sibling of the same interface, not a
- * rewrite of anything above it.
- *
- * `@prisma/client` and `prisma` stay installed and unused until that story.
+ * The store behind `DemoStore`, chosen by configuration: Postgres (Neon) when a
+ * person's data has to last, an in-memory twin for local development and the
+ * test suite, and Upstash Redis for the earlier expiring demo. Prisma types
+ * never leave this package (AD-2).
  */
 
 export {
@@ -28,6 +25,12 @@ export {
   type InMemoryDemoStore,
   type InMemoryStoreOptions,
 } from "./memory";
+
+export {
+  createPostgresDemoStore,
+  type PostgresDemoStore,
+  type PostgresStoreOptions,
+} from "./postgres";
 
 export {
   createRedisDemoStore,

@@ -74,6 +74,18 @@ export interface DemoStore<
   renewGuest(tokenHash: string): Promise<void>;
 
   /**
+   * The principal for a signed-in account, created from `candidate` the first
+   * time and returned unchanged after that. Atomic: requests racing for one
+   * account all get the same principal.
+   */
+  findOrCreateAccountPrincipal(clerkUserId: string, candidate: StoredGuest): Promise<StoredGuest>;
+  /**
+   * Take one of `limit` generation slots for `day` (YYYY-MM-DD). `true` when one
+   * was free. Atomic: requests racing for the last slot cannot both win.
+   */
+  claimGenerationSlot(ownerId: string, day: string, limit: number): Promise<boolean>;
+
+  /**
    * Claim a completion atomically. `true` only for the first caller: a
    * double-tap, a retried request or two tabs all race to one winner, so a
    * step can never be paid twice. This is a single atomic set-if-absent, never
@@ -128,6 +140,19 @@ export function guestKey(tokenHash: string): string {
 export function ownerIndexKey(ownerId: string): string {
   return `${DEMO_KEY_PREFIX}:missions:${ownerId}`;
 }
+
+/** The account-to-principal link. */
+export function accountKey(clerkUserId: string): string {
+  return `${DEMO_KEY_PREFIX}:account:${clerkUserId}`;
+}
+
+/** One person's generation count for one day. */
+export function usageKey(ownerId: string, day: string): string {
+  return `${DEMO_KEY_PREFIX}:usage:${ownerId}:${day}`;
+}
+
+/** Outlives the day in every timezone. The count means nothing after that. */
+export const USAGE_RETENTION_SECONDS = 2 * 24 * 60 * 60;
 
 /** One guest's append-only ledger. */
 export function ledgerKey(ownerId: string): string {

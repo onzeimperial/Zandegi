@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createInMemoryDemoStore } from "./memory";
 import { MAX_LISTED_MISSIONS, guestKey, missionKey, type StoredMission } from "./store";
+import { describeStoreContract } from "./store-contract";
+
+const contractStore = createInMemoryDemoStore();
+describeStoreContract("memory", () => contractStore);
 
 const NOW = Date.UTC(2026, 9, 7);
 const WINDOW = 60;

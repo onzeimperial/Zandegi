@@ -12,6 +12,9 @@
  */
 
 import {
+  accountKey,
+  usageKey,
+  USAGE_RETENTION_SECONDS,
   completionKey,
   guestKey,
   ledgerKey,
@@ -130,6 +133,27 @@ export function createInMemoryDemoStore<
 
     async saveGuest(tokenHash, guest) {
       write(guestKey(tokenHash), guest);
+    },
+
+    async findOrCreateAccountPrincipal(clerkUserId, candidate) {
+      // No await between the read and the write, as with `claimCompletion`.
+      const key = accountKey(clerkUserId);
+      const found = read(key);
+      if (found !== null) {
+        entries.set(key, { value: found, expiresAt: expiryFrom() });
+        return structuredClone(found) as StoredGuest;
+      }
+      write(key, candidate);
+      return structuredClone(candidate);
+    },
+
+    async claimGenerationSlot(ownerId, day, limit) {
+      const key = usageKey(ownerId, day);
+      const used = read(key);
+      const count = typeof used === "number" ? used : 0;
+      if (count >= limit) return false;
+      entries.set(key, { value: count + 1, expiresAt: now() + USAGE_RETENTION_SECONDS * 1000 });
+      return true;
     },
 
     async claimCompletion(ownerId, completionId) {

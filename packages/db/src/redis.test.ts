@@ -13,7 +13,7 @@ const TOKEN = "AX9zASQgYTEyMzQ1Njc4OTBhYmNkZWY";
 const WINDOW = 1_234;
 
 interface Call {
-  op: "get" | "set" | "expire" | "del" | "rpush" | "lrange";
+  op: "get" | "set" | "expire" | "del" | "rpush" | "lrange" | "incr";
   key: string;
   ex?: number;
 }
@@ -35,6 +35,13 @@ function fakeRedis(options: { data?: Record<string, string>; fail?: boolean } = 
       if (opts.nx === true && data.has(key)) return null;
       data.set(key, value);
       return "OK";
+    },
+    async incr(key) {
+      calls.push({ op: "incr", key });
+      if (options.fail) throw new Error(`fetch failed: POST ${URL}/incr (Bearer ${TOKEN})`);
+      const count = Number(data.get(key) ?? 0) + 1;
+      data.set(key, String(count));
+      return count;
     },
     async expire(key, seconds) {
       calls.push({ op: "expire", key, ex: seconds });
@@ -166,6 +173,9 @@ describe("the Redis demo store", () => {
       async expire() {
         throw new Error(`fetch failed: POST ${URL}/expire`);
       },
+      async incr() {
+        return 1;
+      },
       async del() {
         return 0;
       },
@@ -264,5 +274,24 @@ describe("completion claims and the ledger in Redis", () => {
       .catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(StoreUnavailableError);
     expect(JSON.stringify(error) + String(error)).not.toContain(TOKEN);
+  });
+
+  it("links an account to the first principal it was given", async () => {
+    const store = createRedisDemoStore({ client: fakeRedis().client });
+    const first = { id: "p-1", createdAt: "2026-11-04T00:00:00.000Z" };
+    expect(await store.findOrCreateAccountPrincipal("user_1", first)).toEqual(first);
+    expect(await store.findOrCreateAccountPrincipal("user_1", { ...first, id: "p-2" })).toEqual(
+      first,
+    );
+  });
+
+  it("grants generation slots up to the limit and expires the count", async () => {
+    const fake = fakeRedis();
+    const store = createRedisDemoStore({ client: fake.client });
+    expect(await store.claimGenerationSlot("p-1", "2026-11-04", 1)).toBe(true);
+    expect(await store.claimGenerationSlot("p-1", "2026-11-04", 1)).toBe(false);
+    expect(await store.claimGenerationSlot("p-1", "2026-11-05", 1)).toBe(true);
+    expect(await store.claimGenerationSlot("p-1", "2026-11-06", 0)).toBe(false);
+    expect(fake.calls.filter((call) => call.op === "expire").length).toBe(2);
   });
 });

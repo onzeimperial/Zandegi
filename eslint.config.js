@@ -48,6 +48,7 @@ export default tseslint.config(
       "**/.next/**",
       "**/node_modules/**",
       "**/next-env.d.ts",
+      "packages/db/src/generated/**",
       "legacy/**",
       "_bmad/render/**",
     ],
