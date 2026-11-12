@@ -2,7 +2,8 @@
 title: 'Daily loop: steps by day, gentle recovery, daily reminder'
 type: 'feature'
 created: '2026-11-12'
-status: 'ready-for-dev'
+status: 'in-progress'
+baseline_commit: '80a46a929800185f6bfc7b08abbefd3d9a2ec96a'
 route: 'dispatch'
 review_loop_iteration: 0
 context:
