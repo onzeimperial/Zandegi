@@ -78,11 +78,11 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `packages/core/src/schedule/*` -- the pure planner, rollover and adaptation, with tests for every matrix row -- trustworthy arithmetic.
-- [ ] `packages/api/src/client.ts`, `plan/plan-today.ts` -- `TodayPlan` (today's step IDs, the next 3 days, a done flag, and whether this is the first visit after a gap), built from the mission, the fold and the zone -- one use case for web and the reminder.
-- [ ] `apps/web/src/app/today/*` -- day sections with loading, empty, error and 375px states -- shows the schedule.
-- [ ] `apps/web/src/app/api/cron/reminder/route.ts`, `vercel.json`, the channel adapter and the opt-in -- the daily send, with happy-path and auth-failure tests.
-- [ ] `docs/BUILD-LOG.md`, `README.md` (new environment variables).
+- [x] `packages/core/src/schedule/*` -- the pure planner, rollover and adaptation, with tests for every matrix row -- trustworthy arithmetic.
+- [x] `packages/api/src/client.ts`, `plan/plan-today.ts` -- `TodayPlan` (today's step IDs, the next 3 days, a done flag, and whether this is the first visit after a gap), built from the mission, the fold and the zone -- one use case for web and the reminder.
+- [x] `apps/web/src/app/today/*` -- day sections with loading, empty, error and 375px states -- shows the schedule.
+- [x] `apps/web/src/app/api/cron/reminder/route.ts`, `vercel.json`, the channel adapter and the opt-in -- the daily send, with happy-path and auth-failure tests.
+- [x] `docs/BUILD-LOG.md`, `README.md` (new environment variables).
 
 **Acceptance Criteria:**
 - Given a mission with a timezone and a budget, when the person opens Today on two consecutive days without completing anything, then the same steps lead each day, nothing says "missed", and XP is unchanged.

@@ -17,6 +17,7 @@ import {
   isAccountAllowed,
   randomIdGenerator,
   randomTokenSource,
+  reminderAddress,
   resolveAccountPrincipal,
   resolveGuest,
   resolveOrMintGuest,
@@ -71,6 +72,11 @@ export async function readAccountAccess(): Promise<AccountAccess> {
 export interface RequestSession {
   principal: GuestPrincipal;
   ports: DemoPorts;
+  /**
+   * The verified, invited sign-in address, for the daily reminder. Personal
+   * content: never logged. Absent in guest mode.
+   */
+  email?: string;
   /** Guest mode only: re-written so the browser-side expiry renews. */
   setCookie?: string;
 }
@@ -107,15 +113,13 @@ export async function resolveRequestSession(
   const ports = await demoPortsFromEnv();
 
   if (access.kind === "allowed") {
+    const allowed = allowedEmailsFromEnv(process.env);
     const principal = await resolveAccountPrincipal(
-      {
-        clerkUserId: access.clerkUserId,
-        emails: access.emails,
-        allowed: allowedEmailsFromEnv(process.env),
-      },
+      { clerkUserId: access.clerkUserId, emails: access.emails, allowed },
       { accounts: ports.accounts, clock: systemClock, ids: randomIdGenerator },
     );
-    return { principal, ports };
+    const email = reminderAddress(access.emails, allowed);
+    return { principal, ports, ...(email === undefined ? {} : { email }) };
   }
 
   const policy = guestCookiePolicyFromEnv(process.env);

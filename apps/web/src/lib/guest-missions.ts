@@ -16,9 +16,26 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { GenerationError, foldProgress, listLogs, listMissions, readProgress } from "@zandegi/api";
-import type { MissionLogView, ProgressView, StoredMissionView } from "@zandegi/api/client";
-import { isAccessRefusal, resolveRequestSession } from "./session";
+import {
+  GenerationError,
+  foldProgress,
+  gmailCredentialsFromEnv,
+  listLogs,
+  listMissions,
+  planToday,
+  readProgress,
+  readReminder,
+  systemClock,
+} from "@zandegi/api";
+import type {
+  MissionLogView,
+  ProgressView,
+  ReminderSettingsView,
+  StoredMissionView,
+  TodayPlan,
+} from "@zandegi/api/client";
+import { isAccessRefusal, resolveRequestSession, type RequestSession } from "./session";
+import { timezoneFromCookieHeader } from "./timezone";
 
 export type GuestMissions =
   | {
@@ -27,23 +44,74 @@ export type GuestMissions =
       progress: ProgressView;
       /** Each mission's logs, newest first. Empty unless asked for. */
       logs: Record<string, MissionLogView[]>;
+      /** Each mission's plan for today, by mission id. Empty unless asked for. */
+      plans: Record<string, TodayPlan>;
+      /** The daily reminder setting, or `null` when not asked for or not readable. */
+      reminder: ReminderSettingsView | null;
     }
   | { status: "unavailable" };
 
+/**
+ * The reminder setting, or `null` if it cannot be read: a reminder problem
+ * must never take Today down.
+ */
+async function loadReminder(session: RequestSession): Promise<ReminderSettingsView | null> {
+  try {
+    return await readReminder(
+      { principal: session.principal, email: session.email },
+      {
+        reminders: session.ports.reminders,
+        mailerConfigured: gmailCredentialsFromEnv(process.env) !== null,
+      },
+    );
+  } catch {
+    console.error("[guest-missions]", JSON.stringify({ outcome: "reminder-unavailable" }));
+    return null;
+  }
+}
+
 export async function loadGuestMissions(
-  options: { withLogs?: boolean } = {},
+  options: { withLogs?: boolean; withToday?: boolean } = {},
 ): Promise<GuestMissions> {
   try {
-    const session = await resolveRequestSession((await headers()).get("cookie"), { mint: false });
+    const cookieHeader = (await headers()).get("cookie");
+    const session = await resolveRequestSession(cookieHeader, { mint: false });
     // No guest means a brand-new character: level 1, no XP, nothing done.
     if (session === null) {
-      return { status: "ready", missions: [], progress: foldProgress([]), logs: {} };
+      return {
+        status: "ready",
+        missions: [],
+        progress: foldProgress([]),
+        logs: {},
+        plans: {},
+        reminder: null,
+      };
     }
 
-    const [missions, progress] = await Promise.all([
-      listMissions({ principal: session.principal }, { persistence: session.ports.persistence }),
-      readProgress({ principal: session.principal }, { ledger: session.ports.ledger }),
-    ]);
+    let missions: StoredMissionView[];
+    let progress: ProgressView;
+    let plans: Record<string, TodayPlan> = {};
+    let reminder: ReminderSettingsView | null = null;
+    if (options.withToday === true) {
+      const [today, setting] = await Promise.all([
+        planToday(
+          { principal: session.principal, browserTimezone: timezoneFromCookieHeader(cookieHeader) },
+          {
+            persistence: session.ports.persistence,
+            ledger: session.ports.ledger,
+            clock: systemClock,
+          },
+        ),
+        loadReminder(session),
+      ]);
+      ({ missions, progress, plans } = today);
+      reminder = setting;
+    } else {
+      [missions, progress] = await Promise.all([
+        listMissions({ principal: session.principal }, { persistence: session.ports.persistence }),
+        readProgress({ principal: session.principal }, { ledger: session.ports.ledger }),
+      ]);
+    }
     const logs: Record<string, MissionLogView[]> = {};
     if (options.withLogs === true) {
       // One mission's logs failing must not take Today down: that mission
@@ -64,7 +132,7 @@ export async function loadGuestMissions(
         console.error("[guest-missions]", JSON.stringify({ outcome: "logs-unavailable" }));
       }
     }
-    return { status: "ready", missions, progress, logs };
+    return { status: "ready", missions, progress, logs, plans, reminder };
   } catch (error) {
     // `redirect` works by throwing, so it belongs here rather than in the try.
     if (error instanceof GenerationError && isAccessRefusal(error.code)) redirect("/");

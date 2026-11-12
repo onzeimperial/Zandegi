@@ -4,6 +4,61 @@ Newest first.
 
 ---
 
+## 2026-11-12 - daily loop: steps by day, gentle recovery, daily reminder
+
+**Shipped**
+
+- **A pure planner (Story 3.1, simplified).** `packages/core/src/schedule/`: `localDay`,
+  `planDays`, `adaptCapacity` and `isReturningAfterGap`. Undone steps are placed on the person's
+  local days in path order (reorders and own steps included) until the next step would overflow the
+  day. Steps completed earlier today fill today first, so finishing today never pulls tomorrow in,
+  and every day gets at least one step even when it is longer than the day. A step with no
+  estimate is placed at a nominal 30 minutes; the step itself is never resized. No clock, no store.
+- **Adapting the load (Story 3.2's thresholds).** Over the last seven local days before today, and
+  only since the mission began, completed minutes over capacity above 0.85 adds 15%, below 0.45
+  removes 20%. Base is the weekly budget over 7, or 30 minutes a day with none.
+- **`planToday` and `TodayPlan`.** One use case for Today and the reminder: today's step ids, the
+  next 3 days, a done-for-today flag, a finished flag, and `returningAfterGap`. The day follows the
+  mission's `goalContext.timezone`, then the browser's zone (a `zandegi_tz` cookie, checked with the
+  now-exported `isSupportedTimezone`), then UTC. Derived on every read; nothing is stored, nothing
+  touches the ledger.
+- **Today shows the days.** Each mission card lists today's steps (done ones ticked, Start step on
+  the current one), "Done for today" when they are all done, a "Coming up" list for the next days,
+  and one welcoming line after a day with nothing completed. No streak, no "missed", no countdown.
+- **The daily reminder.** Opt-in on Today ("Turn on reminders" / "Stop reminders"). The address is
+  the verified, invited sign-in email, stored at opt-in and cleared at opt-out. `GET /api/cron/reminder`
+  runs at 21:00 UTC from `vercel.json`, accepts only `Bearer $CRON_SECRET` (constant-time, 401
+  otherwise, and 401 for everything with no secret), and sends at most one email per person per
+  local day, only while today has undone steps. The day is claimed before sending, so a failed send
+  is not retried that day. Gmail SMTP via nodemailer 10.2.1, loaded only when sending; with the
+  credentials unset reminders stay off and nothing else changes.
+- **Storage.** Migration `20261112120000_daily_reminder` adds `ReminderPreference` (additive).
+  Contract tests cover memory and Postgres (PGlite), including the one-winner day claim; Redis
+  reads none and refuses writes.
+
+**Learned**
+
+- Counting today's completions toward today's capacity is what makes the plan stable through the
+  day; leaving today out of the adaptation window is what keeps the capacity itself stable.
+- "First visit after a gap" cannot be known without storing visits, which the spec rules out. It is
+  derived instead: nothing completed yesterday or yet today, on a mission begun before today. The
+  line shows on every visit that day until the first step is completed.
+
+**Broken or deferred**
+
+- After a day with nothing done, the adaptation removes 20% from the next day's load, so a person
+  who misses days sees fewer steps per day. This is Story 3.2's rule as written; the steps still lead.
+- `docs/ANALYTICS.md` still does not exist, so the new surfaces fire no analytics events.
+- Not run here: a real Gmail send, a real Vercel cron run, and the manual 375px and midnight checks.
+
+**Next step**
+
+Set `CRON_SECRET` and the two `REMINDER_GMAIL_*` variables on Vercel, apply the migration, deploy,
+then run the spec's manual checks: trigger the cron route with and without the secret, and move the
+device clock past local midnight to see Today roll over at 375px.
+
+---
+
 ## 2026-11-12 - own the plan: Today, plan editing, quick logs
 
 **Shipped**

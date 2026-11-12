@@ -4,5 +4,11 @@
   "framework": "nextjs",
   "buildCommand": "pnpm --filter @zandegi/db db:generate && if [ \"$VERCEL_ENV\" = \"production\" ]; then pnpm --filter @zandegi/db db:deploy; fi && pnpm --filter @zandegi/web build",
   "installCommand": "pnpm install --frozen-lockfile",
-  "outputDirectory": "apps/web/.next"
+  "outputDirectory": "apps/web/.next",
+  "crons": [
+    {
+      "path": "/api/cron/reminder",
+      "schedule": "0 21 * * *"
+    }
+  ]
 }
