@@ -13,5 +13,6 @@ export * from "./verification";
 export * from "./safety";
 export * from "./scoring/xp";
 export * from "./scoring/award";
+export * from "./scoring/progression";
 export * from "./scoring/levels";
 export * from "./scoring/rarity";
