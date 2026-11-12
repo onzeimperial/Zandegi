@@ -94,6 +94,7 @@ const { POST: complete } = await import("./missions/[id]/complete/route");
 const { PATCH: editPlanRoute } = await import("./missions/[id]/plan/route");
 const { GET: readLogs, POST: writeLog } = await import("./missions/[id]/logs/route");
 const { PATCH: moveLogRoute } = await import("./missions/[id]/logs/[logId]/route");
+const { POST: bossRoute } = await import("./missions/[id]/boss/route");
 
 const ORIGIN = "http://localhost";
 const INVITED = "invited@example.com";
@@ -133,6 +134,29 @@ async function postComplete(id: string, stepId?: string) {
   const bytes = await encoded.arrayBuffer();
   return complete(
     new Request(`${ORIGIN}/api/missions/${id}/complete`, {
+      method: "POST",
+      body: bytes,
+      headers: {
+        "content-type": encoded.headers.get("content-type")!,
+        "content-length": String(bytes.byteLength),
+        origin: ORIGIN,
+      },
+    }),
+    { params: Promise.resolve({ id }) },
+  );
+}
+
+async function postBoss(id: string) {
+  const form = new FormData();
+  form.set("chapterId", "0");
+  form.set("result", "done");
+  form.set("evidence", "SELF");
+  form.set("attemptKey", "access-key-1");
+  form.set("wentWell", "Read every letter");
+  const encoded = new Response(form);
+  const bytes = await encoded.arrayBuffer();
+  return bossRoute(
+    new Request(`${ORIGIN}/api/missions/${id}/boss`, {
       method: "POST",
       body: bytes,
       headers: {
@@ -231,6 +255,7 @@ describe("signed out", () => {
     await expectCode(await postLog("m-1", NOTE), 401, "SIGN_IN_REQUIRED");
     await expectCode(await getLogs("m-1"), 401, "SIGN_IN_REQUIRED");
     await expectCode(await patchLog("m-1", "l-1", { chapterId: "0" }), 401, "SIGN_IN_REQUIRED");
+    await expectCode(await postBoss("m-1"), 401, "SIGN_IN_REQUIRED");
     expect(pipeline.calls).toBe(0);
   });
 });
@@ -248,6 +273,7 @@ describe("signed in but not invited", () => {
     await expectCode(await postLog("m-1", NOTE), 403, "ACCOUNT_NOT_ALLOWED");
     await expectCode(await getLogs("m-1"), 403, "ACCOUNT_NOT_ALLOWED");
     await expectCode(await patchLog("m-1", "l-1", { chapterId: "0" }), 403, "ACCOUNT_NOT_ALLOWED");
+    await expectCode(await postBoss("m-1"), 403, "ACCOUNT_NOT_ALLOWED");
     expect(pipeline.calls).toBe(0);
   });
 
@@ -304,6 +330,7 @@ describe("an invited person", () => {
     await expectCode(await patchPlan(id, RENAME), 404, "MISSION_NOT_FOUND");
     await expectCode(await postLog(id, NOTE), 404, "MISSION_NOT_FOUND");
     await expectCode(await getLogs(id), 404, "MISSION_NOT_FOUND");
+    await expectCode(await postBoss(id), 404, "MISSION_NOT_FOUND");
     signIn("user_a");
     expect(await (await getMission(id)).json()).toMatchObject({
       mission: { version: 0, mission: { chapters: [{ title: "Sounds" }] } },
@@ -344,15 +371,26 @@ describe("an invited person", () => {
     });
     expect((await patchLog(id, log.logId, { chapterId: "0" })).status).toBe(200);
 
-    // The one generated step already finished the chapter and the mission and
-    // paid their bonuses. The added step pays nothing, and nothing the edits
-    // did moved the total.
+    // The added step pays nothing, and nothing the edits did moved the total.
     const finishing = await postComplete(id, "own-1");
     const { result } = (await finishing.json()) as {
       result: { awards: { kind: string; xp: number }[]; progress: { totalXp: number } };
     };
     expect(result.awards).toEqual([{ kind: "step", xp: 0 }]);
-    expect(result.progress.totalXp).toBe(40 + 100 + 400);
+    expect(result.progress.totalXp).toBe(40);
+
+    // The chapter's boss, beaten on this device, closes the one-chapter
+    // mission: the done band and the fixed mission reward.
+    const boss = await postBoss(id);
+    expect(boss.status).toBe(200);
+    const beaten = (await boss.json()) as {
+      result: { awards: { kind: string; xp: number }[]; progress: { totalXp: number } };
+    };
+    expect(beaten.result.awards).toEqual([
+      { kind: "boss", xp: 400 },
+      { kind: "mission", xp: 1500 },
+    ]);
+    expect(beaten.result.progress.totalXp).toBe(40 + 400 + 1500);
   });
 });
 
