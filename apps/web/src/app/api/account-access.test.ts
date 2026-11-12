@@ -91,6 +91,9 @@ vi.mock("@zandegi/api", async () => {
 const { POST: generate } = await import("./generate/route");
 const { GET: read } = await import("./missions/[id]/route");
 const { POST: complete } = await import("./missions/[id]/complete/route");
+const { PATCH: editPlanRoute } = await import("./missions/[id]/plan/route");
+const { GET: readLogs, POST: writeLog } = await import("./missions/[id]/logs/route");
+const { PATCH: moveLogRoute } = await import("./missions/[id]/logs/[logId]/route");
 
 const ORIGIN = "http://localhost";
 const INVITED = "invited@example.com";
@@ -116,10 +119,15 @@ function getMission(id: string) {
   });
 }
 
-async function postComplete(id: string) {
+async function postComplete(id: string, stepId?: string) {
   const form = new FormData();
-  form.set("chapter", "0");
-  form.set("step", "0");
+  if (stepId === undefined) {
+    // The fields a page open from before stable ids still sends.
+    form.set("chapter", "0");
+    form.set("step", "0");
+  } else {
+    form.set("stepId", stepId);
+  }
   form.set("evidence", "SELF");
   const encoded = new Response(form);
   const bytes = await encoded.arrayBuffer();
@@ -136,6 +144,41 @@ async function postComplete(id: string) {
     { params: Promise.resolve({ id }) },
   );
 }
+
+function jsonRequest(url: string, method: string, body: unknown) {
+  return new Request(`${ORIGIN}${url}`, {
+    method,
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json", Origin: ORIGIN },
+  });
+}
+
+function patchPlan(id: string, body: unknown) {
+  return editPlanRoute(jsonRequest(`/api/missions/${id}/plan`, "PATCH", body), {
+    params: Promise.resolve({ id }),
+  });
+}
+
+function postLog(id: string, body: unknown) {
+  return writeLog(jsonRequest(`/api/missions/${id}/logs`, "POST", body), {
+    params: Promise.resolve({ id }),
+  });
+}
+
+function getLogs(id: string) {
+  return readLogs(new Request(`${ORIGIN}/api/missions/${id}/logs`), {
+    params: Promise.resolve({ id }),
+  });
+}
+
+function patchLog(id: string, logId: string, body: unknown) {
+  return moveLogRoute(jsonRequest(`/api/missions/${id}/logs/${logId}`, "PATCH", body), {
+    params: Promise.resolve({ id, logId }),
+  });
+}
+
+const RENAME = { version: 0, edit: { op: "renameChapter", chapterId: "0", title: "Warm up" } };
+const NOTE = { kind: "note", text: "Practised five letters on the train" };
 
 async function generatedMissionId(): Promise<string> {
   const response = await postGenerate();
@@ -184,6 +227,10 @@ describe("signed out", () => {
     await expectCode(await postGenerate(), 401, "SIGN_IN_REQUIRED");
     await expectCode(await getMission("m-1"), 401, "SIGN_IN_REQUIRED");
     await expectCode(await postComplete("m-1"), 401, "SIGN_IN_REQUIRED");
+    await expectCode(await patchPlan("m-1", RENAME), 401, "SIGN_IN_REQUIRED");
+    await expectCode(await postLog("m-1", NOTE), 401, "SIGN_IN_REQUIRED");
+    await expectCode(await getLogs("m-1"), 401, "SIGN_IN_REQUIRED");
+    await expectCode(await patchLog("m-1", "l-1", { chapterId: "0" }), 401, "SIGN_IN_REQUIRED");
     expect(pipeline.calls).toBe(0);
   });
 });
@@ -197,6 +244,10 @@ describe("signed in but not invited", () => {
     await expectCode(await postGenerate(), 403, "ACCOUNT_NOT_ALLOWED");
     await expectCode(await getMission("m-1"), 403, "ACCOUNT_NOT_ALLOWED");
     await expectCode(await postComplete("m-1"), 403, "ACCOUNT_NOT_ALLOWED");
+    await expectCode(await patchPlan("m-1", RENAME), 403, "ACCOUNT_NOT_ALLOWED");
+    await expectCode(await postLog("m-1", NOTE), 403, "ACCOUNT_NOT_ALLOWED");
+    await expectCode(await getLogs("m-1"), 403, "ACCOUNT_NOT_ALLOWED");
+    await expectCode(await patchLog("m-1", "l-1", { chapterId: "0" }), 403, "ACCOUNT_NOT_ALLOWED");
     expect(pipeline.calls).toBe(0);
   });
 
@@ -250,6 +301,58 @@ describe("an invited person", () => {
     signIn("user_b");
     await expectCode(await getMission(id), 404, "MISSION_NOT_FOUND");
     await expectCode(await postComplete(id), 404, "MISSION_NOT_FOUND");
+    await expectCode(await patchPlan(id, RENAME), 404, "MISSION_NOT_FOUND");
+    await expectCode(await postLog(id, NOTE), 404, "MISSION_NOT_FOUND");
+    await expectCode(await getLogs(id), 404, "MISSION_NOT_FOUND");
+    signIn("user_a");
+    expect(await (await getMission(id)).json()).toMatchObject({
+      mission: { version: 0, mission: { chapters: [{ title: "Sounds" }] } },
+    });
+  });
+
+  it("edits and logs on one device and finds it all on another, with XP moved only by steps", async () => {
+    signIn("user_a");
+    const id = await generatedMissionId();
+    expect((await postComplete(id)).status).toBe(200);
+
+    expect((await patchPlan(id, RENAME)).status).toBe(200);
+    const added = await patchPlan(id, {
+      version: 1,
+      edit: { op: "addStep", chapterId: "0", title: "Say them aloud" },
+    });
+    expect(added.status).toBe(200);
+    const logged = await postLog(id, NOTE);
+    expect(logged.status).toBe(200);
+    const { log } = (await logged.json()) as { log: { logId: string; chapterId: string } };
+    expect(log.chapterId).toBe("0");
+
+    // A second device is a fresh request with the same account.
+    const reread = (await (await getMission(id)).json()) as {
+      mission: {
+        version: number;
+        mission: { chapters: { title: string; steps: { id: string }[] }[] };
+      };
+    };
+    expect(reread.mission.version).toBe(2);
+    expect(reread.mission.mission.chapters[0]!.title).toBe("Warm up");
+    expect(reread.mission.mission.chapters[0]!.steps.map((step) => step.id)).toEqual([
+      "0:0",
+      "own-1",
+    ]);
+    expect(await (await getLogs(id)).json()).toMatchObject({
+      logs: [{ logId: log.logId, text: NOTE.text }],
+    });
+    expect((await patchLog(id, log.logId, { chapterId: "0" })).status).toBe(200);
+
+    // The one generated step already finished the chapter and the mission and
+    // paid their bonuses. The added step pays nothing, and nothing the edits
+    // did moved the total.
+    const finishing = await postComplete(id, "own-1");
+    const { result } = (await finishing.json()) as {
+      result: { awards: { kind: string; xp: number }[]; progress: { totalXp: number } };
+    };
+    expect(result.awards).toEqual([{ kind: "step", xp: 0 }]);
+    expect(result.progress.totalXp).toBe(40 + 100 + 400);
   });
 });
 

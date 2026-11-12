@@ -43,6 +43,7 @@ describe("generator UI state", () => {
     });
     expect(detail.chapters).toHaveLength(0);
     const chapter = {
+      id: "0",
       index: 0,
       title: "Start",
       exitCondition: "Evidence gathered",

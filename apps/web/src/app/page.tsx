@@ -16,6 +16,6 @@ export default async function Home() {
   const access = await readAccountAccess().catch(() => null);
   if (access === null) return <HomeView state="unavailable" />;
   // Outside any try: `redirect` works by throwing.
-  if (access.kind === "allowed") redirect("/path");
+  if (access.kind === "allowed") redirect("/today");
   return <HomeView state={STATES[access.kind]} />;
 }

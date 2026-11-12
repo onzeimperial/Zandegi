@@ -58,9 +58,9 @@ describe("the middleware", () => {
     });
 
     it.each(["/shop", "/crew", "/profile", "/builder", "/customise", "/complete"])(
-      "keeps %s out of reach, sending them to their path",
+      "keeps %s out of reach, sending them to Today",
       async (path) => {
-        expect((await run(path)).location).toBe("http://localhost/path");
+        expect((await run(path)).location).toBe("http://localhost/today");
       },
     );
 

@@ -35,9 +35,9 @@ describe("the home page", () => {
     expect(html).not.toContain('type="email"');
   });
 
-  it("sends an allowed person straight to their path", async () => {
+  it("sends an allowed person straight to Today", async () => {
     await expect(render({ kind: "allowed", clerkUserId: "u", emails: [] })).rejects.toThrow(
-      "redirect:/path",
+      "redirect:/today",
     );
   });
 
@@ -46,6 +46,7 @@ describe("the home page", () => {
     expect(html).toContain("invite-only");
     expect(html).toContain("Sign out");
     expect(html).not.toContain('href="/path"');
+    expect(html).not.toContain('href="/today"');
     expect(html).not.toContain('href="/generate"');
   });
 
@@ -66,6 +67,6 @@ describe("the home page", () => {
     const html = await render({ kind: "guest-mode" });
     expect(html).toContain("Guest mode");
     expect(html).toContain('href="/generate"');
-    expect(html).toContain('href="/path"');
+    expect(html).toContain('href="/today"');
   });
 });

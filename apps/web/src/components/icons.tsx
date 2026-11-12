@@ -1,6 +1,7 @@
 import React, { type ReactNode } from "react";
 
 export type IconName =
+  | "today"
   | "path"
   | "crew"
   | "shop"
@@ -38,6 +39,12 @@ export type IconName =
 export type IconTone = "flame" | "shard" | "bolt" | "shardSoft" | "ember";
 
 const paths: Record<IconName, ReactNode> = {
+  today: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+    </>
+  ),
   path: <path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z" />,
   crew: (
     <>

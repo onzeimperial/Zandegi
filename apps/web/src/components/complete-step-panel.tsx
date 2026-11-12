@@ -57,21 +57,23 @@ async function preparePhoto(file: File): Promise<Blob> {
 function awardLine(award: AwardView): string {
   if (award.kind === "chapter") return `Chapter complete · +${award.xp} XP`;
   if (award.kind === "mission") return `Mission complete · +${award.xp} XP`;
-  return `+${award.xp} XP`;
+  // A step the person added counts toward its chapter but pays nothing yet.
+  return award.xp === 0 ? "Your own step · counts toward this chapter" : `+${award.xp} XP`;
 }
 
 export function CompleteStepPanel({
   missionId,
-  chapterIndex,
-  stepIndex,
+  stepId,
+  paysXp,
   state,
   completedWith,
   nextHref,
   pathHref,
 }: {
   missionId: string;
-  chapterIndex: number;
-  stepIndex: number;
+  stepId: string;
+  /** False for a step the person added: it counts toward the chapter, but pays no XP yet. */
+  paysXp: boolean;
   state: "current" | "done" | "upcoming";
   completedWith?: { evidence: CompletionEvidence; xp: number };
   /** The step after this one, or `null` if this is the last. */
@@ -92,8 +94,7 @@ export function CompleteStepPanel({
   async function confirm(evidence: CompletionEvidence, photo?: File) {
     setPhase({ kind: "saving" });
     const form = new FormData();
-    form.set("chapter", String(chapterIndex));
-    form.set("step", String(stepIndex));
+    form.set("stepId", stepId);
     form.set("evidence", evidence);
     if (photo !== undefined) form.set("photo", await preparePhoto(photo), "evidence.jpg");
 
@@ -139,7 +140,7 @@ export function CompleteStepPanel({
         <p className="confirm-title">Step confirmed</p>
         <p className="confirm-sub">
           {completedWith?.evidence === "ARTIFACT" ? "With a photo" : "With a check"}
-          {completedWith !== undefined && <> · +{completedWith.xp} XP</>}
+          {completedWith !== undefined && completedWith.xp > 0 && <> · +{completedWith.xp} XP</>}
         </p>
         <Link href={nextHref ?? pathHref} className="d button-start">
           {nextHref === null ? "Back to your path" : "Next step"}
@@ -196,8 +197,9 @@ export function CompleteStepPanel({
     <section className="confirm-panel" aria-label="Confirm this step">
       <p className="confirm-title">Done this step?</p>
       <p className="confirm-sub">
-        A photo is stronger evidence than a check. We check that it is a real photo and keep its
-        fingerprint, never the photo itself.
+        {paysXp
+          ? "A photo is stronger evidence than a check. We check that it is a real photo and keep its fingerprint, never the photo itself."
+          : "You added this step, so it earns no XP for now. It still counts toward finishing the chapter."}
       </p>
 
       {phase.kind === "photo" ? (

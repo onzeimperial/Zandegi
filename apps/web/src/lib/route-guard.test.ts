@@ -5,20 +5,20 @@ const clerk = { clerk: true, production: true };
 
 describe("the page guard", () => {
   it("sends a signed-out person home from every page", () => {
-    for (const path of ["/path", "/step", "/generate", ...UNBUILT_ROUTES]) {
+    for (const path of ["/today", "/path", "/step", "/generate", ...UNBUILT_ROUTES]) {
       expect(pageRedirect(path, { ...clerk, signedIn: false }), path).toBe("/");
     }
   });
 
   it("keeps a signed-in person away from fixture boards", () => {
     for (const path of UNBUILT_ROUTES) {
-      expect(pageRedirect(path, { ...clerk, signedIn: true }), path).toBe("/path");
+      expect(pageRedirect(path, { ...clerk, signedIn: true }), path).toBe("/today");
     }
-    expect(pageRedirect("/crew/anything", { ...clerk, signedIn: true })).toBe("/path");
+    expect(pageRedirect("/crew/anything", { ...clerk, signedIn: true })).toBe("/today");
   });
 
   it("lets a signed-in person reach the built screens", () => {
-    for (const path of ["/path", "/step", "/generate"]) {
+    for (const path of ["/today", "/path", "/step", "/generate"]) {
       expect(pageRedirect(path, { ...clerk, signedIn: true }), path).toBeNull();
     }
   });

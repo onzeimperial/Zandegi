@@ -6,7 +6,14 @@ import type { ProgressView, StoredMissionView } from "@zandegi/api/client";
 import { AppShell } from "@/components/app-shell";
 import { GuestStatusRail } from "@/components/status-rail";
 import { Icon } from "@/components/icons";
-import { estimateLabel, loadGuestMissions, selectMission, stepStates } from "@/lib/guest-missions";
+import { PlanEditor } from "@/components/plan-editor";
+import {
+  estimateLabel,
+  loadGuestMissions,
+  selectMission,
+  stepHref,
+  stepStates,
+} from "@/lib/guest-missions";
 
 export const metadata: Metadata = { title: "Mission path" };
 // Every render depends on the guest's own cookie, so nothing here is cacheable.
@@ -21,22 +28,14 @@ const mascotSrc =
 const TRAIL_OFFSETS = [0, -60, -100, -60, 0, 60, 100, 60] as const;
 const offsetAt = (position: number) => TRAIL_OFFSETS[position % TRAIL_OFFSETS.length]!;
 
-function stepHref(missionId: string, chapterIndex: number, stepIndex: number): string {
-  const params = new URLSearchParams({
-    mission: missionId,
-    chapter: String(chapterIndex),
-    step: String(stepIndex),
-  });
-  return `/step?${params.toString()}`;
-}
-
 export default async function PathPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mission?: string | string[] }>;
+  searchParams: Promise<{ mission?: string | string[]; edit?: string | string[] }>;
 }) {
   const params = await searchParams;
   const requested = typeof params.mission === "string" ? params.mission : undefined;
+  const editing = params.edit === "1";
   const loaded = await loadGuestMissions();
 
   if (loaded.status === "unavailable") {
@@ -65,6 +64,24 @@ export default async function PathPage({
             Generate your first mission
           </Link>
         </section>
+      </AppShell>
+    );
+  }
+
+  if (editing) {
+    const states = stepStates(selected, loaded.progress);
+    const done = selected.mission.chapters
+      .flatMap((chapter) => chapter.steps)
+      .filter((step) => states.state(step.id) === "done")
+      .map((step) => step.id);
+    return (
+      <AppShell current="Path" aside={rail}>
+        <PlanEditor
+          key={selected.missionId}
+          missionId={selected.missionId}
+          initial={{ version: selected.version, mission: selected.mission }}
+          doneStepIds={done}
+        />
       </AppShell>
     );
   }
@@ -140,13 +157,9 @@ function MissionPath({
 
   // The chapter holding the current step is the one the hero describes; once
   // everything is done there is no current step, so it describes completion.
-  const currentChapterIndex = chapters.findIndex((chapter, chapterIndex) =>
-    chapter.steps.some((_step, stepIndex) => states.state(chapterIndex, stepIndex) === "current"),
-  );
-  const heroChapter = currentChapterIndex >= 0 ? chapters[currentChapterIndex] : undefined;
-  const doneCount = progress.completions.filter(
-    (completion) => completion.missionId === selected.missionId,
-  ).length;
+  const heroChapter = states.current?.chapter;
+  const currentChapterNumber = states.current?.chapterNumber ?? 0;
+  const doneCount = states.doneOnPath;
   let position = 0;
 
   return (
@@ -160,9 +173,15 @@ function MissionPath({
             <h1 className="hero-title">
               {states.finished || heroChapter === undefined
                 ? "Mission complete"
-                : `Chapter ${currentChapterIndex + 1} · ${heroChapter.title}`}
+                : `Chapter ${currentChapterNumber} · ${heroChapter.title}`}
             </h1>
           </div>
+          <Link
+            href={`/path?mission=${encodeURIComponent(selected.missionId)}&edit=1`}
+            className="d plan-edit-link"
+          >
+            <Icon name="pencil" /> Edit plan
+          </Link>
         </div>
         {/* Counts, not a percentage bar. Law 2: there is no measured quantity
             behind a generated mission, so a bar would be an invented
@@ -170,7 +189,7 @@ function MissionPath({
         <p className="hero-progress">
           {states.finished
             ? `All ${chapters.length} chapters done`
-            : `Chapter ${currentChapterIndex + 1} of ${chapters.length} · ${doneCount} ${
+            : `Chapter ${currentChapterNumber} of ${chapters.length} · ${doneCount} ${
                 doneCount === 1 ? "step" : "steps"
               } done`}
           {heroChapter !== undefined && !states.finished && (
@@ -181,7 +200,7 @@ function MissionPath({
 
       <div className="path-map">
         {chapters.map((chapter, chapterIndex) => (
-          <Fragment key={`${selected.missionId}-${chapterIndex}`}>
+          <Fragment key={`${selected.missionId}-${chapter.id}`}>
             {chapterIndex > 0 && (
               <div className="chapter-rule">
                 <i />
@@ -192,11 +211,12 @@ function MissionPath({
               </div>
             )}
 
-            {chapter.steps.map((step, stepIndex) => {
+            {chapter.steps.map((step) => {
               const offset = offsetAt(position++);
-              const href = stepHref(selected.missionId, chapterIndex, stepIndex);
-              const state = states.state(chapterIndex, stepIndex);
-              const key = `${chapterIndex}-${stepIndex}`;
+              const href = stepHref(selected.missionId, step.id);
+              const state = states.state(step.id);
+              const key = step.id;
+              const estimate = estimateLabel(step.estimatedMinutes);
 
               if (state === "current") {
                 return (
@@ -206,7 +226,7 @@ function MissionPath({
                     style={{ transform: `translateX(${offset}px)` }}
                   >
                     <div className="next-label">
-                      <span className="when">NEXT · {estimateLabel(step.estimatedMinutes)}</span>
+                      <span className="when">NEXT{estimate === null ? "" : ` · ${estimate}`}</span>
                       <span className="what">{step.title}</span>
                     </div>
                     <div className="halo">

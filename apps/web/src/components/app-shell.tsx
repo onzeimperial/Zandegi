@@ -6,6 +6,7 @@ import { Icon, type IconName } from "./icons";
 /* Only screens backed by real data. Crew, shop and profile return here when they
    stop being fixtures, so nothing in the nav makes a claim about a real person. */
 const navigation: ReadonlyArray<{ href: string; label: string; icon: IconName }> = [
+  { href: "/today", label: "Today", icon: "today" },
   { href: "/path", label: "Path", icon: "path" },
 ];
 

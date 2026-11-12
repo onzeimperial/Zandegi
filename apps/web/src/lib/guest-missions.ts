@@ -16,25 +16,49 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { GenerationError, foldProgress, listMissions, readProgress } from "@zandegi/api";
-import type { ProgressView, StoredMissionView } from "@zandegi/api/client";
+import { GenerationError, foldProgress, listLogs, listMissions, readProgress } from "@zandegi/api";
+import type { MissionLogView, ProgressView, StoredMissionView } from "@zandegi/api/client";
 import { isAccessRefusal, resolveRequestSession } from "./session";
 
 export type GuestMissions =
-  | { status: "ready"; missions: StoredMissionView[]; progress: ProgressView }
+  | {
+      status: "ready";
+      missions: StoredMissionView[];
+      progress: ProgressView;
+      /** Each mission's logs, newest first. Empty unless asked for. */
+      logs: Record<string, MissionLogView[]>;
+    }
   | { status: "unavailable" };
 
-export async function loadGuestMissions(): Promise<GuestMissions> {
+export async function loadGuestMissions(
+  options: { withLogs?: boolean } = {},
+): Promise<GuestMissions> {
   try {
     const session = await resolveRequestSession((await headers()).get("cookie"), { mint: false });
     // No guest means a brand-new character: level 1, no XP, nothing done.
-    if (session === null) return { status: "ready", missions: [], progress: foldProgress([]) };
+    if (session === null) {
+      return { status: "ready", missions: [], progress: foldProgress([]), logs: {} };
+    }
 
     const [missions, progress] = await Promise.all([
       listMissions({ principal: session.principal }, { persistence: session.ports.persistence }),
       readProgress({ principal: session.principal }, { ledger: session.ports.ledger }),
     ]);
-    return { status: "ready", missions, progress };
+    const logs: Record<string, MissionLogView[]> = {};
+    if (options.withLogs === true) {
+      const lists = await Promise.all(
+        missions.map((mission) =>
+          listLogs(
+            { principal: session.principal, missionId: mission.missionId },
+            { persistence: session.ports.persistence, logs: session.ports.logs },
+          ),
+        ),
+      );
+      missions.forEach((mission, index) => {
+        logs[mission.missionId] = lists[index]!;
+      });
+    }
+    return { status: "ready", missions, progress, logs };
   } catch (error) {
     // `redirect` works by throwing, so it belongs here rather than in the try.
     if (error instanceof GenerationError && isAccessRefusal(error.code)) redirect("/");
@@ -79,8 +103,12 @@ export const VERIFICATION_LABEL: Record<
   INTEGRATION: "A connected app confirms it",
 };
 
-/** "About 30 min" or "About 1 h 15 min" — always phrased as an estimate. */
-export function estimateLabel(minutes: number): string {
+/**
+ * "About 30 min" or "About 1 h 15 min" — always phrased as an estimate. `null`
+ * for 0: a step the person added has no estimate, and none is invented.
+ */
+export function estimateLabel(minutes: number): string | null {
+  if (minutes <= 0) return null;
   if (minutes < 60) return `About ${minutes} min`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
@@ -90,39 +118,52 @@ export function estimateLabel(minutes: number): string {
 /** Where a step stands for this guest. */
 export type StepState = "done" | "current" | "upcoming";
 
+type Step = StoredMissionView["mission"]["chapters"][number]["steps"][number];
+type Chapter = StoredMissionView["mission"]["chapters"][number];
+
+export interface MissionStepStates {
+  state: (stepId: string) => StepState;
+  /** The current step and its chapter, or `null` once every step is done. */
+  current: { chapter: Chapter; chapterNumber: number; step: Step } | null;
+  finished: boolean;
+  /** Steps on the path that are done. A deleted step is no longer on the path. */
+  doneOnPath: number;
+}
+
 /**
- * Each step's state in one mission. Steps complete in order, so the first one
- * not yet done is current and everything after it is upcoming.
+ * Each step's state in one mission, by stable id. Steps complete in their
+ * current order, so the first one not yet done is current and everything after
+ * it is upcoming. A reorder moves the current step; it never undoes a done one.
  */
-export function stepStates(
-  mission: StoredMissionView,
-  progress: ProgressView,
-): { state: (chapterIndex: number, stepIndex: number) => StepState; finished: boolean } {
+export function stepStates(mission: StoredMissionView, progress: ProgressView): MissionStepStates {
   const done = new Set(
     progress.completions
       .filter((completion) => completion.missionId === mission.missionId)
-      .map((completion) => `${completion.chapterIndex}:${completion.stepIndex}`),
+      .map((completion) => completion.stepId),
   );
-  // Positions, not the `index` fields: completions are recorded by position
-  // and the step links are built by position, so all three must agree.
-  let current: string | null = null;
-  const chapters = mission.mission.chapters;
-  for (let chapterIndex = 0; chapterIndex < chapters.length && current === null; chapterIndex++) {
-    const steps = chapters[chapterIndex]!.steps;
-    for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
-      const key = `${chapterIndex}:${stepIndex}`;
-      if (!done.has(key)) {
-        current = key;
-        break;
-      }
+  let current: MissionStepStates["current"] = null;
+  let doneOnPath = 0;
+  const { chapters } = mission.mission;
+  for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex++) {
+    const chapter = chapters[chapterIndex]!;
+    for (const step of chapter.steps) {
+      if (done.has(step.id)) doneOnPath += 1;
+      else if (current === null) current = { chapter, chapterNumber: chapterIndex + 1, step };
     }
   }
+  const currentId = current?.step.id ?? null;
   return {
-    state: (chapterIndex, stepIndex) => {
-      const key = `${chapterIndex}:${stepIndex}`;
-      if (done.has(key)) return "done";
-      return key === current ? "current" : "upcoming";
+    state: (stepId) => {
+      if (done.has(stepId)) return "done";
+      return stepId === currentId ? "current" : "upcoming";
     },
+    current,
     finished: current === null,
+    doneOnPath,
   };
+}
+
+/** The link to one step's guide. */
+export function stepHref(missionId: string, stepId: string): string {
+  return `/step?${new URLSearchParams({ mission: missionId, step: stepId }).toString()}`;
 }

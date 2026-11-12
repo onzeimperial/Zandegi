@@ -13,6 +13,7 @@ const routes = [
   "profile",
   "shop",
   "step",
+  "today",
 ];
 const appDirectory = fileURLToPath(new URL(".", import.meta.url));
 
@@ -37,7 +38,7 @@ describe("designed route contract", () => {
     }
   });
   it("renders the guest's real missions on path and step, with no fixture fabrications", () => {
-    for (const route of ["path", "step"]) {
+    for (const route of ["path", "step", "today"]) {
       const source = readFileSync(join(appDirectory, route, "page.tsx"), "utf8");
       // Real data, loaded server-side through the ownership-checked use case.
       expect(source, route).toContain("loadGuestMissions");
@@ -59,6 +60,7 @@ describe("designed route contract", () => {
     for (const hidden of ["/crew", "/shop", "/profile", "/builder", "/customise", "/complete"]) {
       expect(shell, hidden).not.toContain(hidden);
     }
+    expect(shell).toContain('href: "/today"');
     expect(shell).toContain('href: "/path"');
     expect(shell).toContain('href="/generate"');
   });

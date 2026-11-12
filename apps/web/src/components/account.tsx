@@ -47,7 +47,7 @@ export function SignInCard() {
           </a>
         </div>
       </ClerkFailed>
-      <SignIn routing="hash" withSignUp forceRedirectUrl="/path" />
+      <SignIn routing="hash" withSignUp forceRedirectUrl="/today" />
     </div>
   );
 }

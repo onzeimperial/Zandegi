@@ -31,7 +31,7 @@ function Chapter({
       {open && (
         <div className="chapter-steps">
           {chapter.steps.map((step) => (
-            <div className="step" key={step.index}>
+            <div className="step" key={step.id}>
               <div>
                 <span className="what">{step.title}</span>
                 {/* A planning estimate, never a promise and never an XP figure:
@@ -106,7 +106,7 @@ export function MissionReview({ result }: { result: GenerationResult }) {
             <ol>
               {mission.chapters.map((chapter, index) => (
                 <Chapter
-                  key={chapter.index}
+                  key={chapter.id}
                   chapter={chapter}
                   index={index}
                   open={openChapter === index}

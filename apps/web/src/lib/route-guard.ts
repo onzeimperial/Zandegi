@@ -22,7 +22,7 @@ export function pageRedirect(
 
   if (state.clerk) {
     if (!state.signedIn) return "/";
-    return unbuilt ? "/path" : null;
+    return unbuilt ? "/today" : null;
   }
   // Guest mode keeps the boards for design work. Production without Clerk is off.
   return unbuilt && state.production ? "/" : null;

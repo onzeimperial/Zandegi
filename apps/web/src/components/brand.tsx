@@ -7,7 +7,7 @@ const mascotSrc =
 
 export function Brand({ compact = false }: { compact?: boolean }) {
   return (
-    <Link href="/path" className="brand" aria-label="Zandegi home">
+    <Link href="/today" className="brand" aria-label="Zandegi home">
       <Image
         className="brand-mark"
         src={mascotSrc}

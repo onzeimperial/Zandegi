@@ -1,4 +1,4 @@
-import { GenerationError } from "@zandegi/api";
+import { GenerationError, foldProgress } from "@zandegi/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const resolveRequestSession = vi.fn();
@@ -28,7 +28,7 @@ vi.mock("./session", async () => {
   return { ...actual, resolveRequestSession: () => resolveRequestSession() };
 });
 
-const { loadGuestMissions } = await import("./guest-missions");
+const { loadGuestMissions, stepStates, estimateLabel, stepHref } = await import("./guest-missions");
 const { default: GenerateLayout } = await import("@/app/generate/layout");
 
 beforeEach(() => {
@@ -115,5 +115,73 @@ describe("the generate page's guard with Clerk active", () => {
   it("sends everyone home when Clerk cannot answer", async () => {
     clerk.failure = new Error("clerk down");
     await expect(GenerateLayout({ children })).rejects.toThrow("redirect:/");
+  });
+});
+
+describe("step states by stable id", () => {
+  const step = (id: string) => ({
+    id,
+    index: 0,
+    title: id,
+    estimatedMinutes: 0,
+    verification: "SELF" as const,
+    guide: { approach: "", materials: [], commonMistakes: [], whatGoodLooksLike: "" },
+    sources: [],
+    toolKinds: [],
+  });
+  const mission = (stepIds: string[][]) => ({
+    missionId: "m-1",
+    generatedAt: "2026-11-12T00:00:00.000Z",
+    pursuitSlug: "p",
+    safetyClass: "NORMAL" as const,
+    version: 0,
+    mission: {
+      title: "t",
+      goalType: "PROJECT" as const,
+      primaryDomain: "Mind" as const,
+      chapters: stepIds.map((ids, index) => ({
+        id: String(index),
+        index,
+        title: `c${index}`,
+        exitCondition: "",
+        steps: ids.map(step),
+      })),
+    },
+  });
+  const done = (...stepIds: string[]) =>
+    foldProgress(
+      stepIds.map((stepId) => ({
+        version: 2 as const,
+        eventId: stepId,
+        missionId: "m-1",
+        recordedAt: "2026-11-12T00:00:00.000Z",
+        type: "StepCompleted" as const,
+        chapterId: stepId.split(":")[0] ?? "0",
+        stepId,
+        evidence: { kind: "SELF" as const },
+        award: { xp: 40, base: 40, verificationMult: 1, calculatorVersion: "neutral-v1" },
+      })),
+    );
+
+  it("keeps a done step done after a reorder, and makes the first undone current", () => {
+    const states = stepStates(mission([["0:1", "0:0"], ["1:0"]]), done("0:0"));
+    expect(states.state("0:0")).toBe("done");
+    expect(states.state("0:1")).toBe("current");
+    expect(states.state("1:0")).toBe("upcoming");
+    expect(states.current?.step.id).toBe("0:1");
+    expect(states.current?.chapterNumber).toBe(1);
+  });
+
+  it("counts only steps still on the path, and finishes when they are all done", () => {
+    const states = stepStates(mission([["0:1"], ["1:0"]]), done("0:0", "0:1", "1:0"));
+    expect(states.doneOnPath).toBe(2);
+    expect(states.finished).toBe(true);
+    expect(states.current).toBeNull();
+  });
+
+  it("shows no estimate for a step nobody estimated, and links by id", () => {
+    expect(estimateLabel(0)).toBeNull();
+    expect(estimateLabel(75)).toBe("About 1 h 15 min");
+    expect(stepHref("m-1", "own-2")).toBe("/step?mission=m-1&step=own-2");
   });
 });

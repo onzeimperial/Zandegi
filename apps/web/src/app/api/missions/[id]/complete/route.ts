@@ -6,9 +6,11 @@
  * mints a guest -- completing a step means owning a mission, and a caller
  * without a resolvable cookie owns nothing.
  *
- * The body is multipart form data: `chapter`, `step`, `evidence` ("SELF" or
- * "ARTIFACT") and, for a photo, `photo`. The photo is checked and fingerprinted
- * by the use case, then discarded.
+ * The body is multipart form data: `stepId`, `evidence` ("SELF" or "ARTIFACT")
+ * and, for a photo, `photo`. The photo is checked and fingerprinted by the use
+ * case, then discarded. A page open from before stable ids sends `chapter` and
+ * `step` positions instead; a position is exactly the id of the step generated
+ * there, and no edit can predate the deploy, so it names the same step.
  */
 
 import {
@@ -55,9 +57,20 @@ function logDiagnostic(requestId: string, code: GenerationErrorCode, diagnostic:
   console.error("[complete]", JSON.stringify({ requestId, code, diagnostic }));
 }
 
-/** A small non-negative integer from a form field, or `undefined`. */
-function indexField(value: FormDataEntryValue | null): number | undefined {
-  return typeof value === "string" && /^\d{1,3}$/.test(value) ? Number(value) : undefined;
+/** The step id from the form, or `undefined`. */
+function stepIdField(form: FormData): string | undefined {
+  const stepId = form.get("stepId");
+  if (typeof stepId === "string") {
+    return /^[A-Za-z0-9:_-]{1,64}$/.test(stepId) ? stepId : undefined;
+  }
+  const chapter = form.get("chapter");
+  const step = form.get("step");
+  return typeof chapter === "string" &&
+    typeof step === "string" &&
+    /^\d{1,3}$/.test(chapter) &&
+    /^\d{1,3}$/.test(step)
+    ? `${chapter}:${step}`
+    : undefined;
 }
 
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
@@ -95,12 +108,9 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     return jsonError("INVALID_REQUEST", requestId);
   }
 
-  const chapterIndex = indexField(form.get("chapter"));
-  const stepIndex = indexField(form.get("step"));
+  const stepId = stepIdField(form);
   const kind = form.get("evidence");
-  if (chapterIndex === undefined || stepIndex === undefined) {
-    return jsonError("INVALID_REQUEST", requestId);
-  }
+  if (stepId === undefined) return jsonError("INVALID_REQUEST", requestId);
 
   let evidence: CompletionEvidenceInput;
   if (kind === "SELF") {
@@ -120,7 +130,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     if (session === null) return jsonError("MISSION_NOT_FOUND", requestId);
 
     const result = await completeStep(
-      { principal: session.principal, missionId: id, chapterIndex, stepIndex, evidence },
+      { principal: session.principal, missionId: id, stepId, evidence },
       {
         persistence: session.ports.persistence,
         ledger: session.ports.ledger,

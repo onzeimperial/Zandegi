@@ -1,11 +1,13 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { isGeneratedStepId } from "@zandegi/api";
 import { Icon } from "@/components/icons";
 import { CompleteStepPanel } from "@/components/complete-step-panel";
 import {
   VERIFICATION_LABEL,
   estimateLabel,
   loadGuestMissions,
+  stepHref,
   stepStates,
 } from "@/lib/guest-missions";
 
@@ -22,11 +24,19 @@ type StepParams = {
 const single = (value: string | string[] | undefined) =>
   typeof value === "string" ? value : undefined;
 
-/** A non-negative integer index, or `undefined` for anything else. */
-function indexParam(value: string | string[] | undefined): number | undefined {
-  const raw = single(value);
-  if (raw === undefined || !/^\d{1,3}$/.test(raw)) return undefined;
-  return Number(raw);
+/**
+ * The step id a link names. Links are `?step=<id>`. A link from before stable
+ * ids named a position, `?chapter=c&step=s`, and a position is exactly the id
+ * of the step generated there, so old links still open the right step.
+ */
+function stepIdParam(params: StepParams): string | undefined {
+  const step = single(params.step);
+  const chapter = single(params.chapter);
+  if (step === undefined) return undefined;
+  if (chapter !== undefined) {
+    return /^\d{1,3}$/.test(chapter) && /^\d{1,3}$/.test(step) ? `${chapter}:${step}` : undefined;
+  }
+  return /^[A-Za-z0-9:_-]{1,64}$/.test(step) ? step : undefined;
 }
 
 function StepUnavailable({ heading, body }: { heading: string; body: string }) {
@@ -46,8 +56,7 @@ function StepUnavailable({ heading, body }: { heading: string; body: string }) {
 export default async function StepPage({ searchParams }: { searchParams: Promise<StepParams> }) {
   const params = await searchParams;
   const missionId = single(params.mission);
-  const chapterIndex = indexParam(params.chapter);
-  const stepIndex = indexParam(params.step);
+  const stepId = stepIdParam(params);
 
   const loaded = await loadGuestMissions();
   if (loaded.status === "unavailable") {
@@ -62,44 +71,35 @@ export default async function StepPage({ searchParams }: { searchParams: Promise
   // A missing, malformed, or somebody else's mission all land here alike, so
   // the page reveals nothing about which ids exist.
   const mission = loaded.missions.find((entry) => entry.missionId === missionId);
-  const chapter = chapterIndex === undefined ? undefined : mission?.mission.chapters[chapterIndex];
-  const step = stepIndex === undefined ? undefined : chapter?.steps[stepIndex];
+  const chapters = mission?.mission.chapters ?? [];
+  const chapterIndex = chapters.findIndex((entry) =>
+    entry.steps.some((candidate) => candidate.id === stepId),
+  );
+  const chapter = chapters[chapterIndex];
+  const stepIndex = chapter?.steps.findIndex((entry) => entry.id === stepId) ?? -1;
+  const step = chapter?.steps[stepIndex];
   if (mission === undefined || chapter === undefined || step === undefined) {
     return (
       <StepUnavailable
         heading="This step isn't available"
-        body="It may belong to a mission you no longer have, or the link may be incomplete."
+        body="It may have been removed from the plan, or the link may be incomplete."
       />
     );
   }
 
   const backHref = `/path?mission=${encodeURIComponent(mission.missionId)}`;
   const { guide } = step;
-  const state = stepStates(mission, loaded.progress).state(chapterIndex!, stepIndex!);
+  const estimate = estimateLabel(step.estimatedMinutes);
+  const state = stepStates(mission, loaded.progress).state(step.id);
   const completion = loaded.progress.completions.find(
-    (entry) =>
-      entry.missionId === mission.missionId &&
-      entry.chapterIndex === chapterIndex &&
-      entry.stepIndex === stepIndex,
+    (entry) => entry.missionId === mission.missionId && entry.stepId === step.id,
   );
 
-  // The step after this one in order, whatever its state: once this one is
-  // confirmed, it is the one that opens next.
-  const chapters = mission.mission.chapters;
-  const following =
-    stepIndex! + 1 < chapter.steps.length
-      ? { chapter: chapterIndex!, step: stepIndex! + 1 }
-      : chapterIndex! + 1 < chapters.length && chapters[chapterIndex! + 1]!.steps.length > 0
-        ? { chapter: chapterIndex! + 1, step: 0 }
-        : null;
-  const nextHref =
-    following === null
-      ? null
-      : `/step?${new URLSearchParams({
-          mission: mission.missionId,
-          chapter: String(following.chapter),
-          step: String(following.step),
-        }).toString()}`;
+  // The step after this one in the current order, whatever its state: once
+  // this one is confirmed, it is the one that opens next.
+  const ordered = chapters.flatMap((entry) => entry.steps);
+  const following = ordered[ordered.findIndex((entry) => entry.id === step.id) + 1];
+  const nextHref = following === undefined ? null : stepHref(mission.missionId, following.id);
 
   return (
     <main className="step-page">
@@ -113,7 +113,7 @@ export default async function StepPage({ searchParams }: { searchParams: Promise
           {/* Position, not progress: nothing is completed yet, so there is no
               filled bar implying otherwise. */}
           <b>
-            Step {stepIndex! + 1} of {chapter.steps.length}
+            Step {stepIndex + 1} of {chapter.steps.length}
           </b>
         </div>
         <div className="side end" />
@@ -124,25 +124,35 @@ export default async function StepPage({ searchParams }: { searchParams: Promise
           <div className="step-main">
             <div className="step-heading">
               <span className="eyebrow">
-                Chapter {chapterIndex! + 1} · {chapter.title}
+                Chapter {chapterIndex + 1} · {chapter.title}
               </span>
               <h1>{step.title}</h1>
             </div>
 
-            <div className="media-row">
-              <span className="media-icon">
-                <Icon name="clock" />
-              </span>
-              <span className="media-text">
-                <b>{estimateLabel(step.estimatedMinutes)}</b>
-                <span className="sub">A planning estimate, not a target</span>
-              </span>
-            </div>
+            {estimate !== null && (
+              <div className="media-row">
+                <span className="media-icon">
+                  <Icon name="clock" />
+                </span>
+                <span className="media-text">
+                  <b>{estimate}</b>
+                  <span className="sub">A planning estimate, not a target</span>
+                </span>
+              </div>
+            )}
 
-            <section className="guide-section">
-              <h2 className="d">How to do it</h2>
-              <p>{guide.approach}</p>
-            </section>
+            {step.writtenBy === "person" && (
+              <p className="own-step-note">
+                <Icon name="pencil" /> Your own words. Zandegi hasn&#39;t checked this step.
+              </p>
+            )}
+
+            {guide.approach.length > 0 && (
+              <section className="guide-section">
+                <h2 className="d">How to do it</h2>
+                <p className="guide-approach">{guide.approach}</p>
+              </section>
+            )}
 
             {guide.materials.length > 0 && (
               <section className="guide-section">
@@ -180,13 +190,15 @@ export default async function StepPage({ searchParams }: { searchParams: Promise
                   promised beside a step that has not been done (FR34). */}
             </div>
 
-            <div className="advice">
-              <div className="advice-head">
-                <span className="advice-tag">GOAL</span>
-                <b>What good looks like</b>
+            {guide.whatGoodLooksLike.length > 0 && (
+              <div className="advice">
+                <div className="advice-head">
+                  <span className="advice-tag">GOAL</span>
+                  <b>What good looks like</b>
+                </div>
+                <p>{guide.whatGoodLooksLike}</p>
               </div>
-              <p>{guide.whatGoodLooksLike}</p>
-            </div>
+            )}
 
             {step.sources.length > 0 && (
               <section className="guide-section guide-sources">
@@ -210,8 +222,8 @@ export default async function StepPage({ searchParams }: { searchParams: Promise
 
             <CompleteStepPanel
               missionId={mission.missionId}
-              chapterIndex={chapterIndex!}
-              stepIndex={stepIndex!}
+              stepId={step.id}
+              paysXp={isGeneratedStepId(step.id)}
               state={state}
               completedWith={
                 completion === undefined

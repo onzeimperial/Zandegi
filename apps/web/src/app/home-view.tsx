@@ -47,7 +47,7 @@ function Panel({ state }: { state: HomeState }) {
           <Link className="d flow-primary" href="/generate">
             Build a mission
           </Link>
-          <Link className="flow-secondary" href="/path">
+          <Link className="flow-secondary" href="/today">
             Go to your path
           </Link>
         </div>

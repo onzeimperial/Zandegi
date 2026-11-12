@@ -17,11 +17,13 @@ function result(
       primaryDomain: "Mind",
       chapters: [
         {
+          id: "0",
           index: 0,
           title: "Know the pathway",
           exitCondition: "Gather entry evidence",
           steps: [
             {
+              id: "0:0",
               index: 0,
               title: "Read entry requirements",
               estimatedMinutes: 30,
