@@ -192,6 +192,18 @@ describe("the port adapter", () => {
       claimGenerationSlot: async () => {
         throw new StoreUnavailableError("claimGenerationSlot", "[redacted]: connection refused");
       },
+      updateMission: async () => {
+        throw new StoreUnavailableError("updateMission", "[redacted]: connection refused");
+      },
+      recordLog: async () => {
+        throw new StoreUnavailableError("recordLog", "[redacted]: connection refused");
+      },
+      listLogs: async () => {
+        throw new StoreUnavailableError("listLogs", "[redacted]: connection refused");
+      },
+      moveLog: async () => {
+        throw new StoreUnavailableError("moveLog", "[redacted]: connection refused");
+      },
     };
     const ports = demoPortsFromStore(broken);
 
@@ -201,6 +213,17 @@ describe("the port adapter", () => {
     );
     expect(read!.code).toBe("STORE_UNAVAILABLE");
     expect(read!.message).toBe("Your missions are temporarily unavailable. Try again.");
+
+    const update = await ports.plans.update("guest-1", "m-1", 0, {} as never).then(
+      () => null,
+      (error: unknown) => error as GenerationError,
+    );
+    expect(update!.code).toBe("STORE_UNAVAILABLE");
+    const logs = await ports.logs.list("guest-1", "m-1").then(
+      () => null,
+      (error: unknown) => error as GenerationError,
+    );
+    expect(logs!.code).toBe("STORE_UNAVAILABLE");
 
     // An unsanitised throw from below is replaced wholesale rather than
     // forwarded, so a provider message cannot smuggle an endpoint into a log.

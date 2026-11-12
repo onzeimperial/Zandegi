@@ -33,7 +33,35 @@ export interface StoredMission<
   safetyClass: TSafetyClass;
   /** What the person stated beyond the goal. Absent when there was nothing. */
   goalContext?: TContext;
+  /**
+   * Bumped by every plan update. Ignored by `recordMission`, which always
+   * starts at 0; every read answers with it.
+   */
+  version?: number;
 }
+
+/** What a compare-and-set mission update found. */
+export type MissionUpdateOutcome = "updated" | "conflict" | "missing";
+
+/**
+ * A progress log. Personal content on a deletable row, never a ledger fact, so
+ * unlike the ledger it may be updated: moving it changes `chapterId`.
+ */
+export interface StoredMissionLog {
+  logId: string;
+  ownerId: string;
+  missionId: string;
+  chapterId: string;
+  kind: "note" | "number";
+  text?: string;
+  value?: number;
+  unit?: string;
+  /** ISO-8601 UTC, from the caller's clock port. */
+  loggedAt: string;
+}
+
+/** Bounds a log listing. */
+export const MAX_LISTED_LOGS = 50;
 
 /** A guest principal. The token itself is never stored, only its hash. */
 export interface StoredGuest {
@@ -68,6 +96,30 @@ export interface DemoStore<
    * keyed" true. A mission that has expired drops out of the list silently.
    */
   listMissions(ownerId: string): Promise<StoredMission<TMission, TSafetyClass, TContext>[]>;
+  /**
+   * Replace the mission body if, and only if, the stored version is
+   * `expectedVersion`, and bump the version. Keyed on owner and id together:
+   * another owner's mission is `"missing"`, exactly like an unknown one. Atomic,
+   * so of two edits made against one version exactly one is `"updated"`.
+   */
+  updateMission(
+    ownerId: string,
+    missionId: string,
+    expectedVersion: number,
+    mission: TMission,
+  ): Promise<MissionUpdateOutcome>;
+
+  /** Save a log. The caller has already checked that the owner owns the mission. */
+  recordLog(log: StoredMissionLog): Promise<void>;
+  /** One mission's logs for one owner, newest first, at most `MAX_LISTED_LOGS`. */
+  listLogs(ownerId: string, missionId: string): Promise<StoredMissionLog[]>;
+  /** Refile a log. `null` when the log is unknown, another owner's, or on another mission. */
+  moveLog(
+    ownerId: string,
+    missionId: string,
+    logId: string,
+    chapterId: string,
+  ): Promise<StoredMissionLog | null>;
   findGuest(tokenHash: string): Promise<StoredGuest | null>;
   saveGuest(tokenHash: string, guest: StoredGuest): Promise<void>;
   /** Renews the retention window. A no-op when the hash is unknown. */
@@ -154,6 +206,11 @@ export function usageKey(ownerId: string, day: string): string {
 /** Outlives the day in every timezone. The count means nothing after that. */
 export const USAGE_RETENTION_SECONDS = 2 * 24 * 60 * 60;
 
+/** One owner's logs for one mission. */
+export function logsKey(ownerId: string, missionId: string): string {
+  return `${DEMO_KEY_PREFIX}:logs:${ownerId}:${missionId}`;
+}
+
 /** One guest's append-only ledger. */
 export function ledgerKey(ownerId: string): string {
   return `${DEMO_KEY_PREFIX}:ledger:${ownerId}`;
@@ -212,6 +269,11 @@ export function withIndexEntry(
     0,
     MAX_LISTED_MISSIONS,
   );
+}
+
+/** Newest first by `loggedAt`; ties keep their existing order. */
+export function newestLogsFirst(logs: readonly StoredMissionLog[]): StoredMissionLog[] {
+  return [...logs].sort((a, b) => b.loggedAt.localeCompare(a.loggedAt));
 }
 
 /** Newest first by `generatedAt`; ties keep their existing order. */

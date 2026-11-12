@@ -12,7 +12,7 @@ const MISSION: MissionDraft = {
   title: "Half Marathon",
   goalType: "METRIC",
   primaryDomain: "Body",
-  chapters: [{ index: 0, title: "Base building", exitCondition: "Four weeks", steps: [] }],
+  chapters: [{ id: "0", index: 0, title: "Base building", exitCondition: "Four weeks", steps: [] }],
 };
 
 function record(overrides: Partial<GeneratedMissionRecord> = {}): GeneratedMissionRecord {
@@ -77,7 +77,7 @@ describe("listing a principal's missions", () => {
 
     // The goal text is the user's own words; ownerId and runId are internal.
     expect(Object.keys(view!).sort()).toEqual(
-      ["generatedAt", "mission", "missionId", "pursuitSlug", "safetyClass"].sort(),
+      ["generatedAt", "mission", "missionId", "pursuitSlug", "safetyClass", "version"].sort(),
     );
     expect(JSON.stringify(view)).not.toContain("run a half marathon in april");
   });

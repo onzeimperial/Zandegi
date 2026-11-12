@@ -49,7 +49,33 @@ export {
   type CompletionEvidenceInput,
 } from "./progress/complete-step";
 export { fingerprintPhoto, sniffPhotoType } from "./progress/evidence";
-export { foldProgress, nextStep, completedStepKeys } from "./progress/fold";
+export { ADDED_STEP_AWARD_VERSION } from "./progress/complete-step";
+export { foldProgress, nextStep, completedStepIds } from "./progress/fold";
+export {
+  addedStepId,
+  isGeneratedStepId,
+  positionChapterId,
+  positionStepId,
+  upcastMission,
+  type StoredMissionDraft,
+} from "./plan/ids";
+export {
+  applyPlanEdit,
+  editPlan,
+  parsePlanEditRequest,
+  type EditPlanInput,
+  type EditPlanPorts,
+} from "./plan/edit-plan";
+export {
+  listLogs,
+  logProgress,
+  moveLog,
+  parseLogInput,
+  type ListLogsPorts,
+  type LogProgressInput,
+  type LogProgressPorts,
+  type MoveLogInput,
+} from "./plan/logs";
 export type { LedgerEvent, ProgressLedgerPort } from "./progress/ledger";
 export * from "./identity";
 export {

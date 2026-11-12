@@ -7,7 +7,12 @@
  * able to mint an authoritative timestamp, identifier, identity or fact.
  */
 
-import type { GenerateMissionDetails, GenerationSafetyClass, MissionDraft } from "./client";
+import type {
+  GenerateMissionDetails,
+  GenerationSafetyClass,
+  MissionDraft,
+  MissionLogView,
+} from "./client";
 
 /** The one source of "now" a use case may read. */
 export interface Clock {
@@ -122,6 +127,11 @@ export interface GeneratedMissionRecord {
   safetyClass: GenerationSafetyClass;
   /** Absent when the person gave only the goal. */
   goalContext?: MissionGoalContext;
+  /**
+   * Bumped by every saved plan edit. Absent on a record that has never been
+   * read back from a store; a store always answers with a number.
+   */
+  version?: number;
 }
 
 /**
@@ -141,4 +151,40 @@ export interface GenerationPersistencePort {
   findForOwner(ownerId: string, missionId: string): Promise<GeneratedMissionRecord | null>;
   /** The owner's missions, newest first. Never another principal's. */
   listForOwner(ownerId: string): Promise<GeneratedMissionRecord[]>;
+}
+
+/** What a compare-and-set plan update found. */
+export type PlanUpdateOutcome = "updated" | "conflict" | "missing";
+
+/**
+ * Where an edited plan is saved. The update is a compare-and-set on the
+ * mission's version, keyed on owner and id together, so a stale edit and an
+ * edit to someone else's mission both save nothing.
+ */
+export interface MissionPlanStorePort {
+  update(
+    ownerId: string,
+    missionId: string,
+    expectedVersion: number,
+    mission: MissionDraft,
+  ): Promise<PlanUpdateOutcome>;
+}
+
+/** A log as stored: the view plus its owner. Personal content, deletable, never a ledger fact. */
+export interface MissionLogRecord extends MissionLogView {
+  ownerId: string;
+}
+
+/** Where logs live. Every call is keyed on the owner, so no input reaches another person's. */
+export interface MissionLogStorePort {
+  record(log: MissionLogRecord): Promise<void>;
+  /** One mission's logs, newest first, bounded. */
+  list(ownerId: string, missionId: string): Promise<MissionLogRecord[]>;
+  /** `null` when the log is unknown, or not the owner's, or not on that mission. */
+  move(
+    ownerId: string,
+    missionId: string,
+    logId: string,
+    chapterId: string,
+  ): Promise<MissionLogRecord | null>;
 }

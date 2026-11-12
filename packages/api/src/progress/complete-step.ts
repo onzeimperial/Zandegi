@@ -16,6 +16,15 @@
  *
  * XP comes only from `@zandegi/core`'s neutral award (law 5): the evidence the
  * person provided, never anything the model wrote.
+ *
+ * Steps are addressed by stable id (Story 7.2), never by position, so a reorder
+ * or a deletion cannot move a payment to a different step. Two rules keep plan
+ * editing from changing what progress is worth:
+ *   - A step the person added pays no XP. It still has to be done to finish its
+ *     chapter, and its completion is still recorded, at 0 XP.
+ *   - Chapter and mission bonuses are priced from the generated steps the person
+ *     actually completed, so adding or deleting steps can never raise a bonus.
+ *     With no edits that count is the chapter's step count, exactly as before.
  */
 
 import {
@@ -24,14 +33,17 @@ import {
   neutralMissionAward,
   neutralStepAward,
 } from "@zandegi/core";
-import type { AwardView, CompleteStepResult } from "../client";
+import type { StepAward } from "@zandegi/core";
+import type { AwardView, CompleteStepResult, MissionChapter } from "../client";
 import { GenerationError, describeFailure, isGenerationError } from "../errors";
 import type { GuestPrincipal } from "../identity/ports";
 import { readMission } from "../missions/read-mission";
 import type { Clock, GenerationPersistencePort, IdGenerator } from "../ports";
 import { fingerprintPhoto } from "./evidence";
-import { completedStepKeys, foldProgress, nextStep, readEvents } from "./fold";
+import { isGeneratedStepId } from "../plan/ids";
+import { completedStepIds, foldProgress, nextStep, readEvents } from "./fold";
 import {
+  LEDGER_EVENT_VERSION,
   chapterClaimId,
   missionClaimId,
   stepClaimId,
@@ -47,10 +59,8 @@ export interface CompleteStepInput {
   principal: GuestPrincipal;
   /** Untrusted: from the URL. */
   missionId: unknown;
-  /** Untrusted: from the form. */
-  chapterIndex: unknown;
-  /** Untrusted: from the form. */
-  stepIndex: unknown;
+  /** Untrusted: from the form. A stable step id. */
+  stepId: unknown;
   evidence: CompletionEvidenceInput;
 }
 
@@ -61,8 +71,42 @@ export interface CompleteStepPorts {
   ids: IdGenerator;
 }
 
-const isIndex = (value: unknown): value is number =>
-  typeof value === "number" && Number.isInteger(value) && value >= 0;
+/**
+ * The award recorded for completing a step the person added. It pays nothing
+ * until a reward policy for added steps exists (spec B), and it is stamped with
+ * its own version so the ledger says why it is zero.
+ */
+export const ADDED_STEP_AWARD_VERSION = "added-step-unpaid-v1";
+
+const unpaidAward = (): StepAward => ({
+  xp: 0,
+  base: 0,
+  verificationMult: 0,
+  calculatorVersion: ADDED_STEP_AWARD_VERSION,
+});
+
+/** Each chapter's completed generated steps, by chapter id. Deleted steps still count. */
+function completedGeneratedSteps(
+  completions: readonly { missionId: string; chapterId: string; stepId: string }[],
+  missionId: string,
+): Map<string, Set<string>> {
+  const byChapter = new Map<string, Set<string>>();
+  for (const completion of completions) {
+    if (completion.missionId !== missionId || !isGeneratedStepId(completion.stepId)) continue;
+    const steps = byChapter.get(completion.chapterId) ?? new Set<string>();
+    steps.add(completion.stepId);
+    byChapter.set(completion.chapterId, steps);
+  }
+  return byChapter;
+}
+
+function findStep(chapters: readonly MissionChapter[], stepId: unknown) {
+  if (typeof stepId !== "string") return undefined;
+  for (const chapter of chapters) {
+    if (chapter.steps.some((step) => step.id === stepId)) return { chapter, stepId };
+  }
+  return undefined;
+}
 
 async function storeCall<T>(run: () => Promise<T>): Promise<T> {
   try {
@@ -109,30 +153,25 @@ export async function completeStep(
   );
   const { missionId } = view;
   const { chapters } = view.mission;
-  const { chapterIndex, stepIndex } = input;
-  if (
-    !isIndex(chapterIndex) ||
-    !isIndex(stepIndex) ||
-    chapters[chapterIndex]?.steps[stepIndex] === undefined
-  ) {
-    throw new GenerationError("INVALID_REQUEST", "step position is not in this mission");
+  const target = findStep(chapters, input.stepId);
+  if (target === undefined) {
+    throw new GenerationError("INVALID_REQUEST", "step id is not in this mission");
   }
+  const { chapter, stepId } = target;
 
   const ownerId = input.principal.id;
-  const stepCounts = chapters.map((chapter) => chapter.steps.length);
   const awards: AwardView[] = [];
   const event = () => ({
-    version: 1 as const,
+    version: LEDGER_EVENT_VERSION,
     eventId: ports.ids.newId(),
     missionId,
     recordedAt: ports.clock.now().toISOString(),
   });
 
-  const before = completedStepKeys(await currentProgress(ports, ownerId), missionId);
-  if (!before.has(`${chapterIndex}:${stepIndex}`)) {
-    const next = nextStep(stepCounts, before);
-    if (next?.chapterIndex !== chapterIndex || next.stepIndex !== stepIndex) {
-      throw new GenerationError("STEP_NOT_CURRENT", `asked for ${chapterIndex}:${stepIndex}`);
+  const before = completedStepIds(await currentProgress(ports, ownerId), missionId);
+  if (!before.has(stepId)) {
+    if (nextStep(chapters, before)?.stepId !== stepId) {
+      throw new GenerationError("STEP_NOT_CURRENT", "asked for a step that is not next");
     }
 
     // Evidence is checked before the claim, so a rejected photo never marks a
@@ -141,13 +180,13 @@ export async function completeStep(
       input.evidence.kind === "SELF"
         ? { kind: "SELF" }
         : { kind: "ARTIFACT", ...(await fingerprintPhoto(input.evidence.bytes)) };
-    const award = neutralStepAward(evidence.kind);
+    const award = isGeneratedStepId(stepId) ? neutralStepAward(evidence.kind) : unpaidAward();
 
-    const paid = await payOnce(ports, ownerId, stepClaimId(missionId, chapterIndex, stepIndex), {
+    const paid = await payOnce(ports, ownerId, stepClaimId(missionId, stepId), {
       ...event(),
       type: "StepCompleted",
-      chapterIndex,
-      stepIndex,
+      chapterId: chapter.id,
+      stepId,
       evidence,
       award,
     });
@@ -157,20 +196,22 @@ export async function completeStep(
   // Bonuses settle on every call, not only on the call that finished the
   // chapter. If a bonus write failed earlier, the next request for this mission
   // pays it; its own claim still means it can never be paid twice.
-  const done = completedStepKeys(await currentProgress(ports, ownerId), missionId);
+  const after = await currentProgress(ports, ownerId);
+  const done = completedStepIds(after, missionId);
+  const generated = completedGeneratedSteps(after.completions, missionId);
+  const generatedCount = (chapterId: string) => generated.get(chapterId)?.size ?? 0;
   const chapterDone = chapters.map(
-    (chapter, index) =>
-      chapter.steps.length > 0 &&
-      chapter.steps.every((_step, step) => done.has(`${index}:${step}`)),
+    (entry) => entry.steps.length > 0 && entry.steps.every((step) => done.has(step.id)),
   );
 
   for (const [index, complete] of chapterDone.entries()) {
     if (!complete) continue;
-    const xp = neutralChapterAward(stepCounts[index]!);
-    const paid = await payOnce(ports, ownerId, chapterClaimId(missionId, index), {
+    const chapterId = chapters[index]!.id;
+    const xp = neutralChapterAward(generatedCount(chapterId));
+    const paid = await payOnce(ports, ownerId, chapterClaimId(missionId, chapterId), {
       ...event(),
       type: "ChapterCompleted",
-      chapterIndex: index,
+      chapterId,
       xp,
       calculatorVersion: AWARD_CALCULATOR_VERSION,
     });
@@ -178,7 +219,7 @@ export async function completeStep(
   }
 
   if (chapterDone.length > 0 && chapterDone.every(Boolean)) {
-    const xp = neutralMissionAward(stepCounts);
+    const xp = neutralMissionAward(chapters.map((entry) => generatedCount(entry.id)));
     const paid = await payOnce(ports, ownerId, missionClaimId(missionId), {
       ...event(),
       type: "MissionCompleted",

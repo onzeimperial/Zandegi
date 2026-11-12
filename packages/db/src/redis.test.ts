@@ -295,3 +295,26 @@ describe("completion claims and the ledger in Redis", () => {
     expect(fake.calls.filter((call) => call.op === "expire").length).toBe(2);
   });
 });
+
+describe("plan editing and logs in Redis", () => {
+  it("refuses edits and log writes clearly, and reads no logs", async () => {
+    const redis = createRedisDemoStore({ client: fakeRedis().client });
+    await expect(redis.updateMission("o", "m", 0, {})).rejects.toMatchObject({
+      name: "StoreUnavailableError",
+      operation: "updateMission",
+    });
+    await expect(
+      redis.recordLog({
+        logId: "l",
+        ownerId: "o",
+        missionId: "m",
+        chapterId: "0",
+        kind: "note",
+        text: "x",
+        loggedAt: "2026-11-12T00:00:00.000Z",
+      }),
+    ).rejects.toMatchObject({ operation: "recordLog" });
+    await expect(redis.moveLog("o", "m", "l", "1")).rejects.toMatchObject({ operation: "moveLog" });
+    await expect(redis.listLogs("o", "m")).resolves.toEqual([]);
+  });
+});

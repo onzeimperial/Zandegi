@@ -55,11 +55,13 @@ describe("toProgress", () => {
     const progress = toProgress({ stage: "detail", status: "done", chapter });
 
     expect(progress.chapter).toEqual({
+      id: "0",
       index: 0,
       title: "Base building",
       exitCondition: "Run 3x a week for four weeks",
       steps: [
         {
+          id: "0:0",
           index: 0,
           title: "Run 3km easy",
           estimatedMinutes: 30,

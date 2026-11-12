@@ -27,8 +27,8 @@ export function foldProgress(events: readonly LedgerEvent[]): ProgressView {
         totalXp += event.award.xp;
         completions.push({
           missionId: event.missionId,
-          chapterIndex: event.chapterIndex,
-          stepIndex: event.stepIndex,
+          chapterId: event.chapterId,
+          stepId: event.stepId,
           evidence: event.evidence.kind,
           xp: event.award.xp,
           recordedAt: event.recordedAt,
@@ -36,7 +36,7 @@ export function foldProgress(events: readonly LedgerEvent[]): ProgressView {
         break;
       case "ChapterCompleted":
         totalXp += event.xp;
-        completedChapters.push({ missionId: event.missionId, chapterIndex: event.chapterIndex });
+        completedChapters.push({ missionId: event.missionId, chapterId: event.chapterId });
         break;
       case "MissionCompleted":
         totalXp += event.xp;
@@ -58,27 +58,28 @@ export function foldProgress(events: readonly LedgerEvent[]): ProgressView {
   };
 }
 
-/** The steps of one mission that are complete, as `"chapter:step"` keys. */
-export function completedStepKeys(progress: ProgressView, missionId: string): Set<string> {
+/** The ids of one mission's completed steps, including steps since deleted. */
+export function completedStepIds(progress: ProgressView, missionId: string): Set<string> {
   return new Set(
     progress.completions
       .filter((completion) => completion.missionId === missionId)
-      .map((completion) => `${completion.chapterIndex}:${completion.stepIndex}`),
+      .map((completion) => completion.stepId),
   );
 }
 
 /**
- * The first step not yet completed, walking chapters and steps in order, or
- * `null` when every step is done. Steps complete in order, so this is the only
- * step that can be completed next.
+ * The first step not yet completed, walking chapters and steps in their current
+ * order, or `null` when every step is done. Steps complete in order, so this is
+ * the only step that can be completed next. A reorder changes which step this
+ * is; it never changes which steps are done.
  */
 export function nextStep(
-  chapterStepCounts: readonly number[],
+  chapters: readonly { id: string; steps: readonly { id: string }[] }[],
   completed: ReadonlySet<string>,
-): { chapterIndex: number; stepIndex: number } | null {
-  for (let chapterIndex = 0; chapterIndex < chapterStepCounts.length; chapterIndex++) {
-    for (let stepIndex = 0; stepIndex < chapterStepCounts[chapterIndex]!; stepIndex++) {
-      if (!completed.has(`${chapterIndex}:${stepIndex}`)) return { chapterIndex, stepIndex };
+): { chapterId: string; stepId: string } | null {
+  for (const chapter of chapters) {
+    for (const step of chapter.steps) {
+      if (!completed.has(step.id)) return { chapterId: chapter.id, stepId: step.id };
     }
   }
   return null;

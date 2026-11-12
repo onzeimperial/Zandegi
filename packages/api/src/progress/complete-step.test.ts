@@ -1,10 +1,11 @@
 import type { MissionGoalContext } from "../ports";
 import { createInMemoryDemoStore } from "@zandegi/db";
 import { describe, expect, it } from "vitest";
-import type { GenerationSafetyClass, MissionDraft, MissionStep } from "../client";
+import type { GenerationSafetyClass, MissionDraft } from "../client";
 import { demoPortsFromStore } from "../demo-store";
 import { GenerationError } from "../errors";
 import type { GuestPrincipal } from "../identity/ports";
+import type { StoredMissionDraft } from "../plan/ids";
 import { fixedClock, sequentialIdGenerator } from "../ports";
 import { completeStep, readProgress, type CompletionEvidenceInput } from "./complete-step";
 
@@ -15,7 +16,14 @@ const SELF: CompletionEvidenceInput = { kind: "SELF" };
 /** The leading bytes of a real JPEG; enough for the sniffer. */
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00]);
 
-function step(index: number, estimatedMinutes = 30): MissionStep {
+/**
+ * Steps and missions here are stored exactly as the release before ids stored
+ * them -- no ids -- so every test below also proves the upcaster keeps legacy
+ * missions working.
+ */
+type LegacyStep = StoredMissionDraft["chapters"][number]["steps"][number];
+
+function step(index: number, estimatedMinutes = 30): LegacyStep {
   return {
     index,
     title: `Step ${index + 1}`,
@@ -28,7 +36,7 @@ function step(index: number, estimatedMinutes = 30): MissionStep {
 }
 
 /** Two chapters of two steps each. */
-const MISSION: MissionDraft = {
+const MISSION: StoredMissionDraft = {
   title: "Half Marathon",
   goalType: "METRIC",
   primaryDomain: "Body",
@@ -38,7 +46,7 @@ const MISSION: MissionDraft = {
   ],
 };
 
-async function setup(mission: MissionDraft = MISSION) {
+async function setup(mission: StoredMissionDraft = MISSION) {
   const store = createInMemoryDemoStore<MissionDraft, GenerationSafetyClass, MissionGoalContext>();
   const demo = demoPortsFromStore(store);
   await demo.persistence.record({
@@ -48,7 +56,8 @@ async function setup(mission: MissionDraft = MISSION) {
     generatedAt: "2026-10-09T00:00:00.000Z",
     goalText: "run a half marathon in april",
     pursuitSlug: "run-a-half-marathon",
-    mission,
+    // why: a legacy record, stored without ids, exactly as the old release wrote it.
+    mission: mission as MissionDraft,
     safetyClass: "NORMAL",
   });
   const ports = {
@@ -58,11 +67,10 @@ async function setup(mission: MissionDraft = MISSION) {
     ids: sequentialIdGenerator("event"),
   };
   const complete = (
-    chapterIndex: number,
-    stepIndex: number,
+    stepId: string,
     evidence: CompletionEvidenceInput = SELF,
     principal: GuestPrincipal = OWNER,
-  ) => completeStep({ principal, missionId: "m-1", chapterIndex, stepIndex, evidence }, ports);
+  ) => completeStep({ principal, missionId: "m-1", stepId, evidence }, ports);
   return { store, ports, complete };
 }
 
@@ -78,15 +86,15 @@ async function failure(run: () => Promise<unknown>): Promise<GenerationError> {
 describe("completing a step", () => {
   it("pays a self-check 40 XP and records it", async () => {
     const { complete } = await setup();
-    const result = await complete(0, 0);
+    const result = await complete("0:0");
 
     expect(result.awards).toEqual([{ kind: "step", xp: 40 }]);
     expect(result.progress.totalXp).toBe(40);
     expect(result.progress.completions).toEqual([
       {
         missionId: "m-1",
-        chapterIndex: 0,
-        stepIndex: 0,
+        chapterId: "0",
+        stepId: "0:0",
         evidence: "SELF",
         xp: 40,
         recordedAt: "2026-10-09T09:00:00.000Z",
@@ -96,7 +104,7 @@ describe("completing a step", () => {
 
   it("pays a photo more than a self-check", async () => {
     const { complete } = await setup();
-    const result = await complete(0, 0, { kind: "ARTIFACT", bytes: JPEG });
+    const result = await complete("0:0", { kind: "ARTIFACT", bytes: JPEG });
     expect(result.awards).toEqual([{ kind: "step", xp: 50 }]);
     expect(result.progress.completions[0]?.evidence).toBe("ARTIFACT");
   });
@@ -110,13 +118,13 @@ describe("completing a step", () => {
       ...MISSION,
       chapters: [{ ...MISSION.chapters[0]!, steps: [step(0, 900), step(1)] }],
     });
-    expect((await quick.complete(0, 0)).awards).toEqual((await huge.complete(0, 0)).awards);
+    expect((await quick.complete("0:0")).awards).toEqual((await huge.complete("0:0")).awards);
   });
 
   it("treats a repeat as harmless: it pays nothing and changes nothing", async () => {
     const { complete } = await setup();
-    await complete(0, 0);
-    const again = await complete(0, 0);
+    await complete("0:0");
+    const again = await complete("0:0");
 
     expect(again.awards).toEqual([]);
     expect(again.progress.totalXp).toBe(40);
@@ -125,29 +133,30 @@ describe("completing a step", () => {
 
   it("pays a step once, however many requests race for it", async () => {
     const { complete } = await setup();
-    const results = await Promise.all([complete(0, 0), complete(0, 0), complete(0, 0)]);
+    const results = await Promise.all([complete("0:0"), complete("0:0"), complete("0:0")]);
 
     expect(results.flatMap((result) => result.awards)).toEqual([{ kind: "step", xp: 40 }]);
-    expect((await complete(0, 0)).progress.totalXp).toBe(40);
+    expect((await complete("0:0")).progress.totalXp).toBe(40);
   });
 
   it("refuses to skip ahead, and records nothing when it does", async () => {
     const { complete, ports } = await setup();
-    const error = await failure(() => complete(0, 1));
+    const error = await failure(() => complete("0:1"));
     expect(error.code).toBe("STEP_NOT_CURRENT");
     expect((await readProgress({ principal: OWNER }, ports)).completions).toEqual([]);
   });
 
   it("answers another guest's mission exactly as a missing one", async () => {
     const { complete } = await setup();
-    const error = await failure(() => complete(0, 0, SELF, INTRUDER));
+    const error = await failure(() => complete("0:0", SELF, INTRUDER));
     expect(error.code).toBe("MISSION_NOT_FOUND");
   });
 
-  it("rejects a position outside the mission", async () => {
+  it("rejects a step id that is not in the mission", async () => {
     const { complete } = await setup();
-    expect((await failure(() => complete(9, 0))).code).toBe("INVALID_REQUEST");
-    expect((await failure(() => complete(0, 9))).code).toBe("INVALID_REQUEST");
+    expect((await failure(() => complete("9:0"))).code).toBe("INVALID_REQUEST");
+    expect((await failure(() => complete("0:9"))).code).toBe("INVALID_REQUEST");
+    expect((await failure(() => complete("own-1"))).code).toBe("INVALID_REQUEST");
   });
 });
 
@@ -156,16 +165,16 @@ describe("photo evidence", () => {
     const { complete } = await setup();
     const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');
 
-    expect((await failure(() => complete(0, 0, { kind: "ARTIFACT", bytes: svg }))).code).toBe(
+    expect((await failure(() => complete("0:0", { kind: "ARTIFACT", bytes: svg }))).code).toBe(
       "EVIDENCE_REJECTED",
     );
     // The step was never claimed, so the person can still complete it.
-    expect((await complete(0, 0)).awards).toEqual([{ kind: "step", xp: 40 }]);
+    expect((await complete("0:0")).awards).toEqual([{ kind: "step", xp: 40 }]);
   });
 
   it("keeps a fingerprint in the ledger, never the photo or the goal", async () => {
     const { complete, store } = await setup();
-    await complete(0, 0, { kind: "ARTIFACT", bytes: JPEG });
+    await complete("0:0", { kind: "ARTIFACT", bytes: JPEG });
 
     const ledger = await store.readLedger(OWNER.id);
     const recorded = JSON.stringify(ledger);
@@ -181,24 +190,24 @@ describe("photo evidence", () => {
 describe("chapter and mission bonuses", () => {
   it("pays the chapter bonus once, on the step that finishes the chapter", async () => {
     const { complete } = await setup();
-    await complete(0, 0);
-    const finishing = await complete(0, 1);
+    await complete("0:0");
+    const finishing = await complete("0:1");
 
     expect(finishing.awards).toEqual([
       { kind: "step", xp: 40 },
       { kind: "chapter", xp: 200 },
     ]);
-    expect(finishing.progress.completedChapters).toEqual([{ missionId: "m-1", chapterIndex: 0 }]);
+    expect(finishing.progress.completedChapters).toEqual([{ missionId: "m-1", chapterId: "0" }]);
     // Repeating the finishing step does not pay the chapter again.
-    expect((await complete(0, 1)).awards).toEqual([]);
+    expect((await complete("0:1")).awards).toEqual([]);
   });
 
   it("pays the mission bonus once, when every chapter is done", async () => {
     const { complete } = await setup();
-    await complete(0, 0);
-    await complete(0, 1);
-    await complete(1, 0);
-    const last = await complete(1, 1);
+    await complete("0:0");
+    await complete("0:1");
+    await complete("1:0");
+    const last = await complete("1:1");
 
     expect(last.awards).toEqual([
       { kind: "step", xp: 40 },
@@ -229,13 +238,53 @@ describe("recovering from a failed write", () => {
       },
     };
     const attempt = () =>
-      completeStep(
-        { principal: OWNER, missionId: "m-1", chapterIndex: 0, stepIndex: 0, evidence: SELF },
-        flaky,
-      );
+      completeStep({ principal: OWNER, missionId: "m-1", stepId: "0:0", evidence: SELF }, flaky);
 
     expect((await failure(attempt)).code).toBe("STORE_UNAVAILABLE");
     // Without the release, the step would be marked taken with nothing paid.
     expect((await attempt()).awards).toEqual([{ kind: "step", xp: 40 }]);
+  });
+});
+
+describe("data from before stable ids", () => {
+  const legacyEvent = (chapterIndex: number, stepIndex: number) => ({
+    version: 1,
+    eventId: `legacy-${chapterIndex}-${stepIndex}`,
+    missionId: "m-1",
+    recordedAt: "2026-10-08T09:00:00.000Z",
+    type: "StepCompleted",
+    chapterIndex,
+    stepIndex,
+    evidence: { kind: "SELF" },
+    award: { xp: 40, base: 40, verificationMult: 1, calculatorVersion: "neutral-v1" },
+  });
+
+  it("keeps a legacy person's XP, completed steps and next step", async () => {
+    const { store, complete, ports } = await setup();
+    // What the old release left behind: a claim and a position-keyed event.
+    await store.claimCompletion(OWNER.id, "m-1:step:0:0");
+    await store.appendLedger(OWNER.id, legacyEvent(0, 0));
+
+    const before = await readProgress({ principal: OWNER }, ports);
+    expect(before.totalXp).toBe(40);
+    expect(before.completions.map((entry) => entry.stepId)).toEqual(["0:0"]);
+
+    // The next step is still the second one: skipping it is refused.
+    expect((await failure(() => complete("1:0"))).code).toBe("STEP_NOT_CURRENT");
+    const finishing = await complete("0:1");
+    expect(finishing.awards).toEqual([
+      { kind: "step", xp: 40 },
+      { kind: "chapter", xp: 200 },
+    ]);
+  });
+
+  it("pays once for a step whose first attempt landed before the deploy", async () => {
+    const { store, complete } = await setup();
+    // The claim was taken under the legacy key; the retry arrives after.
+    await store.claimCompletion(OWNER.id, "m-1:step:0:0");
+    await store.appendLedger(OWNER.id, legacyEvent(0, 0));
+    const retry = await complete("0:0");
+    expect(retry.awards).toEqual([]);
+    expect(retry.progress.totalXp).toBe(40);
   });
 });

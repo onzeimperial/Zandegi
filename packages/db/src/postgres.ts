@@ -19,10 +19,12 @@
 
 import {
   MAX_LEDGER_ENTRIES,
+  MAX_LISTED_LOGS,
   MAX_LISTED_MISSIONS,
   StoreUnavailableError,
   type DemoStore,
   type StoredGuest,
+  type StoredMissionLog,
 } from "./store";
 import type { Prisma, PrismaClient } from "./generated/prisma/client";
 
@@ -97,6 +99,7 @@ export async function createPostgresDemoStore<
     mission: unknown;
     safetyClass: string;
     goalContext: unknown;
+    version: number;
   };
 
   const toStored = (row: Row) => ({
@@ -110,6 +113,31 @@ export async function createPostgresDemoStore<
     safetyClass: row.safetyClass as TSafetyClass,
     // Absent rather than null, so every store returns the record it was given.
     ...(row.goalContext === null ? {} : { goalContext: row.goalContext as TContext }),
+    version: row.version,
+  });
+
+  type LogRow = {
+    id: string;
+    ownerId: string;
+    missionId: string;
+    chapterId: string;
+    kind: string;
+    text: string | null;
+    value: number | null;
+    unit: string | null;
+    loggedAt: Date;
+  };
+
+  const toLog = (row: LogRow): StoredMissionLog => ({
+    logId: row.id,
+    ownerId: row.ownerId,
+    missionId: row.missionId,
+    chapterId: row.chapterId,
+    kind: row.kind === "number" ? "number" : "note",
+    ...(row.text === null ? {} : { text: row.text }),
+    ...(row.value === null ? {} : { value: row.value }),
+    ...(row.unit === null ? {} : { unit: row.unit }),
+    loggedAt: row.loggedAt.toISOString(),
   });
 
   const toGuest = (row: { id: string; createdAt: Date }): StoredGuest => ({
@@ -152,6 +180,60 @@ export async function createPostgresDemoStore<
           take: MAX_LISTED_MISSIONS,
         });
         return rows.map(toStored);
+      }),
+
+    updateMission: (ownerId, missionId, expectedVersion, mission) =>
+      guard("updateMission", async () => {
+        // The version in the WHERE makes this one atomic compare-and-set.
+        const { count } = await prisma.mission.updateMany({
+          where: { id: missionId, ownerId, version: expectedVersion },
+          data: {
+            // why: the store holds the mission opaquely; the caller's type is not Prisma's.
+            mission: mission as Prisma.InputJsonValue,
+            version: { increment: 1 },
+          },
+        });
+        if (count === 1) return "updated";
+        const exists = await prisma.mission.count({ where: { id: missionId, ownerId } });
+        return exists === 0 ? "missing" : "conflict";
+      }),
+
+    recordLog: (log) =>
+      guard("recordLog", async () => {
+        await prisma.missionLog.create({
+          data: {
+            id: log.logId,
+            ownerId: log.ownerId,
+            missionId: log.missionId,
+            chapterId: log.chapterId,
+            kind: log.kind,
+            text: log.text ?? null,
+            value: log.value ?? null,
+            unit: log.unit ?? null,
+            loggedAt: new Date(log.loggedAt),
+          },
+        });
+      }),
+
+    listLogs: (ownerId, missionId) =>
+      guard("listLogs", async () => {
+        const rows = await prisma.missionLog.findMany({
+          where: { ownerId, missionId },
+          orderBy: { loggedAt: "desc" },
+          take: MAX_LISTED_LOGS,
+        });
+        return rows.map(toLog);
+      }),
+
+    moveLog: (ownerId, missionId, logId, chapterId) =>
+      guard("moveLog", async () => {
+        const { count } = await prisma.missionLog.updateMany({
+          where: { id: logId, ownerId, missionId },
+          data: { chapterId },
+        });
+        if (count === 0) return null;
+        const row = await prisma.missionLog.findFirst({ where: { id: logId, ownerId } });
+        return row === null ? null : toLog(row);
       }),
 
     findGuest: (tokenHash) =>

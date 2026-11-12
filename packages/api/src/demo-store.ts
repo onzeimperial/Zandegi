@@ -31,7 +31,12 @@ import type { GuestCookiePolicy } from "./identity/cookie";
 import type { GenerationUsagePort } from "./generation/usage";
 import type { AccountPrincipalStorePort } from "./identity/account";
 import type { GuestPrincipalStorePort } from "./identity/ports";
-import type { GenerationPersistencePort, MissionGoalContext } from "./ports";
+import type {
+  GenerationPersistencePort,
+  MissionGoalContext,
+  MissionLogStorePort,
+  MissionPlanStorePort,
+} from "./ports";
 
 /**
  * The store as this package instantiates it. Naming the mission payload and
@@ -57,6 +62,8 @@ export interface DemoPorts {
   ledger: ProgressLedgerPort;
   accounts: AccountPrincipalStorePort;
   usage: GenerationUsagePort;
+  plans: MissionPlanStorePort;
+  logs: MissionLogStorePort;
 }
 
 export type Env = Record<string, string | undefined>;
@@ -174,6 +181,18 @@ export function demoPortsFromStore(store: StoredDemoStore): DemoPorts {
       findForOwner: (ownerId, missionId) =>
         guard("findForOwner", () => store.findMission(ownerId, missionId)),
       listForOwner: (ownerId) => guard("listForOwner", () => store.listMissions(ownerId)),
+    },
+    plans: {
+      update: (ownerId, missionId, expectedVersion, mission) =>
+        guard("updateMission", () =>
+          store.updateMission(ownerId, missionId, expectedVersion, mission),
+        ),
+    },
+    logs: {
+      record: (log) => guard("recordLog", () => store.recordLog(log)),
+      list: (ownerId, missionId) => guard("listLogs", () => store.listLogs(ownerId, missionId)),
+      move: (ownerId, missionId, logId, chapterId) =>
+        guard("moveLog", () => store.moveLog(ownerId, missionId, logId, chapterId)),
     },
     guests: {
       findByTokenHash: (tokenHash) =>

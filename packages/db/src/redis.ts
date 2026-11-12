@@ -177,6 +177,26 @@ export function createRedisDemoStore<
       return found;
     },
 
+    // Plan editing and logs need a compare-and-set and a durable home. The
+    // expiring demo store offers neither, so it refuses clearly rather than
+    // racing a read-modify-write or keeping a log for 30 days.
+    async updateMission() {
+      throw new StoreUnavailableError("updateMission", "plan editing needs the postgres store");
+    },
+
+    async recordLog() {
+      throw new StoreUnavailableError("recordLog", "logs need the postgres store");
+    },
+
+    // Nothing can have been logged here, so the honest answer to a read is none.
+    async listLogs() {
+      return [];
+    },
+
+    async moveLog() {
+      throw new StoreUnavailableError("moveLog", "logs need the postgres store");
+    },
+
     async findGuest(tokenHash) {
       const raw = await guard("findGuest", () => client.get(guestKey(tokenHash)));
       return decode<StoredGuest>(raw);

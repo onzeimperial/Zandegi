@@ -7,13 +7,19 @@
  * change?" answerable: every point traces to one event with its evidence and
  * the calculator version that priced it.
  *
- * Payloads hold minimal facts and opaque references only (AD-3): ids, indices,
- * an evidence kind, and for a photo its fingerprint, size and type. Never the
- * goal text, the mission body, or the photo itself.
+ * Payloads hold minimal facts and opaque references only (AD-3): ids, an
+ * evidence kind, and for a photo its fingerprint, size and type. Never the goal
+ * text, the mission body, a log, or the photo itself.
+ *
+ * Version 1 events keyed steps and chapters by position. Version 2 keys them by
+ * stable id (Story 7.2). `parseLedgerEvent` upcasts version 1 to ids on read --
+ * the stored entry is never rewritten (law 4) -- and a position id is the
+ * position itself, so the fold of old events is unchanged.
  */
 
 import type { StepAward } from "@zandegi/core";
 import type { CompletionEvidence } from "../client";
+import { positionChapterId, positionStepId } from "../plan/ids";
 
 /** What a photo leaves behind once it has been checked and discarded. */
 export interface PhotoFingerprint {
@@ -24,9 +30,15 @@ export interface PhotoFingerprint {
 
 export type LedgerEvidence = { kind: "SELF" } | ({ kind: "ARTIFACT" } & PhotoFingerprint);
 
+/** The version every new event is written with. */
+export const LEDGER_EVENT_VERSION = 2 as const;
+
 interface EventBase {
-  /** Bumped when an event's shape changes, so old events stay readable. */
-  version: 1;
+  /**
+   * Bumped when an event's shape changes, so old events stay readable. A read
+   * keeps the stored version, so a fold can tell an upcast event apart.
+   */
+  version: 1 | 2;
   eventId: string;
   missionId: string;
   /** ISO-8601 UTC, from the server's clock port. Never the client's. */
@@ -35,15 +47,16 @@ interface EventBase {
 
 export interface StepCompletedEvent extends EventBase {
   type: "StepCompleted";
-  chapterIndex: number;
-  stepIndex: number;
+  /** The chapter the step was in. Steps never move between chapters. */
+  chapterId: string;
+  stepId: string;
   evidence: LedgerEvidence;
   award: StepAward;
 }
 
 export interface ChapterCompletedEvent extends EventBase {
   type: "ChapterCompleted";
-  chapterIndex: number;
+  chapterId: string;
   xp: number;
   calculatorVersion: string;
 }
@@ -71,9 +84,13 @@ const isIndex = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 0;
 const isText = (value: unknown): value is string => typeof value === "string" && value.length > 0;
 
+const ID_PATTERN = /^[A-Za-z0-9:_-]{1,64}$/;
+const isId = (value: unknown): value is string =>
+  typeof value === "string" && ID_PATTERN.test(value);
+
 function hasBase(value: Record<string, unknown>): boolean {
   return (
-    value.version === 1 &&
+    (value.version === 1 || value.version === 2) &&
     isText(value.eventId) &&
     isText(value.missionId) &&
     isText(value.recordedAt)
@@ -109,16 +126,70 @@ function isAward(value: unknown): value is StepAward {
  */
 export function parseLedgerEvent(value: unknown): LedgerEvent | null {
   if (!isRecord(value) || !hasBase(value)) return null;
+  return value.version === 1 ? parseVersion1(value) : parseVersion2(value);
+}
+
+/**
+ * The upcaster for position-keyed events. Pure: the ids are the positions, the
+ * same ids `upcastMission` gives the mission those positions belong to.
+ */
+function parseVersion1(value: Record<string, unknown>): LedgerEvent | null {
+  const base = {
+    version: 1 as const,
+    eventId: value.eventId as string,
+    missionId: value.missionId as string,
+    recordedAt: value.recordedAt as string,
+  };
   switch (value.type) {
     case "StepCompleted":
       return isIndex(value.chapterIndex) &&
         isIndex(value.stepIndex) &&
         isEvidence(value.evidence) &&
         isAward(value.award)
-        ? (value as unknown as StepCompletedEvent)
+        ? {
+            ...base,
+            type: "StepCompleted",
+            chapterId: positionChapterId(value.chapterIndex),
+            stepId: positionStepId(value.chapterIndex, value.stepIndex),
+            evidence: value.evidence,
+            award: value.award,
+          }
         : null;
     case "ChapterCompleted":
       return isIndex(value.chapterIndex) && isIndex(value.xp) && isText(value.calculatorVersion)
+        ? {
+            ...base,
+            type: "ChapterCompleted",
+            chapterId: positionChapterId(value.chapterIndex),
+            xp: value.xp,
+            calculatorVersion: value.calculatorVersion,
+          }
+        : null;
+    case "MissionCompleted":
+      return isIndex(value.xp) && isText(value.calculatorVersion)
+        ? {
+            ...base,
+            type: "MissionCompleted",
+            xp: value.xp,
+            calculatorVersion: value.calculatorVersion,
+          }
+        : null;
+    default:
+      return null;
+  }
+}
+
+function parseVersion2(value: Record<string, unknown>): LedgerEvent | null {
+  switch (value.type) {
+    case "StepCompleted":
+      return isId(value.chapterId) &&
+        isId(value.stepId) &&
+        isEvidence(value.evidence) &&
+        isAward(value.award)
+        ? (value as unknown as StepCompletedEvent)
+        : null;
+    case "ChapterCompleted":
+      return isId(value.chapterId) && isIndex(value.xp) && isText(value.calculatorVersion)
         ? (value as unknown as ChapterCompletedEvent)
         : null;
     case "MissionCompleted":
@@ -134,13 +205,15 @@ export function evidenceKind(evidence: LedgerEvidence): CompletionEvidence {
   return evidence.kind;
 }
 
-/** The claim id that makes a step pay once. */
-export const stepClaimId = (missionId: string, chapterIndex: number, stepIndex: number) =>
-  `${missionId}:step:${chapterIndex}:${stepIndex}`;
+/**
+ * The claim id that makes a step pay once. For a generated step the id is
+ * `"c:s"`, so this is exactly the legacy `${missionId}:step:c:s`.
+ */
+export const stepClaimId = (missionId: string, stepId: string) => `${missionId}:step:${stepId}`;
 
-/** The claim id that makes a chapter bonus pay once. */
-export const chapterClaimId = (missionId: string, chapterIndex: number) =>
-  `${missionId}:chapter:${chapterIndex}`;
+/** The claim id that makes a chapter bonus pay once. Equal to the legacy key. */
+export const chapterClaimId = (missionId: string, chapterId: string) =>
+  `${missionId}:chapter:${chapterId}`;
 
 /** The claim id that makes a mission bonus pay once. */
 export const missionClaimId = (missionId: string) => `${missionId}:mission`;

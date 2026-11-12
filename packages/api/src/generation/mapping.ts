@@ -32,6 +32,7 @@ import {
   type MissionSource,
   type MissionStep,
 } from "../client";
+import { positionChapterId, positionStepId } from "../plan/ids";
 
 /**
  * Compile-time parity between the wire enums and core's domain types. A new
@@ -55,8 +56,10 @@ function toSource(source: Source): MissionSource {
   };
 }
 
-export function toMissionStep(step: DraftStep): MissionStep {
+/** `id` is the step's stable id: its generated position (Story 7.2). */
+export function toMissionStep(step: DraftStep, id: string): MissionStep {
   return {
+    id,
     index: step.index,
     title: step.title,
     // A planning estimate. No progression number is derived from it.
@@ -73,12 +76,24 @@ export function toMissionStep(step: DraftStep): MissionStep {
   };
 }
 
-export function toMissionChapter(chapter: DraftChapter): MissionChapter {
+/**
+ * Ids come from positions in the delivered draft, not from the draft's own
+ * `index` fields, because positions are what legacy ledger events were keyed
+ * on. A progress preview passes its chapter's index, which is its position in
+ * the plan.
+ */
+export function toMissionChapter(
+  chapter: DraftChapter,
+  chapterPosition: number = chapter.index,
+): MissionChapter {
   return {
+    id: positionChapterId(chapterPosition),
     index: chapter.index,
     title: chapter.title,
     exitCondition: chapter.exitCondition,
-    steps: chapter.steps.map(toMissionStep),
+    steps: chapter.steps.map((step, stepPosition) =>
+      toMissionStep(step, positionStepId(chapterPosition, stepPosition)),
+    ),
   };
 }
 
@@ -87,7 +102,7 @@ export function toMissionDraft(mission: DraftMission): MissionDraft {
     title: mission.title,
     goalType: mission.goalType,
     primaryDomain: mission.primaryDomain,
-    chapters: mission.chapters.map(toMissionChapter),
+    chapters: mission.chapters.map((chapter, position) => toMissionChapter(chapter, position)),
   };
 }
 

@@ -10,6 +10,7 @@
 import type { StoredMissionView } from "../client";
 import { GenerationError, describeFailure, isGenerationError } from "../errors";
 import type { GuestPrincipal } from "../identity/ports";
+import { upcastMission } from "../plan/ids";
 import type { GeneratedMissionRecord, GenerationPersistencePort } from "../ports";
 
 export interface ListMissionsInput {
@@ -32,7 +33,10 @@ function toView(record: GeneratedMissionRecord): StoredMissionView {
     generatedAt: record.generatedAt,
     pursuitSlug: record.pursuitSlug,
     safetyClass: record.safetyClass,
-    mission: record.mission,
+    // Missions stored before ids existed get them here, on every read; the
+    // stored record is left as it is.
+    mission: upcastMission(record.mission),
+    version: record.version ?? 0,
   };
 }
 

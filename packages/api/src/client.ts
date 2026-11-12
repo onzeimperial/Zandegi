@@ -166,6 +166,14 @@ export interface MissionStepGuide {
 }
 
 export interface MissionStep {
+  /**
+   * Stable for the life of the mission, and never reused. A generated step's id
+   * comes from its generated position (`"chapter:step"`); a step the person adds
+   * takes `"own-N"` from a per-mission counter that only increases. Progress
+   * belongs to this id, never to where the step currently sits.
+   */
+  id: string;
+  /** The step's current position in its chapter. Display only: nothing is keyed on it. */
   index: number;
   title: string;
   /**
@@ -178,9 +186,17 @@ export interface MissionStep {
   guide: MissionStepGuide;
   sources: MissionSource[];
   toolKinds: string[];
+  /**
+   * `"person"` when the person added this step or rewrote it. Such a step has no
+   * sources, is never sent to a model and skips grounding: the words are theirs.
+   * Absent for a step exactly as Zandegi generated it.
+   */
+  writtenBy?: "person";
 }
 
 export interface MissionChapter {
+  /** Stable: the chapter's generated position. Chapters are never added or removed. */
+  id: string;
   index: number;
   title: string;
   exitCondition: string;
@@ -192,6 +208,11 @@ export interface MissionDraft {
   goalType: GoalType;
   primaryDomain: GenerationDomain;
   chapters: MissionChapter[];
+  /**
+   * How many steps the person has ever added. Only increases, so an added
+   * step's id is never reused, even after the step is deleted. Absent means 0.
+   */
+  addedStepCount?: number;
 }
 
 export interface MissionSafetyNotice {
@@ -262,7 +283,76 @@ export interface StoredMissionView {
   pursuitSlug: string;
   safetyClass: GenerationSafetyClass;
   mission: MissionDraft;
+  /**
+   * Bumped by every saved plan edit. An edit names the version it was made
+   * against, and a stale one is refused with `PLAN_EDIT_CONFLICT`.
+   */
+  version: number;
 }
+
+// ── Plan editing ───────────────────────────────────────────
+
+/**
+ * One change to a mission's plan. There is deliberately no operation that adds
+ * or removes a chapter, or edits a chapter's exit condition: those are refused
+ * as `INVALID_REQUEST`.
+ */
+export type PlanEdit =
+  | { op: "renameChapter"; chapterId: string; title: string }
+  | { op: "editStep"; stepId: string; title?: string; approach?: string }
+  | { op: "reorderSteps"; chapterId: string; stepIds: string[] }
+  | { op: "addStep"; chapterId: string; title: string; approach?: string }
+  | { op: "deleteStep"; stepId: string };
+
+export const PLAN_EDIT_OPS = [
+  "renameChapter",
+  "editStep",
+  "reorderSteps",
+  "addStep",
+  "deleteStep",
+] as const;
+
+export interface PlanEditRequest {
+  /** The `version` of the mission the edit was made against. */
+  version: number;
+  edit: PlanEdit;
+}
+
+export const PLAN_EDIT_LIMITS = {
+  maxTitleLength: 200,
+  maxApproachLength: 2_000,
+  maxStepsPerChapter: 50,
+} as const;
+
+// ── Logs ───────────────────────────────────────────────────
+
+/**
+ * Progress the plan did not foresee: a one-line note, or a number with an
+ * optional unit. A log pays no XP and never reaches a model. Its text is
+ * personal content: it never enters a log line, an incident or the ledger.
+ */
+export type MissionLogInput =
+  { kind: "note"; text: string } | { kind: "number"; value: number; unit?: string };
+
+export interface MissionLogView {
+  logId: string;
+  missionId: string;
+  /** The chapter it is filed under: the current one when logged, movable later. */
+  chapterId: string;
+  kind: "note" | "number";
+  text?: string;
+  value?: number;
+  unit?: string;
+  /** ISO-8601 UTC, from the server's clock. */
+  loggedAt: string;
+}
+
+export const MISSION_LOG_LIMITS = {
+  maxTextLength: 280,
+  maxUnitLength: 24,
+  /** Absolute value. Keeps a number a person could plausibly mean. */
+  maxValue: 1_000_000_000,
+} as const;
 
 // ── Errors ─────────────────────────────────────────────────
 
@@ -288,6 +378,7 @@ export const GENERATION_ERROR_CODES = [
   "SIGN_IN_REQUIRED",
   "ACCOUNT_NOT_ALLOWED",
   "DAILY_LIMIT_REACHED",
+  "PLAN_EDIT_CONFLICT",
 ] as const;
 
 export type GenerationErrorCode = (typeof GENERATION_ERROR_CODES)[number];
@@ -309,6 +400,8 @@ export const GENERATION_ERROR_MESSAGES: Record<GenerationErrorCode, string> = {
   ACCOUNT_NOT_ALLOWED: "Zandegi is invite-only for now, and this account isn't on the list.",
   DAILY_LIMIT_REACHED:
     "You've reached today's build limit. Your existing missions are ready. More builds open within 24 hours.",
+  PLAN_EDIT_CONFLICT:
+    "This plan changed somewhere else, so nothing was saved. Reload to see the latest version.",
 };
 
 export interface GenerationErrorBody {
@@ -343,8 +436,9 @@ export const MAX_EVIDENCE_PHOTO_BYTES = 4 * 1024 * 1024;
 
 export interface StepCompletionView {
   missionId: string;
-  chapterIndex: number;
-  stepIndex: number;
+  /** The chapter the step belonged to when it was completed. */
+  chapterId: string;
+  stepId: string;
   evidence: CompletionEvidence;
   xp: number;
   /** ISO-8601 UTC, from the server's clock. */
@@ -367,7 +461,7 @@ export interface ProgressView {
   xpIntoLevel: number;
   xpForThisLevel: number;
   completions: StepCompletionView[];
-  completedChapters: { missionId: string; chapterIndex: number }[];
+  completedChapters: { missionId: string; chapterId: string }[];
   completedMissions: string[];
 }
 

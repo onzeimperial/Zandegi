@@ -37,9 +37,13 @@ let store: PostgresDemoStore;
 
 beforeAll(async () => {
   database = await PGlite.create();
-  for (const entry of readdirSync(MIGRATIONS, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    await database.exec(readFileSync(`${MIGRATIONS}/${entry.name}/migration.sql`, "utf8"));
+  // Applied in name order, as `prisma migrate deploy` applies them.
+  const migrations = readdirSync(MIGRATIONS, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+  for (const name of migrations) {
+    await database.exec(readFileSync(`${MIGRATIONS}/${name}/migration.sql`, "utf8"));
   }
   const port = await freePort();
   server = new PGLiteSocketServer({ db: database, port, host: "127.0.0.1", maxConnections: 8 });

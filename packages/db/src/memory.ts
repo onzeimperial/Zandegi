@@ -18,7 +18,10 @@ import {
   completionKey,
   guestKey,
   ledgerKey,
+  logsKey,
   missionKey,
+  MAX_LISTED_LOGS,
+  newestLogsFirst,
   MAX_LEDGER_ENTRIES,
   newestFirst,
   ownerIndexKey,
@@ -28,6 +31,7 @@ import {
   type DemoStore,
   type StoredGuest,
   type StoredMission,
+  type StoredMissionLog,
 } from "./store";
 
 interface Entry {
@@ -85,9 +89,20 @@ export function createInMemoryDemoStore<
     entries.set(key, { value: structuredClone(value), expiresAt: expiryFrom() });
   }
 
+  /** Every read answers with a version; a record starts at 0. */
+  const versioned = (found: unknown) => {
+    const mission = structuredClone(found) as StoredMission<TMission, TSafetyClass, TContext>;
+    return { ...mission, version: mission.version ?? 0 };
+  };
+
+  const readLogs = (ownerId: string, missionId: string): StoredMissionLog[] => {
+    const found = read(logsKey(ownerId, missionId));
+    return Array.isArray(found) ? (found as StoredMissionLog[]) : [];
+  };
+
   return {
     async recordMission(record) {
-      write(missionKey(record.ownerId, record.missionId), record);
+      write(missionKey(record.ownerId, record.missionId), { ...record, version: 0 });
       const indexKey = ownerIndexKey(record.ownerId);
       write(
         indexKey,
@@ -105,9 +120,7 @@ export function createInMemoryDemoStore<
       for (const entry of index) {
         const found = read(missionKey(ownerId, entry.missionId));
         // An expired mission drops out rather than appearing as a gap.
-        if (found !== null) {
-          missions.push(structuredClone(found) as StoredMission<TMission, TSafetyClass, TContext>);
-        }
+        if (found !== null) missions.push(versioned(found));
       }
       // Listing is a request from the principal, so it renews the index window.
       if (index.length > 0) entries.set(indexKey, { value: index, expiresAt: expiryFrom() });
@@ -123,7 +136,41 @@ export function createInMemoryDemoStore<
       // mission the owner never looks at still expires on its own window;
       // richer renewal semantics are product-owned and deliberately deferred.
       entries.set(key, { value: found, expiresAt: expiryFrom() });
-      return structuredClone(found) as StoredMission<TMission, TSafetyClass, TContext>;
+      return versioned(found);
+    },
+
+    async updateMission(ownerId, missionId, expectedVersion, mission) {
+      // Compare-and-set with no await in between, so it cannot interleave.
+      const key = missionKey(ownerId, missionId);
+      const found = read(key);
+      if (found === null) return "missing";
+      const current = versioned(found);
+      if (current.version !== expectedVersion) return "conflict";
+      write(key, { ...current, mission, version: expectedVersion + 1 });
+      return "updated";
+    },
+
+    async recordLog(log) {
+      const key = logsKey(log.ownerId, log.missionId);
+      write(key, [...readLogs(log.ownerId, log.missionId), log]);
+    },
+
+    async listLogs(ownerId, missionId) {
+      return structuredClone(
+        newestLogsFirst(readLogs(ownerId, missionId)).slice(0, MAX_LISTED_LOGS),
+      );
+    },
+
+    async moveLog(ownerId, missionId, logId, chapterId) {
+      const logs = readLogs(ownerId, missionId);
+      const found = logs.find((log) => log.logId === logId);
+      if (found === undefined) return null;
+      const moved = { ...found, chapterId };
+      write(
+        logsKey(ownerId, missionId),
+        logs.map((log) => (log.logId === logId ? moved : log)),
+      );
+      return structuredClone(moved);
     },
 
     async findGuest(tokenHash) {

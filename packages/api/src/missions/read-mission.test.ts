@@ -12,7 +12,7 @@ const MISSION: MissionDraft = {
   title: "Half Marathon",
   goalType: "METRIC",
   primaryDomain: "Body",
-  chapters: [{ index: 0, title: "Base building", exitCondition: "Four weeks", steps: [] }],
+  chapters: [{ id: "0", index: 0, title: "Base building", exitCondition: "Four weeks", steps: [] }],
 };
 
 function record(overrides: Partial<GeneratedMissionRecord> = {}): GeneratedMissionRecord {
@@ -61,7 +61,44 @@ describe("readMission", () => {
       pursuitSlug: "run-a-half-marathon",
       safetyClass: "NORMAL",
       mission: MISSION,
+      version: 0,
     });
+  });
+
+  it("gives a mission stored before ids its position ids, and its version", async () => {
+    const legacy = {
+      ...MISSION,
+      chapters: [
+        {
+          index: 0,
+          title: "Base",
+          exitCondition: "Four weeks",
+          steps: [
+            {
+              index: 0,
+              title: "Run",
+              estimatedMinutes: 30,
+              verification: "SELF" as const,
+              guide: { approach: "Go.", materials: [], commonMistakes: [], whatGoodLooksLike: "" },
+              sources: [],
+              toolKinds: [],
+            },
+          ],
+        },
+      ],
+    };
+    // why: a record exactly as the release before ids stored it.
+    const ports = {
+      persistence: persistence([
+        record({ mission: legacy as unknown as MissionDraft, version: 3 }),
+      ]),
+    };
+    const view = await readMission({ principal: OWNER, missionId: "mission-1" }, ports);
+    expect(view.mission.chapters[0]).toMatchObject({
+      id: "0",
+      steps: [{ id: "0:0", title: "Run" }],
+    });
+    expect(view.version).toBe(3);
   });
 
   it("keeps server-side record fields off the wire", async () => {
