@@ -188,3 +188,47 @@ export interface MissionLogStorePort {
     chapterId: string,
   ): Promise<MissionLogRecord | null>;
 }
+
+/**
+ * A person's reminder setting as stored. The address is personal content: it is
+ * used to send the reminder and for nothing else, never logged, and cleared when
+ * reminders are turned off.
+ */
+export interface ReminderRecord {
+  ownerId: string;
+  /** `null` once reminders are off. */
+  email: string | null;
+  timezone?: string;
+  /** ISO-8601 UTC. */
+  updatedAt: string;
+  /** The local day of the last reminder claimed. */
+  lastSentDay?: string;
+}
+
+/** Where reminder settings live. Every call but the daily sweep is keyed on the owner. */
+export interface ReminderStorePort {
+  find(ownerId: string): Promise<ReminderRecord | null>;
+  enable(reminder: {
+    ownerId: string;
+    email: string;
+    timezone?: string;
+    updatedAt: string;
+  }): Promise<void>;
+  disable(ownerId: string, updatedAt: string): Promise<void>;
+  /** Every setting that is on. Only the daily trigger calls this. */
+  listEnabled(): Promise<ReminderRecord[]>;
+  /** `true` once per owner per local day, while reminders are on. Atomic. */
+  claimDay(ownerId: string, day: string): Promise<boolean>;
+}
+
+/** One plain-text email. */
+export interface ReminderMessage {
+  to: string;
+  subject: string;
+  text: string;
+}
+
+/** Sends a reminder. A failure throws; its message must never hold the address. */
+export interface ReminderMailerPort {
+  send(message: ReminderMessage): Promise<void>;
+}

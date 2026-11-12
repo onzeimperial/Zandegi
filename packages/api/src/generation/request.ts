@@ -29,7 +29,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isSupportedTimezone(value: string): boolean {
+/** Whether `value` is an IANA zone this runtime knows. */
+export function isSupportedTimezone(value: string): boolean {
   try {
     new Intl.DateTimeFormat("en", { timeZone: value });
     return true;

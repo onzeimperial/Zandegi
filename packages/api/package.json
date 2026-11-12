@@ -18,6 +18,7 @@
     "@zandegi/ai": "workspace:*",
     "@zandegi/core": "workspace:*",
     "@zandegi/db": "workspace:*",
-    "inngest": "4.21.0"
+    "inngest": "4.21.0",
+    "nodemailer": "10.2.1"
   }
 }

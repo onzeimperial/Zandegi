@@ -21,10 +21,12 @@ import {
   MAX_LEDGER_ENTRIES,
   MAX_LISTED_LOGS,
   MAX_LISTED_MISSIONS,
+  MAX_LISTED_REMINDERS,
   StoreUnavailableError,
   type DemoStore,
   type StoredGuest,
   type StoredMissionLog,
+  type StoredReminder,
 } from "./store";
 import type { Prisma, PrismaClient } from "./generated/prisma/client";
 
@@ -140,6 +142,20 @@ export async function createPostgresDemoStore<
     loggedAt: row.loggedAt.toISOString(),
   });
 
+  const toReminder = (row: {
+    ownerId: string;
+    email: string | null;
+    timezone: string | null;
+    updatedAt: Date;
+    lastSentDay: string | null;
+  }): StoredReminder => ({
+    ownerId: row.ownerId,
+    email: row.email,
+    ...(row.timezone === null ? {} : { timezone: row.timezone }),
+    updatedAt: row.updatedAt.toISOString(),
+    ...(row.lastSentDay === null ? {} : { lastSentDay: row.lastSentDay }),
+  });
+
   const toGuest = (row: { id: string; createdAt: Date }): StoredGuest => ({
     id: row.id,
     createdAt: row.createdAt.toISOString(),
@@ -235,6 +251,60 @@ export async function createPostgresDemoStore<
         if (count === 0) return null;
         const row = await prisma.missionLog.findFirst({ where: { id: logId, ownerId } });
         return row === null ? null : toLog(row);
+      }),
+
+    findReminder: (ownerId) =>
+      guard("findReminder", async () => {
+        const row = await prisma.reminderPreference.findUnique({ where: { ownerId } });
+        return row === null ? null : toReminder(row);
+      }),
+
+    enableReminder: (reminder) =>
+      guard("enableReminder", async () => {
+        const fields = {
+          email: reminder.email,
+          timezone: reminder.timezone ?? null,
+          updatedAt: new Date(reminder.updatedAt),
+        };
+        // An upsert leaves `lastSentDay` alone, so today's reminder is not resent.
+        await prisma.reminderPreference.upsert({
+          where: { ownerId: reminder.ownerId },
+          create: { ownerId: reminder.ownerId, ...fields },
+          update: fields,
+        });
+      }),
+
+    disableReminder: (ownerId, updatedAt) =>
+      guard("disableReminder", async () => {
+        await prisma.reminderPreference.updateMany({
+          where: { ownerId },
+          data: { email: null, timezone: null, updatedAt: new Date(updatedAt) },
+        });
+      }),
+
+    listEnabledReminders: () =>
+      guard("listEnabledReminders", async () => {
+        const rows = await prisma.reminderPreference.findMany({
+          where: { email: { not: null } },
+          orderBy: { ownerId: "asc" },
+          take: MAX_LISTED_REMINDERS,
+        });
+        return rows.map(toReminder);
+      }),
+
+    claimReminderDay: (ownerId, day) =>
+      guard("claimReminderDay", async () => {
+        // One conditional UPDATE: of two claims for one day, exactly one matches.
+        // `<>` alone would skip a NULL, hence the explicit OR.
+        const { count } = await prisma.reminderPreference.updateMany({
+          where: {
+            ownerId,
+            email: { not: null },
+            OR: [{ lastSentDay: null }, { lastSentDay: { not: day } }],
+          },
+          data: { lastSentDay: day },
+        });
+        return count === 1;
       }),
 
     findGuest: (tokenHash) =>

@@ -15,7 +15,7 @@
 export * from "./client";
 export * from "./ports";
 export { GenerationError, isGenerationError, redactDiagnostic, describeFailure } from "./errors";
-export { parseGenerateMissionRequest } from "./generation/request";
+export { isSupportedTimezone, parseGenerateMissionRequest } from "./generation/request";
 export {
   toMissionChapter,
   toMissionDraft,
@@ -76,6 +76,37 @@ export {
   type LogProgressPorts,
   type MoveLogInput,
 } from "./plan/logs";
+export {
+  buildTodayPlan,
+  planTimezone,
+  planToday,
+  validTimezone,
+  type BuildTodayPlanInput,
+  type PlanTodayInput,
+  type PlanTodayPorts,
+  type PlanTodayResult,
+} from "./plan/plan-today";
+export {
+  parseReminderRequest,
+  readReminder,
+  reminderAddress,
+  reminderMessage,
+  sendDailyReminders,
+  setReminder,
+  type ReadReminderPorts,
+  type ReminderSettingsInput,
+  type SendDailyRemindersPorts,
+  type SendDailyRemindersResult,
+  type SetReminderPorts,
+} from "./reminders/reminders";
+export {
+  createGmailMailer,
+  gmailCredentialsFromEnv,
+  gmailMailerFromEnv,
+  type GmailCredentials,
+  type MailTransport,
+} from "./reminders/gmail";
+export { appUrlFromEnv, isCronAuthorized } from "./reminders/cron";
 export type { LedgerEvent, ProgressLedgerPort } from "./progress/ledger";
 export * from "./identity";
 export {

@@ -32,6 +32,8 @@ import {
   type StoredGuest,
   type StoredMission,
   type StoredMissionLog,
+  type StoredReminder,
+  MAX_LISTED_REMINDERS,
 } from "./store";
 
 interface Entry {
@@ -65,6 +67,8 @@ export function createInMemoryDemoStore<
   const retentionSeconds = options.retentionSeconds ?? DEMO_RETENTION_SECONDS;
   const now = options.now ?? (() => Date.now());
   const entries = new Map<string, Entry>();
+  // Reminder settings never expire: they belong to a signed-in account.
+  const reminders = new Map<string, StoredReminder>();
 
   const expiryFrom = (): number | null =>
     retentionSeconds <= 0 ? null : now() + retentionSeconds * 1000;
@@ -173,6 +177,51 @@ export function createInMemoryDemoStore<
       return structuredClone(moved);
     },
 
+    async findReminder(ownerId) {
+      const found = reminders.get(ownerId);
+      return found === undefined ? null : structuredClone(found);
+    },
+
+    async enableReminder(reminder) {
+      const existing = reminders.get(reminder.ownerId);
+      reminders.set(reminder.ownerId, {
+        ownerId: reminder.ownerId,
+        email: reminder.email,
+        ...(reminder.timezone === undefined ? {} : { timezone: reminder.timezone }),
+        updatedAt: reminder.updatedAt,
+        ...(existing?.lastSentDay === undefined ? {} : { lastSentDay: existing.lastSentDay }),
+      });
+    },
+
+    async disableReminder(ownerId, updatedAt) {
+      const existing = reminders.get(ownerId);
+      if (existing === undefined) return;
+      reminders.set(ownerId, {
+        ownerId,
+        email: null,
+        updatedAt,
+        ...(existing.lastSentDay === undefined ? {} : { lastSentDay: existing.lastSentDay }),
+      });
+    },
+
+    async listEnabledReminders() {
+      return structuredClone(
+        [...reminders.values()]
+          .filter((reminder) => reminder.email !== null)
+          .slice(0, MAX_LISTED_REMINDERS),
+      );
+    },
+
+    async claimReminderDay(ownerId, day) {
+      // Check-and-set with no await in between, like `claimCompletion`.
+      const existing = reminders.get(ownerId);
+      if (existing === undefined || existing.email === null || existing.lastSentDay === day) {
+        return false;
+      }
+      reminders.set(ownerId, { ...existing, lastSentDay: day });
+      return true;
+    },
+
     async findGuest(tokenHash) {
       const found = read(guestKey(tokenHash));
       return found === null ? null : (structuredClone(found) as StoredGuest);
@@ -245,6 +294,7 @@ export function createInMemoryDemoStore<
 
     clear() {
       entries.clear();
+      reminders.clear();
     },
   };
 }

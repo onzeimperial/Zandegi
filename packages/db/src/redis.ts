@@ -197,6 +197,28 @@ export function createRedisDemoStore<
       throw new StoreUnavailableError("moveLog", "logs need the postgres store");
     },
 
+    // Reminders keep an address for as long as the person wants them, which an
+    // expiring store cannot promise. Reads answer "never set"; writes refuse.
+    async findReminder() {
+      return null;
+    },
+
+    async enableReminder() {
+      throw new StoreUnavailableError("enableReminder", "reminders need the postgres store");
+    },
+
+    async disableReminder() {
+      throw new StoreUnavailableError("disableReminder", "reminders need the postgres store");
+    },
+
+    async listEnabledReminders() {
+      return [];
+    },
+
+    async claimReminderDay() {
+      return false;
+    },
+
     async findGuest(tokenHash) {
       const raw = await guard("findGuest", () => client.get(guestKey(tokenHash)));
       return decode<StoredGuest>(raw);

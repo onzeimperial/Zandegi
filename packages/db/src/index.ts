@@ -18,6 +18,7 @@ export {
   type DemoStore,
   type StoredGuest,
   type StoredMission,
+  type StoredReminder,
 } from "./store";
 
 export {

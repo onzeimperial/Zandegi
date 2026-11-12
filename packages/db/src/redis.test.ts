@@ -318,3 +318,18 @@ describe("plan editing and logs in Redis", () => {
     await expect(redis.listLogs("o", "m")).resolves.toEqual([]);
   });
 });
+
+describe("reminders in Redis", () => {
+  it("reads none, refuses to turn one on or off, and never claims a day", async () => {
+    const redis = createRedisDemoStore({ client: fakeRedis().client });
+    await expect(redis.findReminder("o")).resolves.toBeNull();
+    await expect(
+      redis.enableReminder({ ownerId: "o", email: "a@b.c", updatedAt: "2026-11-12T00:00:00.000Z" }),
+    ).rejects.toMatchObject({ name: "StoreUnavailableError", operation: "enableReminder" });
+    await expect(redis.disableReminder("o", "2026-11-12T00:00:00.000Z")).rejects.toMatchObject({
+      operation: "disableReminder",
+    });
+    await expect(redis.listEnabledReminders()).resolves.toEqual([]);
+    await expect(redis.claimReminderDay("o", "2026-11-12")).resolves.toBe(false);
+  });
+});

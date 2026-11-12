@@ -1,0 +1,209 @@
+import { createInMemoryDemoStore } from "@zandegi/db";
+import { describe, expect, it } from "vitest";
+import type { GenerationSafetyClass, MissionDraft } from "../client";
+import { demoPortsFromStore } from "../demo-store";
+import type { GuestPrincipal } from "../identity/ports";
+import { fixedClock, sequentialIdGenerator, type MissionGoalContext } from "../ports";
+import { completeStep } from "../progress/complete-step";
+import { upcastMission, type StoredMissionDraft } from "./ids";
+import { planTimezone, planToday, validTimezone } from "./plan-today";
+
+const OWNER: GuestPrincipal = { id: "owner-1", createdAt: "2026-11-01T00:00:00.000Z" };
+const SYDNEY = "Australia/Sydney";
+
+const step = (index: number, minutes = 40) => ({
+  index,
+  title: `Step ${index + 1}`,
+  estimatedMinutes: minutes,
+  verification: "SELF" as const,
+  guide: { approach: "Do it.", materials: [], commonMistakes: [], whatGoodLooksLike: "" },
+  sources: [],
+  toolKinds: [],
+});
+
+const missionWith = (minutes: number[]): StoredMissionDraft => ({
+  title: "Conversational Farsi",
+  goalType: "PROJECT",
+  primaryDomain: "Mind",
+  chapters: [
+    {
+      index: 0,
+      title: "Sounds",
+      exitCondition: "Read aloud",
+      steps: minutes.map((m, i) => step(i, m)),
+    },
+  ],
+});
+
+async function setup(
+  options: {
+    goalContext?: MissionGoalContext;
+    minutes?: number[];
+    generatedAt?: string;
+  } = {},
+) {
+  const store = createInMemoryDemoStore<MissionDraft, GenerationSafetyClass, MissionGoalContext>();
+  const demo = demoPortsFromStore(store);
+  await demo.persistence.record({
+    missionId: "m-1",
+    ownerId: OWNER.id,
+    runId: "run-1",
+    generatedAt: options.generatedAt ?? "2026-11-01T00:00:00.000Z",
+    goalText: "learn farsi",
+    pursuitSlug: "learn-farsi",
+    mission: upcastMission(missionWith(options.minutes ?? [40, 40, 40, 40, 40])),
+    safetyClass: "NORMAL",
+    ...(options.goalContext === undefined ? {} : { goalContext: options.goalContext }),
+  });
+  const at = (iso: string) => ({
+    persistence: demo.persistence,
+    ledger: demo.ledger,
+    clock: fixedClock(new Date(iso)),
+  });
+  const plan = async (iso: string, principal: GuestPrincipal = OWNER, browserTimezone?: unknown) =>
+    (await planToday({ principal, browserTimezone }, at(iso))).plans["m-1"];
+  const complete = (stepId: string, iso: string) =>
+    completeStep(
+      { principal: OWNER, missionId: "m-1", stepId, evidence: { kind: "SELF" } },
+      { ...at(iso), ids: sequentialIdGenerator("evt") },
+    );
+  const ledgerSize = async () => (await store.readLedger(OWNER.id)).length;
+  return { plan, complete, ledgerSize };
+}
+
+const WEEK_600 = { timezone: SYDNEY, weeklyTimeBudgetMinutes: 600 };
+
+describe("today's plan", () => {
+  it("spreads five 40-minute steps over a 600-minute week: two today, the rest after", async () => {
+    const { plan } = await setup({
+      goalContext: WEEK_600,
+      generatedAt: "2026-11-12T00:00:00.000Z",
+    });
+    // 10:00 on 12 November in Sydney.
+    const today = await plan("2026-11-11T23:00:00.000Z");
+    expect(today).toMatchObject({
+      today: "2026-11-12",
+      todayStepIds: ["0:0", "0:1"],
+      doneTodayStepIds: [],
+      upcoming: [
+        { date: "2026-11-13", stepIds: ["0:2", "0:3"] },
+        { date: "2026-11-14", stepIds: ["0:4"] },
+        { date: "2026-11-15", stepIds: [] },
+      ],
+      laterStepCount: 0,
+      doneForToday: false,
+      finished: false,
+      returningAfterGap: false,
+      dailyMinutes: 86,
+    });
+  });
+
+  it("keeps the same steps leading on two days with nothing done, with no ledger write", async () => {
+    const { plan, ledgerSize } = await setup({
+      goalContext: WEEK_600,
+      generatedAt: "2026-11-11T22:00:00.000Z", // 09:00 on the 12th in Sydney
+    });
+    const first = await plan("2026-11-11T23:00:00.000Z"); // the 12th
+    const second = await plan("2026-11-12T23:00:00.000Z"); // the 13th
+    expect(first!.todayStepIds[0]).toBe("0:0");
+    expect(second!.todayStepIds[0]).toBe("0:0");
+    expect(second!.today).toBe("2026-11-13");
+    expect(first!.returningAfterGap).toBe(false);
+    // The welcome-back line, never a "missed" state.
+    expect(second!.returningAfterGap).toBe(true);
+    expect(await ledgerSize()).toBe(0);
+  });
+
+  it("says today is done once today's steps are, and pulls nothing new in", async () => {
+    const { plan, complete, ledgerSize } = await setup({
+      goalContext: WEEK_600,
+      generatedAt: "2026-11-11T13:00:00.000Z", // midnight on the 12th in Sydney
+    });
+    await complete("0:0", "2026-11-11T22:00:00.000Z"); // 09:00 on the 12th
+    await complete("0:1", "2026-11-12T01:00:00.000Z"); // 12:00 on the 12th
+    const before = await ledgerSize();
+    const done = await plan("2026-11-12T05:00:00.000Z"); // 16:00 on the 12th
+    expect(done).toMatchObject({
+      todayStepIds: ["0:0", "0:1"],
+      doneTodayStepIds: ["0:0", "0:1"],
+      doneForToday: true,
+      finished: false,
+      returningAfterGap: false,
+    });
+    expect(done!.upcoming[0]).toEqual({ date: "2026-11-13", stepIds: ["0:2", "0:3"] });
+    // Planning writes nothing to the ledger.
+    expect(await ledgerSize()).toBe(before);
+  });
+
+  it("lets yesterday's undone steps lead today", async () => {
+    const { plan, complete } = await setup({ goalContext: WEEK_600 });
+    await complete("0:0", "2026-11-10T22:00:00.000Z"); // the 11th
+    const today = await plan("2026-11-11T23:00:00.000Z"); // the 12th
+    expect(today!.todayStepIds[0]).toBe("0:1");
+    expect(today!.returningAfterGap).toBe(false);
+  });
+
+  it("gives one long step a day of its own", async () => {
+    const { plan } = await setup({
+      goalContext: { timezone: SYDNEY, weeklyTimeBudgetMinutes: 420 },
+      minutes: [180, 20],
+      generatedAt: "2026-11-12T00:00:00.000Z",
+    });
+    const today = await plan("2026-11-11T23:00:00.000Z");
+    expect(today!.todayStepIds).toEqual(["0:0"]);
+    expect(today!.upcoming[0]!.stepIds).toEqual(["0:1"]);
+  });
+
+  it("splits 23:30 and 00:30 in Sydney into different days", async () => {
+    const { plan } = await setup({ goalContext: WEEK_600 });
+    expect((await plan("2026-11-12T12:30:00.000Z"))!.today).toBe("2026-11-12");
+    expect((await plan("2026-11-12T13:30:00.000Z"))!.today).toBe("2026-11-13");
+  });
+
+  it("holds 30 minutes a day with no budget", async () => {
+    const { plan } = await setup({
+      goalContext: { timezone: SYDNEY },
+      minutes: [15, 15, 15],
+      generatedAt: "2026-11-12T00:00:00.000Z",
+    });
+    const today = await plan("2026-11-11T23:00:00.000Z");
+    expect(today!.dailyMinutes).toBe(30);
+    expect(today!.todayStepIds).toEqual(["0:0", "0:1"]);
+  });
+
+  it("uses the browser's zone when the mission has none, and UTC when neither is usable", async () => {
+    const { plan } = await setup({ generatedAt: "2026-11-12T00:00:00.000Z" });
+    const instant = "2026-11-12T13:30:00.000Z"; // 00:30 on the 13th in Sydney
+    expect((await plan(instant, OWNER, SYDNEY))!.today).toBe("2026-11-13");
+    expect((await plan(instant, OWNER, "Mars/Olympus"))!.today).toBe("2026-11-12");
+    expect((await plan(instant))!.today).toBe("2026-11-12");
+  });
+
+  it("prefers the mission's own zone over the browser's", () => {
+    expect(planTimezone({ goalContext: { timezone: SYDNEY } }, "Europe/London")).toBe(SYDNEY);
+    expect(planTimezone({ goalContext: { timezone: "nope" } }, "Europe/London")).toBe(
+      "Europe/London",
+    );
+    expect(validTimezone(42)).toBeUndefined();
+    expect(validTimezone("")).toBeUndefined();
+    expect(validTimezone("x".repeat(101))).toBeUndefined();
+  });
+
+  it("marks a finished mission finished, with nothing done for today", async () => {
+    const { plan, complete } = await setup({ goalContext: WEEK_600, minutes: [40] });
+    await complete("0:0", "2026-11-10T22:00:00.000Z");
+    const today = await plan("2026-11-11T23:00:00.000Z");
+    expect(today).toMatchObject({
+      todayStepIds: [],
+      finished: true,
+      doneForToday: false,
+      returningAfterGap: false,
+    });
+  });
+
+  it("shows nobody else's missions", async () => {
+    const { plan } = await setup({ goalContext: WEEK_600 });
+    const intruder = { id: "owner-2", createdAt: OWNER.createdAt };
+    expect(await plan("2026-11-11T23:00:00.000Z", intruder)).toBeUndefined();
+  });
+});
