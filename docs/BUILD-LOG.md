@@ -4,6 +4,62 @@ Newest first.
 
 ---
 
+## 2026-11-12 - own the plan: Today, plan editing, quick logs
+
+**Shipped**
+
+- **Stable ids (Story 7.2).** Every chapter and step has an id. A generated step's id is its
+  generated position, `"c:s"`, so its claim key is exactly the old `${missionId}:step:c:s` and a
+  retry that straddles the deploy pays once. Steps a person adds take `own-N` from a per-mission
+  counter (`addedStepCount`) that only increases, so an id is never reused.
+- **A pure upcaster.** `upcastMission` gives a mission stored before ids its position ids on every
+  read. `parseLedgerEvent` turns version 1 (position) events into ids on read; new events are
+  version 2. Nothing stored is rewritten, and legacy XP, completed steps and next step fold the same.
+- **Plan editing (Story 8.1).** `editPlan` renames a chapter, rewrites a step's title or guide text,
+  reorders steps within a chapter, adds and deletes steps. Each save is a compare-and-set on the
+  mission's new `version`; a stale edit is `PLAN_EDIT_CONFLICT` (409). Adding or removing a chapter,
+  editing an exit condition, and deleting a chapter's last step are `INVALID_REQUEST`. An edited
+  step loses its sources and is marked `writtenBy: "person"`. Editing has no ledger port at all.
+- **XP rules for edits.** Added steps pay 0 XP (recorded with `added-step-unpaid-v1`) but must be
+  done to finish their chapter. Chapter and mission bonuses are priced from the generated steps the
+  person actually completed, so adding or deleting steps cannot raise a bonus. `neutral-v1` is
+  unchanged.
+- **Quick logs (Story 8.2 lite).** A one-line note or a number with an optional unit, filed under the
+  current chapter and movable to another. No model, no XP, and the text never reaches a diagnostic.
+- **Today is home.** `/today` lists each mission's current step with Start step and a quick log,
+  with loading, empty and error states. Signed-in people land there; the nav is Today, Path and New
+  mission. The path gained Edit plan.
+- **Storage.** Migration `20261112000000_own_the_plan`: `Mission.version` (default 0) and a
+  `MissionLog` table. Additive only. The contract suite covers updates and logs on memory and
+  Postgres (PGlite); Redis refuses edits and logs with `STORE_UNAVAILABLE`.
+- **Routes.** `PATCH /api/missions/[id]/plan`, `GET|POST /api/missions/[id]/logs`,
+  `PATCH /api/missions/[id]/logs/[logId]`, sharing the complete route's guards in
+  `apps/web/src/lib/json-route.ts`. The complete route now takes `stepId`, and still accepts the
+  old `chapter` and `step` fields from a page open across the deploy.
+
+**Learned**
+
+- Keeping the id equal to the legacy position made three problems vanish together: claim keys,
+  event upcasting and old links (`/step?chapter=0&step=1` still opens the right step).
+- Pricing bonuses from completed generated steps, rather than the chapter's current size, is what
+  makes edits unable to farm XP, and it reduces to the old number when nothing was edited.
+
+**Broken or deferred**
+
+- A chapter finished only by deleting its last undone step pays its bonus on the next completion in
+  that mission, not at once, because an edit never writes to the ledger. If that deletion finishes
+  the whole mission, no bonus is paid until spec B decides how.
+- `docs/ANALYTICS.md` still does not exist, so the new screens fire no analytics events.
+- Manual check not yet run: generate, complete two steps, reorder, delete a done step, add one, log
+  a note, reload at 375px.
+
+**Next step**
+
+Run the manual check in the spec against a real Postgres, then start spec B (boss fights), which
+owns exit conditions and the reward policy for added steps.
+
+---
+
 ## 2026-11-04 - two-person test: detailed goals, Postgres, Clerk sign-in
 
 **Shipped**

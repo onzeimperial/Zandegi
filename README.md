@@ -114,12 +114,20 @@ Vercel builds Production only from the production branch, so that branch must ho
    Changing the invite list or the daily limit needs a redeploy before it takes effect.
 
 4. **Deploy,** then check each of these yourself, because the test suite cannot reach them:
-   - Sign in with an invited email. Success: you land on your path.
-   - Sign up for the first time with an invited email. Success: you land on your path.
+   - Sign in with an invited email. Success: you land on Today.
+   - Sign up for the first time with an invited email. Success: you land on Today.
    - Sign in with an email that is not invited. Success: the invite-only screen, and nothing else.
    - Build a mission with details filled in, then open it on a second device. Success: the same
      mission and XP.
    - Redeploy, then read it again. Success: nothing has changed.
+   - Complete two steps, then on the path choose Edit plan: reorder, delete a done step, add one.
+     Log a note on Today, then reload on the second device. Success: every change is there, and
+     the XP total moved only when a step was completed.
+
+Plan editing and logs need the Postgres store. The `own_the_plan` migration only adds a `version`
+column (default 0) to `Mission` and a new `MissionLog` table, so it applies to a live database with
+no downtime and leaves existing missions and XP as they were. The dormant Redis store refuses plan
+edits and logs with `STORE_UNAVAILABLE`.
 
 To apply migrations to a database by hand:
 
