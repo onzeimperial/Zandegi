@@ -60,6 +60,29 @@ export interface StoredMissionLog {
   loggedAt: string;
 }
 
+/**
+ * One boss attempt: the raw result and the debrief. Personal content on a
+ * deletable row, never a ledger fact. The ledger's `BossResolved` event refers
+ * to it by id only, and must keep working once a person deletes it.
+ */
+export interface StoredBossAttempt {
+  attemptId: string;
+  ownerId: string;
+  missionId: string;
+  chapterId: string;
+  result: "done" | "not-yet";
+  evidence: "SELF" | "ARTIFACT";
+  tips?: string;
+  wentWell?: string;
+  didntGoWell?: string;
+  improve?: string;
+  /** ISO-8601 UTC, from the caller's clock port. */
+  attemptedAt: string;
+}
+
+/** Bounds a boss attempt listing. */
+export const MAX_LISTED_BOSS_ATTEMPTS = 50;
+
 /** Bounds a log listing. */
 export const MAX_LISTED_LOGS = 50;
 
@@ -120,6 +143,14 @@ export interface DemoStore<
     logId: string,
     chapterId: string,
   ): Promise<StoredMissionLog | null>;
+
+  /** Save a boss attempt. The caller has already checked that the owner owns the mission. */
+  recordBossAttempt(attempt: StoredBossAttempt): Promise<void>;
+  /** One mission's boss attempts for one owner, newest first, at most `MAX_LISTED_BOSS_ATTEMPTS`. */
+  listBossAttempts(ownerId: string, missionId: string): Promise<StoredBossAttempt[]>;
+  /** Delete one attempt. `false` when it is unknown or another owner's. */
+  deleteBossAttempt(ownerId: string, attemptId: string): Promise<boolean>;
+
   findGuest(tokenHash: string): Promise<StoredGuest | null>;
   saveGuest(tokenHash: string, guest: StoredGuest): Promise<void>;
   /** Renews the retention window. A no-op when the hash is unknown. */
@@ -211,6 +242,11 @@ export function logsKey(ownerId: string, missionId: string): string {
   return `${DEMO_KEY_PREFIX}:logs:${ownerId}:${missionId}`;
 }
 
+/** One owner's boss attempts, across their missions. */
+export function bossAttemptsKey(ownerId: string): string {
+  return `${DEMO_KEY_PREFIX}:boss:${ownerId}`;
+}
+
 /** One guest's append-only ledger. */
 export function ledgerKey(ownerId: string): string {
   return `${DEMO_KEY_PREFIX}:ledger:${ownerId}`;
@@ -278,6 +314,14 @@ export function withIndexEntry(
 export function newestLogsFirst(logs: readonly StoredMissionLog[]): StoredMissionLog[] {
   const desc = (a: string, b: string) => (a < b ? 1 : a > b ? -1 : 0);
   return [...logs].sort((a, b) => desc(a.loggedAt, b.loggedAt) || desc(a.logId, b.logId));
+}
+
+/** Newest first by `attemptedAt`, then by id descending, matching Postgres. */
+export function newestAttemptsFirst(attempts: readonly StoredBossAttempt[]): StoredBossAttempt[] {
+  const desc = (a: string, b: string) => (a < b ? 1 : a > b ? -1 : 0);
+  return [...attempts].sort(
+    (a, b) => desc(a.attemptedAt, b.attemptedAt) || desc(a.attemptId, b.attemptId),
+  );
 }
 
 /** Newest first by `generatedAt`; ties keep their existing order. */

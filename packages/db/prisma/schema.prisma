@@ -22,6 +22,7 @@ model Principal {
   ledger   LedgerEntry[]
   usage    GenerationUsage[]
   logs     MissionLog[]
+  bosses   BossAttempt[]
 }
 
 /// An accepted mission. Personal content lives here, where it can be deleted.
@@ -38,8 +39,9 @@ model Mission {
   /// Bumped by every saved plan edit; an edit is a compare-and-set on it.
   version     Int      @default(0)
 
-  owner Principal    @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  logs  MissionLog[]
+  owner  Principal     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  logs   MissionLog[]
+  bosses BossAttempt[]
 
   @@index([ownerId, generatedAt(sort: Desc)])
 }
@@ -60,6 +62,27 @@ model MissionLog {
   mission Mission   @relation(fields: [missionId], references: [id], onDelete: Restrict)
 
   @@index([ownerId, missionId, loggedAt(sort: Desc)])
+}
+
+/// One boss attempt: the raw result and the debrief. Personal content, deletable, never a ledger
+/// fact: the ledger's BossResolved event holds only this row's id.
+model BossAttempt {
+  id          String   @id
+  ownerId     String
+  missionId   String
+  chapterId   String
+  result      String
+  evidence    String
+  tips        String?
+  wentWell    String?
+  didntGoWell String?
+  improve     String?
+  attemptedAt DateTime @db.Timestamptz(3)
+
+  owner   Principal @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  mission Mission   @relation(fields: [missionId], references: [id], onDelete: Restrict)
+
+  @@index([ownerId, missionId, attemptedAt(sort: Desc)])
 }
 
 /// The atomic marker that one step has been paid. Removed if the append fails.

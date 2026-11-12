@@ -132,6 +132,29 @@ describe("the Redis demo store", () => {
     });
   });
 
+  it("refuses to keep a boss debrief, and touches nothing", async () => {
+    const fake = fakeRedis();
+    const error = await store(fake)
+      .recordBossAttempt({
+        attemptId: "a-1",
+        ownerId: "guest-1",
+        missionId: "m-1",
+        chapterId: "0",
+        result: "done",
+        evidence: "SELF",
+        tips: "warm up",
+        attemptedAt: "2026-11-12T00:00:00.000Z",
+      })
+      .then(
+        () => null,
+        (caught: unknown) => caught as StoreUnavailableError,
+      );
+    expect(error).toBeInstanceOf(StoreUnavailableError);
+    expect(await store(fake).listBossAttempts("guest-1", "m-1")).toEqual([]);
+    expect(await store(fake).deleteBossAttempt("guest-1", "a-1")).toBe(false);
+    expect(fake.calls).toEqual([]);
+  });
+
   it("renews a guest with expire, which is a no-op for an unknown hash", async () => {
     const fake = fakeRedis();
     await store(fake).renewGuest("hash-unknown");

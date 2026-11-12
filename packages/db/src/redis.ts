@@ -197,6 +197,20 @@ export function createRedisDemoStore<
       throw new StoreUnavailableError("moveLog", "logs need the postgres store");
     },
 
+    // A debrief is personal content that must stay deletable and durable, so
+    // boss attempts, like logs, need the postgres store.
+    async recordBossAttempt() {
+      throw new StoreUnavailableError("recordBossAttempt", "boss attempts need the postgres store");
+    },
+
+    async listBossAttempts() {
+      return [];
+    },
+
+    async deleteBossAttempt() {
+      return false;
+    },
+
     async findGuest(tokenHash) {
       const raw = await guard("findGuest", () => client.get(guestKey(tokenHash)));
       return decode<StoredGuest>(raw);

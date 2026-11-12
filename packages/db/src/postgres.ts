@@ -19,10 +19,12 @@
 
 import {
   MAX_LEDGER_ENTRIES,
+  MAX_LISTED_BOSS_ATTEMPTS,
   MAX_LISTED_LOGS,
   MAX_LISTED_MISSIONS,
   StoreUnavailableError,
   type DemoStore,
+  type StoredBossAttempt,
   type StoredGuest,
   type StoredMissionLog,
 } from "./store";
@@ -140,6 +142,34 @@ export async function createPostgresDemoStore<
     loggedAt: row.loggedAt.toISOString(),
   });
 
+  type AttemptRow = {
+    id: string;
+    ownerId: string;
+    missionId: string;
+    chapterId: string;
+    result: string;
+    evidence: string;
+    tips: string | null;
+    wentWell: string | null;
+    didntGoWell: string | null;
+    improve: string | null;
+    attemptedAt: Date;
+  };
+
+  const toAttempt = (row: AttemptRow): StoredBossAttempt => ({
+    attemptId: row.id,
+    ownerId: row.ownerId,
+    missionId: row.missionId,
+    chapterId: row.chapterId,
+    result: row.result === "done" ? "done" : "not-yet",
+    evidence: row.evidence === "ARTIFACT" ? "ARTIFACT" : "SELF",
+    ...(row.tips === null ? {} : { tips: row.tips }),
+    ...(row.wentWell === null ? {} : { wentWell: row.wentWell }),
+    ...(row.didntGoWell === null ? {} : { didntGoWell: row.didntGoWell }),
+    ...(row.improve === null ? {} : { improve: row.improve }),
+    attemptedAt: row.attemptedAt.toISOString(),
+  });
+
   const toGuest = (row: { id: string; createdAt: Date }): StoredGuest => ({
     id: row.id,
     createdAt: row.createdAt.toISOString(),
@@ -235,6 +265,44 @@ export async function createPostgresDemoStore<
         if (count === 0) return null;
         const row = await prisma.missionLog.findFirst({ where: { id: logId, ownerId } });
         return row === null ? null : toLog(row);
+      }),
+
+    recordBossAttempt: (attempt) =>
+      guard("recordBossAttempt", async () => {
+        await prisma.bossAttempt.create({
+          data: {
+            id: attempt.attemptId,
+            ownerId: attempt.ownerId,
+            missionId: attempt.missionId,
+            chapterId: attempt.chapterId,
+            result: attempt.result,
+            evidence: attempt.evidence,
+            tips: attempt.tips ?? null,
+            wentWell: attempt.wentWell ?? null,
+            didntGoWell: attempt.didntGoWell ?? null,
+            improve: attempt.improve ?? null,
+            attemptedAt: new Date(attempt.attemptedAt),
+          },
+        });
+      }),
+
+    listBossAttempts: (ownerId, missionId) =>
+      guard("listBossAttempts", async () => {
+        const rows = await prisma.bossAttempt.findMany({
+          where: { ownerId, missionId },
+          // `id` breaks ties, matching `newestAttemptsFirst`.
+          orderBy: [{ attemptedAt: "desc" }, { id: "desc" }],
+          take: MAX_LISTED_BOSS_ATTEMPTS,
+        });
+        return rows.map(toAttempt);
+      }),
+
+    deleteBossAttempt: (ownerId, attemptId) =>
+      guard("deleteBossAttempt", async () => {
+        const { count } = await prisma.bossAttempt.deleteMany({
+          where: { id: attemptId, ownerId },
+        });
+        return count === 1;
       }),
 
     findGuest: (tokenHash) =>

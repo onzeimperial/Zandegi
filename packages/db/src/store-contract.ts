@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_LISTED_MISSIONS,
   type DemoStore,
+  type StoredBossAttempt,
   type StoredMission,
   type StoredMissionLog,
 } from "./store";
@@ -229,6 +230,85 @@ export function describeStoreContract(name: string, store: () => DemoStore): voi
         const moved = await store().moveLog(owner, missionId, entry.logId, "1");
         expect(moved).toEqual({ ...entry, chapterId: "1" });
         expect(await store().listLogs(owner, missionId)).toEqual([{ ...entry, chapterId: "1" }]);
+      });
+    });
+
+    describe("boss attempts", () => {
+      async function ownedMission(): Promise<{ owner: string; missionId: string }> {
+        const owner = await newOwner();
+        const record = mission(owner);
+        await store().recordMission(record);
+        return { owner, missionId: record.missionId };
+      }
+
+      function attempt(
+        owner: string,
+        missionId: string,
+        overrides: Partial<StoredBossAttempt> = {},
+      ): StoredBossAttempt {
+        return {
+          attemptId: unique("attempt"),
+          ownerId: owner,
+          missionId,
+          chapterId: "0",
+          result: "not-yet",
+          evidence: "SELF",
+          didntGoWell: "lost my place halfway",
+          attemptedAt: CREATED_AT,
+          ...overrides,
+        };
+      }
+
+      it("lists one mission's attempts, newest first, exactly as they were saved", async () => {
+        const { owner, missionId } = await ownedMission();
+        const first = attempt(owner, missionId, { attemptedAt: "2026-11-04T01:00:00.000Z" });
+        const full = attempt(owner, missionId, {
+          result: "done",
+          evidence: "ARTIFACT",
+          tips: "warm up first",
+          wentWell: "kept going",
+          didntGoWell: "rushed the end",
+          improve: "pace the last third",
+          attemptedAt: "2026-11-04T02:00:00.000Z",
+        });
+        for (const entry of [first, full]) await store().recordBossAttempt(entry);
+        expect(await store().listBossAttempts(owner, missionId)).toEqual([full, first]);
+      });
+
+      it("breaks a tie on the same instant by attempt id, newest id first", async () => {
+        const { owner, missionId } = await ownedMission();
+        for (const attemptId of ["att-tie-a", "att-tie-c", "att-tie-b"]) {
+          await store().recordBossAttempt(attempt(owner, missionId, { attemptId }));
+        }
+        const listed = await store().listBossAttempts(owner, missionId);
+        expect(listed.map((entry) => entry.attemptId)).toEqual([
+          "att-tie-c",
+          "att-tie-b",
+          "att-tie-a",
+        ]);
+      });
+
+      it("keeps owners and missions apart", async () => {
+        const first = await ownedMission();
+        const second = await ownedMission();
+        await store().recordBossAttempt(attempt(first.owner, first.missionId));
+        expect(await store().listBossAttempts(second.owner, first.missionId)).toEqual([]);
+        expect(await store().listBossAttempts(first.owner, second.missionId)).toEqual([]);
+      });
+
+      it("deletes an attempt for its owner only", async () => {
+        const { owner, missionId } = await ownedMission();
+        const other = await ownedMission();
+        const entry = attempt(owner, missionId);
+        await store().recordBossAttempt(entry);
+
+        expect(await store().deleteBossAttempt(other.owner, entry.attemptId)).toBe(false);
+        expect(await store().deleteBossAttempt(owner, "never-issued")).toBe(false);
+        expect(await store().listBossAttempts(owner, missionId)).toEqual([entry]);
+
+        expect(await store().deleteBossAttempt(owner, entry.attemptId)).toBe(true);
+        expect(await store().listBossAttempts(owner, missionId)).toEqual([]);
+        expect(await store().deleteBossAttempt(owner, entry.attemptId)).toBe(false);
       });
     });
 

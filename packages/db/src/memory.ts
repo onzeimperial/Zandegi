@@ -13,6 +13,9 @@
 
 import {
   accountKey,
+  bossAttemptsKey,
+  MAX_LISTED_BOSS_ATTEMPTS,
+  newestAttemptsFirst,
   usageKey,
   USAGE_RETENTION_SECONDS,
   completionKey,
@@ -29,6 +32,7 @@ import {
   withIndexEntry,
   DEMO_RETENTION_SECONDS,
   type DemoStore,
+  type StoredBossAttempt,
   type StoredGuest,
   type StoredMission,
   type StoredMissionLog,
@@ -98,6 +102,11 @@ export function createInMemoryDemoStore<
   const readLogs = (ownerId: string, missionId: string): StoredMissionLog[] => {
     const found = read(logsKey(ownerId, missionId));
     return Array.isArray(found) ? (found as StoredMissionLog[]) : [];
+  };
+
+  const readAttempts = (ownerId: string): StoredBossAttempt[] => {
+    const found = read(bossAttemptsKey(ownerId));
+    return Array.isArray(found) ? (found as StoredBossAttempt[]) : [];
   };
 
   return {
@@ -171,6 +180,25 @@ export function createInMemoryDemoStore<
         logs.map((log) => (log.logId === logId ? moved : log)),
       );
       return structuredClone(moved);
+    },
+
+    async recordBossAttempt(attempt) {
+      write(bossAttemptsKey(attempt.ownerId), [...readAttempts(attempt.ownerId), attempt]);
+    },
+
+    async listBossAttempts(ownerId, missionId) {
+      const attempts = readAttempts(ownerId).filter((attempt) => attempt.missionId === missionId);
+      return structuredClone(newestAttemptsFirst(attempts).slice(0, MAX_LISTED_BOSS_ATTEMPTS));
+    },
+
+    async deleteBossAttempt(ownerId, attemptId) {
+      const attempts = readAttempts(ownerId);
+      if (!attempts.some((attempt) => attempt.attemptId === attemptId)) return false;
+      write(
+        bossAttemptsKey(ownerId),
+        attempts.filter((attempt) => attempt.attemptId !== attemptId),
+      );
+      return true;
     },
 
     async findGuest(tokenHash) {
