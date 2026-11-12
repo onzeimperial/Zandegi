@@ -15,3 +15,4 @@ export * from "./scoring/xp";
 export * from "./scoring/award";
 export * from "./scoring/levels";
 export * from "./scoring/rarity";
+export * from "./schedule";
