@@ -64,3 +64,7 @@
 - source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-two-person-mvp-test.md`
   summary: Unverified, medium if true: when a worrying detail makes stage 1 or 2 fail or the model refuse, the person may see a build failure and a retry instead of the support route.
   evidence: Three real wordings reached `support`, and no real run has produced this failure. A real run in which a model refuses at stage 1 or 2 with worrying text would settle it.
+
+- source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-own-the-plan.md`
+  summary: A chapter or mission finished by deleting its remaining steps pays its completion bonus only on the next completion, and never when the deletion finishes the whole mission.
+  evidence: Plan edits may not write ledger events. Spec B replaces chapter bonuses with bosses and gates the mission reward on bosses, which should remove this path; confirm that during spec B's review.

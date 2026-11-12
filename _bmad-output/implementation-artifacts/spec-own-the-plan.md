@@ -2,7 +2,7 @@
 title: 'Own the plan: Today screen, plan editing, log anything'
 type: 'feature'
 created: '2026-11-12'
-status: 'in-progress'
+status: 'done'
 baseline_commit: '9ea8b2d4c4685c0ae0fcef443d1cb112f59764ae'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -94,6 +94,32 @@ context:
 ## Spec Change Log
 
 ## Review Triage Log
+
+Loop 1. B = blind, V = verification gap, E = edge case. Verification-gap gaps arrive pre-verified.
+
+| ID | Finding | Verdict | Route | Evidence |
+|----|---------|---------|-------|----------|
+| B4, E2 | A chapter or mission finished with no completed generated step writes a 0 XP bonus and uses up its claim | medium | patch | `complete-step.ts:208-230` calls `payOnce` whatever the amount; spec B's reward would then find the claim taken. |
+| B1 | An edited generated step keeps unsourced model-written guide facts | medium | patch | `applyPlanEdit` clears `sources` but keeps `materials`, `commonMistakes` and `whatGoodLooksLike`. CLAUDE.md law 6 overrides the spec: an unsourced hard claim never ships. |
+| E8, E7 | A no-op edit strips sources on the server | low | patch | Only the client checks for a no-op; the server always rewrites. |
+| V-other | A title-only edit fails on a long generated `approach` | medium | patch | `StepRow` sends both fields, and the server caps `approach` at 2,000 characters while generated text has no cap. |
+| B7, E9 | One failed log read blanks Today | medium | patch | `guest-missions.ts` uses `Promise.all`. The 2N-query half is rejected as low for two people. |
+| B8, E12, E13 | Logs with the same timestamp have no stable order | low | patch | `postgres.ts` sorts by `loggedAt` with no tie-breaker; memory keeps the oldest first. A direct correction. |
+| B9 | Keyboard focus is lost on every plan edit | medium | patch | `locked` disables the focused control, and nothing restores focus. CLAUDE.md section 6. |
+| B11 | `QuickLog` never picks up server changes, and the unit is not cleared | low | patch | State is seeded once from `initialLogs`. A direct correction. |
+| V1 | `listMissions` upcasting is never tested | medium | patch | Filed evidence. |
+| V2 | Mission-bonus pricing on an edited mission is untested | medium | patch | Filed evidence. |
+| V3 | Old `/step?chapter=&step=` links are untested | low | patch | Filed evidence. |
+| B2, E1, E15, E16 | A chapter or mission finished by deleting steps pays its bonus late, or never | medium | defer | Editing may not write ledger events (frozen). Spec B replaces chapter bonuses with bosses and the mission bonus with a boss-gated reward, so this path goes away there. The bonus is priced from completed generated steps, so deleting never inflates it. |
+| E4 | A rewritten generated step still pays | low | rejected | It pays the same amount, once, as before; rewriting to fit real life is the feature. |
+| B3 | A completed chapter reopens when a step is added | low | rejected | Finishing it again correctly pays nothing; display only. |
+| B5 | Log foreign keys restrict deletion | low | rejected | No delete feature exists yet (Story 4.3). |
+| B6, E11 | Logs have no write limit | low | rejected | Two invited people only. |
+| B10, E10 | Redis shows edit controls that always fail | low | rejected | The Redis store is dormant; deployments use Postgres. |
+| B12 | Analytics, offline state and a real-Postgres manual check are missing | low | rejected | `docs/ANALYTICS.md` does not exist, and the manual check needs credentials. Both are reported to the human. |
+| E3 | The award line treats 0 XP as an added step | false | rejected | Generated steps always pay 40 or 50. |
+| E5, E6, E17 | Zero-padded legacy indices are rejected | low | rejected | Old pages emitted `String(index)`, which is never zero-padded. |
+| E14 | A delete can race a completion | low | rejected | Needs one person acting in two places in the same instant. |
 
 ## Design Notes
 
