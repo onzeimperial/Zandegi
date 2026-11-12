@@ -50,7 +50,22 @@ export {
 } from "./progress/complete-step";
 export { fingerprintPhoto, sniffPhotoType } from "./progress/evidence";
 export { ADDED_STEP_AWARD_VERSION } from "./progress/complete-step";
-export { foldProgress, nextStep, completedStepIds } from "./progress/fold";
+export {
+  chapterBoss,
+  closedChapterIds,
+  completedStepIds,
+  foldProgress,
+  missionPosition,
+  nextStep,
+  type MissionPosition,
+} from "./progress/fold";
+export {
+  attemptBoss,
+  parseBossAttemptRequest,
+  type AttemptBossInput,
+  type AttemptBossPorts,
+  type BossAttemptRequest,
+} from "./boss/attempt-boss";
 export {
   addedStepId,
   isGeneratedStepId,

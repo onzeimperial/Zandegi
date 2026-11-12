@@ -7,7 +7,7 @@
  */
 
 import { levelProgress, rankForLevel } from "@zandegi/core";
-import type { ProgressView, StepCompletionView } from "../client";
+import type { ChapterBossView, ProgressView, StepCompletionView } from "../client";
 import { parseLedgerEvent, type LedgerEvent } from "./ledger";
 
 /** Parse stored entries, dropping any this version cannot read. */
@@ -19,7 +19,15 @@ export function foldProgress(events: readonly LedgerEvent[]): ProgressView {
   let totalXp = 0;
   const completions: StepCompletionView[] = [];
   const completedChapters: ProgressView["completedChapters"] = [];
+  const closed = new Set<string>();
+  const bosses = new Map<string, ChapterBossView>();
   const completedMissions: string[] = [];
+  const close = (missionId: string, chapterId: string) => {
+    const key = `${missionId} ${chapterId}`;
+    if (closed.has(key)) return;
+    closed.add(key);
+    completedChapters.push({ missionId, chapterId });
+  };
 
   for (const event of events) {
     switch (event.type) {
@@ -36,8 +44,22 @@ export function foldProgress(events: readonly LedgerEvent[]): ProgressView {
         break;
       case "ChapterCompleted":
         totalXp += event.xp;
-        completedChapters.push({ missionId: event.missionId, chapterId: event.chapterId });
+        close(event.missionId, event.chapterId);
         break;
+      case "BossResolved": {
+        // The stored amount, never recalculated (law 4).
+        totalXp += event.xp;
+        close(event.missionId, event.chapterId);
+        const key = `${event.missionId} ${event.chapterId}`;
+        const seen = bosses.get(key);
+        bosses.set(key, {
+          missionId: event.missionId,
+          chapterId: event.chapterId,
+          outcome: seen?.outcome === "done" || event.band === "done" ? "done" : "not-yet",
+          xp: (seen?.xp ?? 0) + event.xp,
+        });
+        break;
+      }
       case "MissionCompleted":
         totalXp += event.xp;
         completedMissions.push(event.missionId);
@@ -54,6 +76,7 @@ export function foldProgress(events: readonly LedgerEvent[]): ProgressView {
     xpForThisLevel: level.xpForThisLevel,
     completions,
     completedChapters,
+    bosses: [...bosses.values()],
     completedMissions,
   };
 }
@@ -67,20 +90,66 @@ export function completedStepIds(progress: ProgressView, missionId: string): Set
   );
 }
 
+/** The ids of one mission's closed chapters: finished under `neutral-v1`, or by a boss attempt. */
+export function closedChapterIds(progress: ProgressView, missionId: string): Set<string> {
+  return new Set(
+    progress.completedChapters
+      .filter((chapter) => chapter.missionId === missionId)
+      .map((chapter) => chapter.chapterId),
+  );
+}
+
+/** One chapter's boss, or `undefined` if it has never been attempted. */
+export function chapterBoss(
+  progress: ProgressView,
+  missionId: string,
+  chapterId: string,
+): ChapterBossView | undefined {
+  return progress.bosses.find(
+    (boss) => boss.missionId === missionId && boss.chapterId === chapterId,
+  );
+}
+
+/** Where a person stands in one mission. */
+export type MissionPosition =
+  | { kind: "step"; chapterId: string; stepId: string }
+  /** Every step of the open chapter is done: its boss is next. */
+  | { kind: "boss"; chapterId: string }
+  | { kind: "finished" };
+
 /**
- * The first step not yet completed, walking chapters and steps in their current
- * order, or `null` when every step is done. Steps complete in order, so this is
- * the only step that can be completed next. A reorder changes which step this
- * is; it never changes which steps are done.
+ * Walk chapters in order. A closed chapter is passed over, and any step left
+ * undone in it is skipped for good. The first open chapter is where the person
+ * is: its first undone step, or its boss once every step is done. Later
+ * chapters stay shut until this one closes. A reorder changes which step is
+ * next; it never changes which steps are done.
+ */
+export function missionPosition(
+  chapters: readonly { id: string; steps: readonly { id: string }[] }[],
+  completed: ReadonlySet<string>,
+  closed: ReadonlySet<string> = new Set(),
+): MissionPosition {
+  for (const chapter of chapters) {
+    if (closed.has(chapter.id)) continue;
+    const step = chapter.steps.find((entry) => !completed.has(entry.id));
+    return step === undefined
+      ? { kind: "boss", chapterId: chapter.id }
+      : { kind: "step", chapterId: chapter.id, stepId: step.id };
+  }
+  return { kind: "finished" };
+}
+
+/**
+ * The only step that can be completed next, or `null` when the next thing is a
+ * boss or the mission is finished. Steps complete in order.
  */
 export function nextStep(
   chapters: readonly { id: string; steps: readonly { id: string }[] }[],
   completed: ReadonlySet<string>,
+  closed: ReadonlySet<string> = new Set(),
 ): { chapterId: string; stepId: string } | null {
-  for (const chapter of chapters) {
-    for (const step of chapter.steps) {
-      if (!completed.has(step.id)) return { chapterId: chapter.id, stepId: step.id };
-    }
-  }
-  return null;
+  const position = missionPosition(chapters, completed, closed);
+  return position.kind === "step"
+    ? { chapterId: position.chapterId, stepId: position.stepId }
+    : null;
 }

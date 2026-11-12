@@ -18,7 +18,7 @@
  */
 
 import type { StepAward } from "@zandegi/core";
-import type { CompletionEvidence } from "../client";
+import type { BossEvidence, BossResult, CompletionEvidence } from "../client";
 import { positionChapterId, positionStepId } from "../plan/ids";
 
 /** What a photo leaves behind once it has been checked and discarded. */
@@ -67,7 +67,26 @@ export interface MissionCompletedEvent extends EventBase {
   calculatorVersion: string;
 }
 
-export type LedgerEvent = StepCompletedEvent | ChapterCompletedEvent | MissionCompletedEvent;
+/**
+ * A boss attempt that closed its chapter or paid its done band. The attempt's
+ * raw result and debrief stay on the deletable `BossAttempt` record; the
+ * ledger holds only the reference and the facts that priced the award. The id
+ * may outlive its record, because a person can delete their debriefs.
+ */
+export interface BossResolvedEvent extends EventBase {
+  type: "BossResolved";
+  attemptId: string;
+  chapterId: string;
+  band: BossResult;
+  evidence: BossEvidence;
+  xp: number;
+  /** A boss result is the person's own word, even with a photo: it is never judged. */
+  selfDeclared: true;
+  calculatorVersion: string;
+}
+
+export type LedgerEvent =
+  StepCompletedEvent | ChapterCompletedEvent | BossResolvedEvent | MissionCompletedEvent;
 
 /** Where the ledger lives. `@zandegi/db` implements it. */
 export interface ProgressLedgerPort {
@@ -192,6 +211,16 @@ function parseVersion2(value: Record<string, unknown>): LedgerEvent | null {
       return isId(value.chapterId) && isIndex(value.xp) && isText(value.calculatorVersion)
         ? (value as unknown as ChapterCompletedEvent)
         : null;
+    case "BossResolved":
+      return isId(value.attemptId) &&
+        isId(value.chapterId) &&
+        (value.band === "done" || value.band === "not-yet") &&
+        (value.evidence === "SELF" || value.evidence === "ARTIFACT") &&
+        isIndex(value.xp) &&
+        value.selfDeclared === true &&
+        isText(value.calculatorVersion)
+        ? (value as unknown as BossResolvedEvent)
+        : null;
     case "MissionCompleted":
       return isIndex(value.xp) && isText(value.calculatorVersion)
         ? (value as unknown as MissionCompletedEvent)
@@ -214,6 +243,21 @@ export const stepClaimId = (missionId: string, stepId: string) => `${missionId}:
 /** The claim id that makes a chapter bonus pay once. Equal to the legacy key. */
 export const chapterClaimId = (missionId: string, chapterId: string) =>
   `${missionId}:chapter:${chapterId}`;
+
+/**
+ * The claim id that makes a chapter's boss pay its done band once. "Not yet"
+ * never takes it, so a later "done" can still be paid -- once.
+ */
+export const bossClaimId = (missionId: string, chapterId: string) =>
+  `${missionId}:boss:${chapterId}`;
+
+/** The claim id that lets exactly one "not yet" close a chapter. */
+export const bossCloseClaimId = (missionId: string, chapterId: string) =>
+  `${missionId}:boss-close:${chapterId}`;
+
+/** The claim id that recognises a repeated submission of one attempt. */
+export const bossAttemptClaimId = (missionId: string, attemptKey: string) =>
+  `${missionId}:boss-attempt:${attemptKey}`;
 
 /** The claim id that makes a mission bonus pay once. */
 export const missionClaimId = (missionId: string) => `${missionId}:mission`;

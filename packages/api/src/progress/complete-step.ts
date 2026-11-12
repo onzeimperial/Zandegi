@@ -14,43 +14,34 @@
  *   - Once: every payment sits behind an atomic claim, so concurrent requests
  *     race to exactly one winner (NFR7, NFR8).
  *
- * XP comes only from `@zandegi/core`'s neutral award (law 5): the evidence the
- * person provided, never anything the model wrote.
+ * XP comes only from `@zandegi/core` (law 5): the evidence the person
+ * provided and the step XP the ledger already holds, never anything the model
+ * wrote. New awards are priced by `progression-v2`:
+ *   - A generated step pays the v2 step reward, cut at the per-chapter cap
+ *     counted from the ledger.
+ *   - A step the person added pays nothing. It still has to be done (or
+ *     skipped) before the chapter's boss, and its completion is recorded at 0.
+ *   - No chapter bonus is written any more: a chapter pays for its boss
+ *     (`../boss/attempt-boss`). The mission reward is fixed and paid once every
+ *     boss is done, so adding or deleting steps can never change it.
  *
- * Steps are addressed by stable id (Story 7.2), never by position, so a reorder
- * or a deletion cannot move a payment to a different step. Two rules keep plan
- * editing from changing what progress is worth:
- *   - A step the person added pays no XP. It still has to be done to finish its
- *     chapter, and its completion is still recorded, at 0 XP.
- *   - Chapter and mission bonuses are priced from the generated steps the person
- *     actually completed, so adding or deleting steps can never raise a bonus.
- *     With no edits that count is the chapter's step count, exactly as before.
+ * Steps are addressed by stable id (Story 7.2), never by position. A closed
+ * chapter's undone steps are skipped for good: they are never current again.
  */
 
-import {
-  AWARD_CALCULATOR_VERSION,
-  neutralChapterAward,
-  neutralMissionAward,
-  neutralStepAward,
-} from "@zandegi/core";
+import { progressionV2StepAward } from "@zandegi/core";
 import type { StepAward } from "@zandegi/core";
-import type { AwardView, CompleteStepResult, MissionChapter } from "../client";
-import { GenerationError, describeFailure, isGenerationError } from "../errors";
+import type { AwardView, CompleteStepResult, MissionChapter, ProgressView } from "../client";
+import { GenerationError } from "../errors";
 import type { GuestPrincipal } from "../identity/ports";
 import { readMission } from "../missions/read-mission";
+import { storeCall } from "../plan/store-call";
 import type { Clock, GenerationPersistencePort, IdGenerator } from "../ports";
 import { fingerprintPhoto } from "./evidence";
 import { isGeneratedStepId } from "../plan/ids";
-import { completedStepIds, foldProgress, nextStep, readEvents } from "./fold";
-import {
-  LEDGER_EVENT_VERSION,
-  chapterClaimId,
-  missionClaimId,
-  stepClaimId,
-  type LedgerEvent,
-  type LedgerEvidence,
-  type ProgressLedgerPort,
-} from "./ledger";
+import { closedChapterIds, completedStepIds, foldProgress, nextStep, readEvents } from "./fold";
+import { stepClaimId, type LedgerEvidence, type ProgressLedgerPort } from "./ledger";
+import { currentProgress, eventBase, payOnce, settleMissionReward } from "./settle";
 
 export type CompletionEvidenceInput = { kind: "SELF" } | { kind: "ARTIFACT"; bytes: Uint8Array };
 
@@ -73,8 +64,8 @@ export interface CompleteStepPorts {
 
 /**
  * The award recorded for completing a step the person added. It pays nothing
- * until a reward policy for added steps exists (spec B), and it is stamped with
- * its own version so the ledger says why it is zero.
+ * (spec A, kept by spec B), and it is stamped with its own version so the
+ * ledger says why it is zero.
  */
 export const ADDED_STEP_AWARD_VERSION = "added-step-unpaid-v1";
 
@@ -85,19 +76,15 @@ const unpaidAward = (): StepAward => ({
   calculatorVersion: ADDED_STEP_AWARD_VERSION,
 });
 
-/** Each chapter's completed generated steps, by chapter id. Deleted steps still count. */
-function completedGeneratedSteps(
-  completions: readonly { missionId: string; chapterId: string; stepId: string }[],
+/** The step XP the ledger already holds for one chapter: what the cap is counted from. */
+export function chapterStepXpPaid(
+  progress: ProgressView,
   missionId: string,
-): Map<string, Set<string>> {
-  const byChapter = new Map<string, Set<string>>();
-  for (const completion of completions) {
-    if (completion.missionId !== missionId || !isGeneratedStepId(completion.stepId)) continue;
-    const steps = byChapter.get(completion.chapterId) ?? new Set<string>();
-    steps.add(completion.stepId);
-    byChapter.set(completion.chapterId, steps);
-  }
-  return byChapter;
+  chapterId: string,
+): number {
+  return progress.completions
+    .filter((entry) => entry.missionId === missionId && entry.chapterId === chapterId)
+    .reduce((sum, entry) => sum + entry.xp, 0);
 }
 
 function findStep(chapters: readonly MissionChapter[], stepId: unknown) {
@@ -106,41 +93,6 @@ function findStep(chapters: readonly MissionChapter[], stepId: unknown) {
     if (chapter.steps.some((step) => step.id === stepId)) return { chapter, stepId };
   }
   return undefined;
-}
-
-async function storeCall<T>(run: () => Promise<T>): Promise<T> {
-  try {
-    return await run();
-  } catch (error) {
-    if (isGenerationError(error)) throw error;
-    throw new GenerationError("STORE_UNAVAILABLE", describeFailure(error), { cause: error });
-  }
-}
-
-/**
- * Append `event` only if this call wins its claim. If the append then fails,
- * the claim is released so a retry can succeed rather than finding the step
- * marked paid with no record of the payment.
- */
-async function payOnce(
-  ports: CompleteStepPorts,
-  ownerId: string,
-  claimId: string,
-  event: LedgerEvent,
-): Promise<boolean> {
-  const claimed = await storeCall(() => ports.ledger.claim(ownerId, claimId));
-  if (!claimed) return false;
-  try {
-    await storeCall(() => ports.ledger.append(ownerId, event));
-  } catch (error) {
-    await ports.ledger.release(ownerId, claimId).catch(() => undefined);
-    throw error;
-  }
-  return true;
-}
-
-async function currentProgress(ports: CompleteStepPorts, ownerId: string) {
-  return foldProgress(readEvents(await storeCall(() => ports.ledger.read(ownerId))));
 }
 
 export async function completeStep(
@@ -161,16 +113,11 @@ export async function completeStep(
 
   const ownerId = input.principal.id;
   const awards: AwardView[] = [];
-  const event = () => ({
-    version: LEDGER_EVENT_VERSION,
-    eventId: ports.ids.newId(),
-    missionId,
-    recordedAt: ports.clock.now().toISOString(),
-  });
 
-  const before = completedStepIds(await currentProgress(ports, ownerId), missionId);
-  if (!before.has(stepId)) {
-    if (nextStep(chapters, before)?.stepId !== stepId) {
+  const before = await currentProgress(ports, ownerId);
+  const done = completedStepIds(before, missionId);
+  if (!done.has(stepId)) {
+    if (nextStep(chapters, done, closedChapterIds(before, missionId))?.stepId !== stepId) {
       throw new GenerationError("STEP_NOT_CURRENT", "asked for a step that is not next");
     }
 
@@ -180,10 +127,12 @@ export async function completeStep(
       input.evidence.kind === "SELF"
         ? { kind: "SELF" }
         : { kind: "ARTIFACT", ...(await fingerprintPhoto(input.evidence.bytes)) };
-    const award = isGeneratedStepId(stepId) ? neutralStepAward(evidence.kind) : unpaidAward();
+    const award = isGeneratedStepId(stepId)
+      ? progressionV2StepAward(evidence.kind, chapterStepXpPaid(before, missionId, chapter.id))
+      : unpaidAward();
 
     const paid = await payOnce(ports, ownerId, stepClaimId(missionId, stepId), {
-      ...event(),
+      ...eventBase(ports, missionId),
       type: "StepCompleted",
       chapterId: chapter.id,
       stepId,
@@ -193,46 +142,9 @@ export async function completeStep(
     if (paid) awards.push({ kind: "step", xp: award.xp });
   }
 
-  // Bonuses settle on every call, not only on the call that finished the
-  // chapter. If a bonus write failed earlier, the next request for this mission
-  // pays it; its own claim still means it can never be paid twice.
+  // Settled on every call, so a reward whose write failed earlier is paid now.
   const after = await currentProgress(ports, ownerId);
-  const done = completedStepIds(after, missionId);
-  const generated = completedGeneratedSteps(after.completions, missionId);
-  const generatedCount = (chapterId: string) => generated.get(chapterId)?.size ?? 0;
-  const chapterDone = chapters.map(
-    (entry) => entry.steps.length > 0 && entry.steps.every((step) => done.has(step.id)),
-  );
-
-  for (const [index, complete] of chapterDone.entries()) {
-    if (!complete) continue;
-    const chapterId = chapters[index]!.id;
-    const xp = neutralChapterAward(generatedCount(chapterId));
-    // A chapter finished with no generated step done has no bonus yet. Writing
-    // a 0 XP event would spend its claim, and spec B's reward could never pay.
-    if (xp === 0) continue;
-    const paid = await payOnce(ports, ownerId, chapterClaimId(missionId, chapterId), {
-      ...event(),
-      type: "ChapterCompleted",
-      chapterId,
-      xp,
-      calculatorVersion: AWARD_CALCULATOR_VERSION,
-    });
-    if (paid) awards.push({ kind: "chapter", xp });
-  }
-
-  if (chapterDone.length > 0 && chapterDone.every(Boolean)) {
-    const xp = neutralMissionAward(chapters.map((entry) => generatedCount(entry.id)));
-    const paid =
-      xp > 0 &&
-      (await payOnce(ports, ownerId, missionClaimId(missionId), {
-        ...event(),
-        type: "MissionCompleted",
-        xp,
-        calculatorVersion: AWARD_CALCULATOR_VERSION,
-      }));
-    if (paid) awards.push({ kind: "mission", xp });
-  }
+  awards.push(...(await settleMissionReward(ports, ownerId, missionId, chapters, after)));
 
   return { awards, progress: await currentProgress(ports, ownerId) };
 }

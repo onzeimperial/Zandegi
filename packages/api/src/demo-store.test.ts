@@ -204,6 +204,11 @@ describe("the port adapter", () => {
       moveLog: async () => {
         throw new StoreUnavailableError("moveLog", "[redacted]: connection refused");
       },
+      recordBossAttempt: async () => {
+        throw new StoreUnavailableError("recordBossAttempt", "[redacted]: connection refused");
+      },
+      listBossAttempts: async () => [],
+      deleteBossAttempt: async () => false,
     };
     const ports = demoPortsFromStore(broken);
 
@@ -224,6 +229,11 @@ describe("the port adapter", () => {
       (error: unknown) => error as GenerationError,
     );
     expect(logs!.code).toBe("STORE_UNAVAILABLE");
+    const boss = await ports.bosses.record({} as never).then(
+      () => null,
+      (error: unknown) => error as GenerationError,
+    );
+    expect(boss!.code).toBe("STORE_UNAVAILABLE");
 
     // An unsanitised throw from below is replaced wholesale rather than
     // forwarded, so a provider message cannot smuggle an endpoint into a log.

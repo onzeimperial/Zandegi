@@ -32,6 +32,7 @@ import type { GenerationUsagePort } from "./generation/usage";
 import type { AccountPrincipalStorePort } from "./identity/account";
 import type { GuestPrincipalStorePort } from "./identity/ports";
 import type {
+  BossAttemptStorePort,
   GenerationPersistencePort,
   MissionGoalContext,
   MissionLogStorePort,
@@ -64,6 +65,7 @@ export interface DemoPorts {
   usage: GenerationUsagePort;
   plans: MissionPlanStorePort;
   logs: MissionLogStorePort;
+  bosses: BossAttemptStorePort;
 }
 
 export type Env = Record<string, string | undefined>;
@@ -193,6 +195,9 @@ export function demoPortsFromStore(store: StoredDemoStore): DemoPorts {
       list: (ownerId, missionId) => guard("listLogs", () => store.listLogs(ownerId, missionId)),
       move: (ownerId, missionId, logId, chapterId) =>
         guard("moveLog", () => store.moveLog(ownerId, missionId, logId, chapterId)),
+    },
+    bosses: {
+      record: (attempt) => guard("recordBossAttempt", () => store.recordBossAttempt(attempt)),
     },
     guests: {
       findByTokenHash: (tokenHash) =>

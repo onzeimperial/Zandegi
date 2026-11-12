@@ -8,6 +8,9 @@
  */
 
 import type {
+  BossDebrief,
+  BossEvidence,
+  BossResult,
   GenerateMissionDetails,
   GenerationSafetyClass,
   MissionDraft,
@@ -187,4 +190,25 @@ export interface MissionLogStorePort {
     logId: string,
     chapterId: string,
   ): Promise<MissionLogRecord | null>;
+}
+
+/**
+ * A boss attempt as stored: the raw result and the debrief. Personal content on
+ * a deletable record. It never enters a log, an incident or the ledger, which
+ * holds only `attemptId`.
+ */
+export interface BossAttemptRecord extends BossDebrief {
+  attemptId: string;
+  ownerId: string;
+  missionId: string;
+  chapterId: string;
+  result: BossResult;
+  evidence: BossEvidence;
+  /** ISO-8601 UTC, from the server's clock. */
+  attemptedAt: string;
+}
+
+/** Where boss attempts live. Keyed on the owner, like logs. */
+export interface BossAttemptStorePort {
+  record(attempt: BossAttemptRecord): Promise<void>;
 }

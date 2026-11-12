@@ -45,6 +45,7 @@ describe("generation client contract", () => {
       "ACCOUNT_NOT_ALLOWED",
       "DAILY_LIMIT_REACHED",
       "PLAN_EDIT_CONFLICT",
+      "BOSS_NOT_READY",
     ]);
     for (const code of GENERATION_ERROR_CODES) {
       expect(GENERATION_ERROR_MESSAGES[code]).toBeTruthy();

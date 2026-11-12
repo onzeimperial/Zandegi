@@ -187,36 +187,71 @@ describe("photo evidence", () => {
   });
 });
 
-describe("chapter and mission bonuses", () => {
-  it("pays the chapter bonus once, on the step that finishes the chapter", async () => {
-    const { complete } = await setup();
+describe("progression-v2 steps", () => {
+  it("writes no chapter bonus, and leaves the chapter open for its boss", async () => {
+    const { complete, store } = await setup();
     await complete("0:0");
     const finishing = await complete("0:1");
 
-    expect(finishing.awards).toEqual([
-      { kind: "step", xp: 40 },
-      { kind: "chapter", xp: 200 },
-    ]);
-    expect(finishing.progress.completedChapters).toEqual([{ missionId: "m-1", chapterId: "0" }]);
-    // Repeating the finishing step does not pay the chapter again.
-    expect((await complete("0:1")).awards).toEqual([]);
+    expect(finishing.awards).toEqual([{ kind: "step", xp: 40 }]);
+    expect(finishing.progress.completedChapters).toEqual([]);
+    const ledger = (await store.readLedger(OWNER.id)) as { type: string; award?: unknown }[];
+    expect(ledger.map((entry) => entry.type)).toEqual(["StepCompleted", "StepCompleted"]);
+    expect(ledger[0]!.award).toMatchObject({ calculatorVersion: "progression-v2" });
+    // The next chapter stays shut until the boss closes this one.
+    expect((await failure(() => complete("1:0"))).code).toBe("STEP_NOT_CURRENT");
   });
 
-  it("pays the mission bonus once, when every chapter is done", async () => {
-    const { complete } = await setup();
-    await complete("0:0");
-    await complete("0:1");
-    await complete("1:0");
-    const last = await complete("1:1");
+  it("pays up to the per-chapter cap, then records further steps at 0", async () => {
+    const long: StoredMissionDraft = {
+      ...MISSION,
+      chapters: [
+        {
+          index: 0,
+          title: "Long",
+          exitCondition: "Run 5km",
+          steps: Array.from({ length: 11 }, (_unused, index) => step(index)),
+        },
+      ],
+    };
+    const { complete } = await setup(long);
+    const paid: number[] = [];
+    for (let index = 0; index < 11; index += 1) {
+      paid.push((await complete(`0:${index}`)).awards[0]!.xp);
+    }
+    // 40 x 11 would be 440: under the 450 cap, so every step pays in full.
+    expect(paid.every((xp) => xp === 40)).toBe(true);
 
-    expect(last.awards).toEqual([
-      { kind: "step", xp: 40 },
-      { kind: "chapter", xp: 200 },
-      { kind: "mission", xp: 800 },
-    ]);
-    // 4 steps x 40, 2 chapters x 200, mission 4 x 200.
-    expect(last.progress.totalXp).toBe(160 + 400 + 800);
-    expect(last.progress.completedMissions).toEqual(["m-1"]);
+    const photos = await setup(long);
+    const photoPaid: number[] = [];
+    for (let index = 0; index < 11; index += 1) {
+      const result = await photos.complete(`0:${index}`, { kind: "ARTIFACT", bytes: JPEG });
+      photoPaid.push(result.awards[0]!.xp);
+    }
+    // 50 x 9 = 450 reaches the cap; the rest record 0.
+    expect(photoPaid).toEqual([50, 50, 50, 50, 50, 50, 50, 50, 50, 0, 0]);
+    expect((await readProgress({ principal: OWNER }, photos.ports)).totalXp).toBe(450);
+  });
+
+  it("refuses a step left undone in a closed chapter: it was skipped for good", async () => {
+    const { complete, store } = await setup();
+    await complete("0:0");
+    await store.appendLedger(OWNER.id, {
+      version: 2,
+      eventId: "boss-1",
+      missionId: "m-1",
+      recordedAt: "2026-10-09T10:00:00.000Z",
+      type: "BossResolved",
+      attemptId: "attempt-1",
+      chapterId: "0",
+      band: "done",
+      evidence: "SELF",
+      xp: 400,
+      selfDeclared: true,
+      calculatorVersion: "progression-v2",
+    });
+    expect((await failure(() => complete("0:1"))).code).toBe("STEP_NOT_CURRENT");
+    expect((await complete("1:0")).awards).toEqual([{ kind: "step", xp: 40 }]);
   });
 });
 
@@ -272,10 +307,37 @@ describe("data from before stable ids", () => {
     // The next step is still the second one: skipping it is refused.
     expect((await failure(() => complete("1:0"))).code).toBe("STEP_NOT_CURRENT");
     const finishing = await complete("0:1");
-    expect(finishing.awards).toEqual([
-      { kind: "step", xp: 40 },
-      { kind: "chapter", xp: 200 },
-    ]);
+    // Priced by progression-v2 now; the legacy event keeps its stored amount.
+    expect(finishing.awards).toEqual([{ kind: "step", xp: 40 }]);
+    expect(finishing.progress.totalXp).toBe(80);
+  });
+
+  it("keeps a chapter closed under neutral-v1 closed, and pays its mission once", async () => {
+    const { store, complete, ports } = await setup();
+    const meta = (eventId: string) => ({
+      version: 1,
+      eventId,
+      missionId: "m-1",
+      recordedAt: "2026-10-08T09:00:00.000Z",
+    });
+    await store.claimCompletion(OWNER.id, "m-1:step:0:0");
+    await store.claimCompletion(OWNER.id, "m-1:step:0:1");
+    await store.claimCompletion(OWNER.id, "m-1:chapter:0");
+    await store.appendLedger(OWNER.id, legacyEvent(0, 0));
+    await store.appendLedger(OWNER.id, legacyEvent(0, 1));
+    await store.appendLedger(OWNER.id, {
+      ...meta("legacy-c0"),
+      type: "ChapterCompleted",
+      chapterIndex: 0,
+      xp: 200,
+      calculatorVersion: "neutral-v1",
+    });
+
+    const before = await readProgress({ principal: OWNER }, ports);
+    expect(before.totalXp).toBe(280);
+    expect(before.completedChapters).toEqual([{ missionId: "m-1", chapterId: "0" }]);
+    // The closed chapter is passed over: the next step is chapter 1's first.
+    expect((await complete("1:0")).awards).toEqual([{ kind: "step", xp: 40 }]);
   });
 
   it("pays once for a step whose first attempt landed before the deploy", async () => {

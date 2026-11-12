@@ -21,7 +21,13 @@ import type {
   MissionLogRecord,
   MissionLogStorePort,
 } from "../ports";
-import { completedStepIds, foldProgress, nextStep, readEvents } from "../progress/fold";
+import {
+  closedChapterIds,
+  completedStepIds,
+  foldProgress,
+  missionPosition,
+  readEvents,
+} from "../progress/fold";
 import type { ProgressLedgerPort } from "../progress/ledger";
 import { storeCall } from "./store-call";
 
@@ -107,8 +113,8 @@ export interface LogProgressPorts {
 }
 
 /**
- * File a log under the mission's current chapter: the chapter of the next step,
- * or the last chapter once every step is done.
+ * File a log under the mission's current chapter: the open chapter (its next
+ * step or its boss), or the last chapter once every chapter is closed.
  */
 export async function logProgress(
   input: LogProgressInput,
@@ -122,8 +128,13 @@ export async function logProgress(
   const ownerId = input.principal.id;
   const progress = foldProgress(readEvents(await storeCall(() => ports.ledger.read(ownerId))));
   const { chapters } = view.mission;
-  const next = nextStep(chapters, completedStepIds(progress, view.missionId));
-  const chapterId = next?.chapterId ?? chapters[chapters.length - 1]?.id;
+  const position = missionPosition(
+    chapters,
+    completedStepIds(progress, view.missionId),
+    closedChapterIds(progress, view.missionId),
+  );
+  const chapterId =
+    position.kind === "finished" ? chapters[chapters.length - 1]?.id : position.chapterId;
   if (chapterId === undefined) invalid("mission has no chapters");
 
   const record: MissionLogRecord = {

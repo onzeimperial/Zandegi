@@ -379,6 +379,7 @@ export const GENERATION_ERROR_CODES = [
   "ACCOUNT_NOT_ALLOWED",
   "DAILY_LIMIT_REACHED",
   "PLAN_EDIT_CONFLICT",
+  "BOSS_NOT_READY",
 ] as const;
 
 export type GenerationErrorCode = (typeof GENERATION_ERROR_CODES)[number];
@@ -402,6 +403,8 @@ export const GENERATION_ERROR_MESSAGES: Record<GenerationErrorCode, string> = {
     "You've reached today's build limit. Your existing missions are ready. More builds open within 24 hours.",
   PLAN_EDIT_CONFLICT:
     "This plan changed somewhere else, so nothing was saved. Reload to see the latest version.",
+  BOSS_NOT_READY:
+    "Finish this chapter's steps first, or choose to skip the rest, then take the test.",
 };
 
 export interface GenerationErrorBody {
@@ -461,17 +464,93 @@ export interface ProgressView {
   xpIntoLevel: number;
   xpForThisLevel: number;
   completions: StepCompletionView[];
+  /**
+   * Closed chapters: finished under `neutral-v1` (`ChapterCompleted`) or closed
+   * by a boss attempt (`BossResolved`), whatever its result. One entry each.
+   */
   completedChapters: { missionId: string; chapterId: string }[];
+  /** Each attempted boss, with its best result so far. */
+  bosses: ChapterBossView[];
   completedMissions: string[];
 }
 
+export interface ChapterBossView {
+  missionId: string;
+  chapterId: string;
+  /** `"done"` once any attempt was done, try-again included. */
+  outcome: BossResult;
+  /** XP the boss has paid: the done band once, or 0. */
+  xp: number;
+}
+
 export interface AwardView {
-  kind: "step" | "chapter" | "mission";
+  kind: "step" | "chapter" | "boss" | "mission";
   xp: number;
 }
 
 export interface CompleteStepResult {
   /** Empty when the step was already complete: the request was a repeat. */
   awards: AwardView[];
+  progress: ProgressView;
+}
+
+// ── Boss fights ────────────────────────────────────────────
+
+/**
+ * A chapter's boss is its `exitCondition`: a real act, shown unchanged as the
+ * person's own test. No model writes or judges it. The person attempts it and
+ * says how it went; the chapter closes whatever the result.
+ */
+export const BOSS_RESULTS = ["done", "not-yet"] as const;
+export type BossResult = (typeof BOSS_RESULTS)[number];
+
+/** A boss is self-declared, or backed by a photo that is checked and discarded (law 3). */
+export const BOSS_EVIDENCE = ["SELF", "ARTIFACT"] as const;
+export type BossEvidence = (typeof BOSS_EVIDENCE)[number];
+
+/**
+ * The four optional debrief prompts. At least one must be answered. Answers
+ * are personal content: they live on a deletable record and never reach a log,
+ * an incident or the ledger.
+ */
+export interface BossDebrief {
+  tips?: string;
+  wentWell?: string;
+  didntGoWell?: string;
+  /** Becomes the next chapter's first step, as the person's own. */
+  improve?: string;
+}
+
+export const BOSS_DEBRIEF_FIELDS = ["tips", "wentWell", "didntGoWell", "improve"] as const;
+
+export const BOSS_DEBRIEF_LIMITS = {
+  /** Each answer. "What I'll improve" also has to fit a step title. */
+  maxAnswerLength: 500,
+  maxImproveLength: 200,
+} as const;
+
+/**
+ * The multipart fields `POST /api/missions/{id}/boss` accepts. `attemptKey` is
+ * a random token the form makes once, so a double submit is recognised as one
+ * attempt. It is only a de-duplication key: the attempt's id is the server's.
+ */
+export const BOSS_ATTEMPT_FIELDS = [
+  "chapterId",
+  "result",
+  "evidence",
+  "photo",
+  "skipRest",
+  "attemptKey",
+  ...BOSS_DEBRIEF_FIELDS,
+] as const;
+
+export interface BossAttemptResult {
+  /** `null` when the request repeated an attempt already recorded. */
+  attemptId: string | null;
+  result: BossResult;
+  /** The boss band and, when it completes the mission, the mission reward. */
+  awards: AwardView[];
+  /** Where "what I'll improve" landed, or `null` if it was not answered or could not be added. */
+  improveStep: { chapterId: string; stepId: string } | null;
   progress: ProgressView;
 }

@@ -116,13 +116,30 @@ describe("logging progress", () => {
     expect(await listLogs({ principal: OWNER, missionId: "m-1" }, ports)).toEqual([saved]);
   });
 
-  it("follows the current chapter as steps are completed", async () => {
-    const { log, ports } = await setup();
+  it("follows the current chapter: through its boss, then to the next", async () => {
+    const { log, ports, store } = await setup();
     await completeStep(
       { principal: OWNER, missionId: "m-1", stepId: "0:0", evidence: { kind: "SELF" } },
       { ...ports, ids: sequentialIdGenerator("event") },
     );
-    expect((await log({ kind: "number", value: 5, unit: "km" })).chapterId).toBe("1");
+    // Every step is done, but the chapter's boss is still ahead of the person.
+    expect((await log({ kind: "number", value: 5, unit: "km" })).chapterId).toBe("0");
+
+    await store.appendLedger(OWNER.id, {
+      version: 2,
+      eventId: "boss-1",
+      missionId: "m-1",
+      recordedAt: "2026-11-12T10:00:00.000Z",
+      type: "BossResolved",
+      attemptId: "attempt-1",
+      chapterId: "0",
+      band: "not-yet",
+      evidence: "SELF",
+      xp: 0,
+      selfDeclared: true,
+      calculatorVersion: "progression-v2",
+    });
+    expect((await log({ kind: "number", value: 6, unit: "km" })).chapterId).toBe("1");
   });
 
   it("moves a log to another chapter of the same mission", async () => {

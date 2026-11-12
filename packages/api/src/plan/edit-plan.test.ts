@@ -204,10 +204,7 @@ describe("editing a plan (the I/O matrix)", () => {
     ]);
     // 0:1 is now the next step, and the first one that can be completed.
     expect((await failure(() => complete("1:0"))).code).toBe("STEP_NOT_CURRENT");
-    expect((await complete("0:1")).awards).toEqual([
-      { kind: "step", xp: 40 },
-      { kind: "chapter", xp: 200 },
-    ]);
+    expect((await complete("0:1")).awards).toEqual([{ kind: "step", xp: 40 }]);
   });
 
   it("delete paid step: XP is unchanged and the step leaves the path", async () => {
@@ -287,33 +284,29 @@ describe("editing a plan (the I/O matrix)", () => {
       "0:1",
       "own-1",
     ]);
-    expect(await xp()).toBe(40 + 40 + 0 + 200);
+    expect(await xp()).toBe(40 + 40 + 0);
   });
 
-  it("an added step pays nothing, must be done to finish its chapter, and cannot raise the bonus", async () => {
+  it("an added step pays nothing, and must be done before the chapter's boss", async () => {
     const { edit, complete, xp } = await setup();
     await edit({ op: "addStep", chapterId: "0", title: "Stretch" });
     await complete("0:0");
-    const second = await complete("0:1");
-    // The chapter is not finished: the added step is still to do.
-    expect(second.awards).toEqual([{ kind: "step", xp: 40 }]);
-    const added = await complete("own-1");
-    // Priced from the two generated steps completed: the same 200 as unedited.
-    expect(added.awards).toEqual([
-      { kind: "step", xp: 0 },
-      { kind: "chapter", xp: 200 },
-    ]);
-    expect(await xp()).toBe(280);
+    await complete("0:1");
+    // The chapter's steps are not all done: the added step is still current.
+    expect((await failure(() => complete("1:0"))).code).toBe("STEP_NOT_CURRENT");
+    expect((await complete("own-1")).awards).toEqual([{ kind: "step", xp: 0 }]);
+    expect(await xp()).toBe(80);
   });
 
-  it("deleting an undone step can only lower a bonus, never raise it", async () => {
-    const { edit, complete } = await setup();
+  it("finishing a chapter's steps writes no chapter bonus under progression-v2", async () => {
+    const { edit, complete, store } = await setup();
     await edit({ op: "deleteStep", stepId: "0:1" });
     const finishing = await complete("0:0");
-    expect(finishing.awards).toEqual([
-      { kind: "step", xp: 40 },
-      { kind: "chapter", xp: 100 },
-    ]);
+    expect(finishing.awards).toEqual([{ kind: "step", xp: 40 }]);
+    const types = (await store.readLedger(OWNER.id)).map(
+      (entry) => (entry as { type: string }).type,
+    );
+    expect(types).toEqual(["StepCompleted"]);
   });
 
   it("foreign mission: nothing is saved or revealed", async () => {
@@ -341,29 +334,6 @@ describe("edits after review", () => {
     );
     // The claim stays unspent, so a later reward policy can still pay it.
     expect(types).toEqual(["StepCompleted"]);
-  });
-
-  it("an added step cannot raise the mission bonus", async () => {
-    const unedited = await setup();
-    for (const id of ["0:0", "0:1", "1:0"]) await unedited.complete(id);
-    const plain = (await unedited.complete("1:1")).awards.find((a) => a.kind === "mission");
-
-    const edited = await setup();
-    await edited.edit({ op: "addStep", chapterId: "0", title: "Stretch" });
-    for (const id of ["0:0", "0:1", "own-1", "1:0"]) await edited.complete(id);
-    const withAdded = (await edited.complete("1:1")).awards.find((a) => a.kind === "mission");
-
-    expect(plain).toEqual({ kind: "mission", xp: 800 });
-    expect(withAdded).toEqual(plain);
-  });
-
-  it("deleting undone steps can only lower the mission bonus", async () => {
-    const { edit, complete } = await setup();
-    await edit({ op: "deleteStep", stepId: "0:1" });
-    await edit({ op: "deleteStep", stepId: "1:1" });
-    await complete("0:0");
-    const last = await complete("1:0");
-    expect(last.awards.find((a) => a.kind === "mission")).toEqual({ kind: "mission", xp: 400 });
   });
 
   it("treats an edit that changes nothing as a no-op that keeps sources and version", async () => {
