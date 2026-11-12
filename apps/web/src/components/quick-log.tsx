@@ -44,6 +44,13 @@ export function QuickLog({
   const [value, setValue] = useState("");
   const [unit, setUnit] = useState("");
   const [logs, setLogs] = useState<MissionLogView[]>([...initialLogs]);
+  // A refresh hands down a new list from the server: adopt it, so a log saved
+  // or moved on another device shows up here too.
+  const [seed, setSeed] = useState(initialLogs);
+  if (seed !== initialLogs) {
+    setSeed(initialLogs);
+    setLogs([...initialLogs]);
+  }
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const ids = { text: useId(), value: useId(), unit: useId(), kind: useId() };
   const saving = status.kind === "saving";
@@ -79,6 +86,7 @@ export function QuickLog({
     setLogs((current) => [log, ...current]);
     setText("");
     setValue("");
+    setUnit("");
     setStatus({ kind: "saved", message: "Logged" });
     router.refresh();
   }

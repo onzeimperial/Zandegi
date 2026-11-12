@@ -103,3 +103,37 @@ describe("listing a principal's missions", () => {
     expect((caught as GenerationError).code).toBe("STORE_UNAVAILABLE");
   });
 });
+
+describe("listing missions stored before ids", () => {
+  it("gives them position ids and version 0", async () => {
+    const step = (index: number) => ({
+      index,
+      title: `Step ${index + 1}`,
+      estimatedMinutes: 30,
+      verification: "SELF" as const,
+      guide: { approach: "Go.", materials: [], commonMistakes: [], whatGoodLooksLike: "" },
+      sources: [],
+      toolKinds: [],
+    });
+    const legacy = {
+      title: "Half Marathon",
+      goalType: "METRIC" as const,
+      primaryDomain: "Body" as const,
+      chapters: [
+        { index: 0, title: "Base", exitCondition: "5km", steps: [step(0), step(1)] },
+        { index: 1, title: "Build", exitCondition: "10km", steps: [step(0)] },
+      ],
+    };
+    const stored = record({ mission: legacy as unknown as MissionDraft });
+    delete stored.version;
+
+    const [view] = await listMissions({ principal: OWNER }, { persistence: persistence([stored]) });
+
+    expect(view!.version).toBe(0);
+    expect(view!.mission.chapters.map((chapter) => chapter.id)).toEqual(["0", "1"]);
+    expect(view!.mission.chapters.map((chapter) => chapter.steps.map((s) => s.id))).toEqual([
+      ["0:0", "0:1"],
+      ["1:0"],
+    ]);
+  });
+});

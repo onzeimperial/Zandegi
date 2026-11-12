@@ -31,6 +31,7 @@ import {
   type PlanEditRequest,
   type StoredMissionView,
 } from "../client";
+import { detectFactualClaims } from "@zandegi/ai";
 import { GenerationError } from "../errors";
 import type { GuestPrincipal } from "../identity/ports";
 import { readMission } from "../missions/read-mission";
@@ -154,6 +155,12 @@ export function parsePlanEditRequest(value: unknown): PlanEditRequest {
   return { version, edit: parseEdit(value.edit) };
 }
 
+/** True for text with no hard factual claim in it. */
+const isUnclaimed = (text: string): boolean => detectFactualClaims(text).length === 0;
+
+/** The text, or `""` when it makes a claim that would now have no source. */
+const unclaimed = (text: string): string => (isUnclaimed(text) ? text : "");
+
 /** Steps' `index` is display only; keep it equal to the current position. */
 function reindexed(chapter: MissionChapter, steps: MissionStep[]): MissionChapter {
   return { ...chapter, steps: steps.map((step, index) => ({ ...step, index })) };
@@ -191,18 +198,34 @@ export function applyPlanEdit(mission: MissionDraft, edit: PlanEdit): MissionDra
     case "editStep": {
       const index = chapterOf(edit.stepId);
       const chapter = mission.chapters[index]!;
+      const step = chapter.steps.find((entry) => entry.id === edit.stepId)!;
+      const titleChanged = edit.title !== undefined && edit.title !== step.title.trim();
+      const approachChanged =
+        edit.approach !== undefined && edit.approach !== step.guide.approach.trim();
+      // Nothing differs: saving would only strip sources for no reason.
+      if (!titleChanged && !approachChanged) return mission;
+
+      // Once the step loses its sources, any model-written guide text left in
+      // it must not assert an unsourced fact (law 6). The deterministic claim
+      // detector runs over what the person did not rewrite; no model is called.
+      const guide =
+        step.writtenBy === "person"
+          ? step.guide
+          : {
+              approach: approachChanged ? step.guide.approach : unclaimed(step.guide.approach),
+              materials: step.guide.materials.filter(isUnclaimed),
+              commonMistakes: step.guide.commonMistakes.filter(isUnclaimed),
+              whatGoodLooksLike: unclaimed(step.guide.whatGoodLooksLike),
+            };
       return replaceChapter(index, {
         ...chapter,
-        steps: chapter.steps.map((step) =>
-          step.id !== edit.stepId
-            ? step
+        steps: chapter.steps.map((entry) =>
+          entry.id !== edit.stepId
+            ? entry
             : {
-                ...step,
-                ...(edit.title === undefined ? {} : { title: edit.title }),
-                guide: {
-                  ...step.guide,
-                  ...(edit.approach === undefined ? {} : { approach: edit.approach }),
-                },
+                ...entry,
+                ...(titleChanged ? { title: edit.title! } : {}),
+                guide: { ...guide, ...(approachChanged ? { approach: edit.approach! } : {}) },
                 // The words are now the person's: no source vouches for them.
                 sources: [],
                 writtenBy: "person" as const,
@@ -292,6 +315,8 @@ export async function editPlan(
   }
 
   const mission = applyPlanEdit(view.mission, request.edit);
+  // A no-op edit saves nothing and keeps the version.
+  if (mission === view.mission) return view;
   const outcome = await storeCall(() =>
     ports.plans.update(input.principal.id, view.missionId, view.version, mission),
   );

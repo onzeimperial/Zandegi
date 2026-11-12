@@ -11,7 +11,7 @@
  * remove a chapter, or to change a chapter's exit condition.
  */
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -47,7 +47,29 @@ export function PlanEditor({
   const saving = status.kind === "saving";
   const locked = saving || status.kind === "conflict";
 
+  // Controls are disabled while a save is in flight, which drops keyboard
+  // focus. Each control carries `data-focus="<row>|<control>"`; after the save
+  // the same control on the same row (by id) gets focus back, or that row's
+  // Edit control if the original is gone or disabled, or the heading.
+  const focusAfterSave = useRef<string | null>(null);
+  useEffect(() => {
+    const key = focusAfterSave.current;
+    if (status.kind === "saving" || key === null) return;
+    focusAfterSave.current = null;
+    const find = (target: string) =>
+      document.querySelector<HTMLElement>(`[data-focus="${CSS.escape(target)}"]`);
+    const usable = (element: HTMLElement | null) =>
+      element !== null && !(element as HTMLButtonElement).disabled ? element : null;
+    const row = key.slice(0, key.lastIndexOf("|"));
+    (
+      usable(find(key)) ??
+      usable(find(`${row}|edit`)) ??
+      document.getElementById("plan-editor-title")
+    )?.focus();
+  }, [status]);
+
   async function apply(edit: PlanEdit, announcement: string): Promise<boolean> {
+    focusAfterSave.current = (document.activeElement as HTMLElement | null)?.dataset.focus ?? null;
     setStatus({ kind: "saving" });
     const outcome = await sendJson<{ mission: StoredMissionView }>(
       `/api/missions/${encodeURIComponent(missionId)}/plan`,
@@ -75,7 +97,7 @@ export function PlanEditor({
       <header className="plan-editor-head">
         <div>
           <div className="eyebrow">Edit plan · {plan.mission.title}</div>
-          <h1 id="plan-editor-title" className="hero-title">
+          <h1 id="plan-editor-title" className="hero-title" tabIndex={-1}>
             Fit the plan to your life
           </h1>
           <p className="plan-editor-sub">
@@ -109,6 +131,7 @@ export function PlanEditor({
       {plan.mission.chapters.map((chapter, chapterIndex) => (
         <section key={chapter.id} className="card plan-chapter">
           <ChapterTitle
+            focusKey={`chapter-${chapter.id}`}
             number={chapterIndex + 1}
             title={chapter.title}
             disabled={locked}
@@ -135,6 +158,7 @@ export function PlanEditor({
               return (
                 <StepRow
                   key={step.id}
+                  focusKey={`step-${step.id}`}
                   title={step.title}
                   approach={step.guide.approach}
                   own={step.writtenBy === "person"}
@@ -144,8 +168,8 @@ export function PlanEditor({
                   canMoveDown={stepIndex < chapter.steps.length - 1}
                   canDelete={chapter.steps.length > 1}
                   onMove={move}
-                  onSave={(title, approach) =>
-                    apply({ op: "editStep", stepId: step.id, title, approach }, "Step saved")
+                  onSave={(changes) =>
+                    apply({ op: "editStep", stepId: step.id, ...changes }, "Step saved")
                   }
                   onDelete={() => apply({ op: "deleteStep", stepId: step.id }, "Step deleted")}
                 />
@@ -164,6 +188,7 @@ export function PlanEditor({
 }
 
 function ChapterTitle({
+  focusKey,
   number,
   title,
   disabled,
@@ -171,6 +196,7 @@ function ChapterTitle({
 }: {
   number: number;
   title: string;
+  focusKey: string;
   disabled: boolean;
   onRename: (title: string) => Promise<boolean>;
 }) {
@@ -187,6 +213,7 @@ function ChapterTitle({
         <button
           type="button"
           className="plan-text-button"
+          data-focus={`${focusKey}|edit`}
           disabled={disabled}
           onClick={() => {
             setDraft(title);
@@ -217,7 +244,12 @@ function ChapterTitle({
         onChange={(event) => setDraft(event.target.value)}
       />
       <div className="plan-form-actions">
-        <button type="submit" className="d button-start" disabled={disabled || draft.trim() === ""}>
+        <button
+          type="submit"
+          className="d button-start"
+          data-focus={`${focusKey}|save`}
+          disabled={disabled || draft.trim() === ""}
+        >
           Rename
         </button>
         <button type="button" className="d button-tweak" onClick={() => setEditing(false)}>
@@ -229,6 +261,7 @@ function ChapterTitle({
 }
 
 function StepRow({
+  focusKey,
   title,
   approach,
   own,
@@ -250,7 +283,9 @@ function StepRow({
   canMoveDown: boolean;
   canDelete: boolean;
   onMove: (offset: number) => Promise<boolean>;
-  onSave: (title: string, approach: string) => Promise<boolean>;
+  focusKey: string;
+  /** Only the fields the person changed, compared after trimming. */
+  onSave: (changes: { title?: string; approach?: string }) => Promise<boolean>;
   onDelete: () => Promise<boolean>;
 }) {
   const [mode, setMode] = useState<"view" | "edit" | "confirm-delete">("view");
@@ -266,12 +301,18 @@ function StepRow({
           className="plan-inline-form"
           onSubmit={async (event) => {
             event.preventDefault();
+            // Send only what changed: an untouched field is never re-sent, so
+            // an over-long generated approach cannot fail a title-only edit.
+            const changes = {
+              ...(draftTitle.trim() === title.trim() ? {} : { title: draftTitle }),
+              ...(draftApproach.trim() === approach.trim() ? {} : { approach: draftApproach }),
+            };
             // Nothing changed: saving would only strip sources for no reason.
-            if (draftTitle.trim() === title && draftApproach.trim() === approach) {
+            if (Object.keys(changes).length === 0) {
               setMode("view");
               return;
             }
-            if (await onSave(draftTitle, draftApproach)) setMode("view");
+            if (await onSave(changes)) setMode("view");
           }}
         >
           <label htmlFor={titleId}>Step title</label>
@@ -301,6 +342,7 @@ function StepRow({
             <button
               type="submit"
               className="d button-start"
+              data-focus={`${focusKey}|save`}
               disabled={disabled || draftTitle.trim() === ""}
             >
               Save step
@@ -337,6 +379,7 @@ function StepRow({
           <button
             type="button"
             className="plan-text-button danger"
+            data-focus={`${focusKey}|delete`}
             disabled={disabled}
             onClick={async () => {
               if (!(await onDelete())) setMode("view");
@@ -353,6 +396,7 @@ function StepRow({
           <button
             type="button"
             className="plan-icon-button"
+            data-focus={`${focusKey}|up`}
             disabled={disabled || !canMoveUp}
             onClick={() => void onMove(-1)}
             aria-label={`Move up: ${title}`}
@@ -362,6 +406,7 @@ function StepRow({
           <button
             type="button"
             className="plan-icon-button"
+            data-focus={`${focusKey}|down`}
             disabled={disabled || !canMoveDown}
             onClick={() => void onMove(1)}
             aria-label={`Move down: ${title}`}
@@ -371,6 +416,7 @@ function StepRow({
           <button
             type="button"
             className="plan-text-button"
+            data-focus={`${focusKey}|edit`}
             disabled={disabled}
             onClick={() => {
               setDraftTitle(title);

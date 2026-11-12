@@ -326,3 +326,96 @@ describe("editing a plan (the I/O matrix)", () => {
     expect((await read()).mission.chapters[0]!.title).toBe("Base");
   });
 });
+
+describe("edits after review", () => {
+  it("writes no bonus for a chapter finished with no generated step done", async () => {
+    const { edit, complete, store } = await setup();
+    await edit({ op: "addStep", chapterId: "0", title: "My own way in" });
+    await edit({ op: "deleteStep", stepId: "0:0" });
+    await edit({ op: "deleteStep", stepId: "0:1" });
+
+    const result = await complete("own-1");
+    expect(result.awards).toEqual([{ kind: "step", xp: 0 }]);
+    const types = (await store.readLedger(OWNER.id)).map(
+      (entry) => (entry as { type: string }).type,
+    );
+    // The claim stays unspent, so a later reward policy can still pay it.
+    expect(types).toEqual(["StepCompleted"]);
+  });
+
+  it("an added step cannot raise the mission bonus", async () => {
+    const unedited = await setup();
+    for (const id of ["0:0", "0:1", "1:0"]) await unedited.complete(id);
+    const plain = (await unedited.complete("1:1")).awards.find((a) => a.kind === "mission");
+
+    const edited = await setup();
+    await edited.edit({ op: "addStep", chapterId: "0", title: "Stretch" });
+    for (const id of ["0:0", "0:1", "own-1", "1:0"]) await edited.complete(id);
+    const withAdded = (await edited.complete("1:1")).awards.find((a) => a.kind === "mission");
+
+    expect(plain).toEqual({ kind: "mission", xp: 800 });
+    expect(withAdded).toEqual(plain);
+  });
+
+  it("deleting undone steps can only lower the mission bonus", async () => {
+    const { edit, complete } = await setup();
+    await edit({ op: "deleteStep", stepId: "0:1" });
+    await edit({ op: "deleteStep", stepId: "1:1" });
+    await complete("0:0");
+    const last = await complete("1:0");
+    expect(last.awards.find((a) => a.kind === "mission")).toEqual({ kind: "mission", xp: 400 });
+  });
+
+  it("treats an edit that changes nothing as a no-op that keeps sources and version", async () => {
+    const { edit, read } = await setup();
+    const mission = upcastMission(LEGACY);
+    expect(
+      applyPlanEdit(mission, {
+        op: "editStep",
+        stepId: "0:0",
+        title: "Step 1",
+        approach: "Do it.",
+      }),
+    ).toBe(mission);
+
+    const saved = await edit({ op: "editStep", stepId: "0:0", title: "Step 1" });
+    expect(saved.version).toBe(0);
+    expect((await read()).mission.chapters[0]!.steps[0]).toMatchObject({
+      sources: [{ title: "A source" }],
+    });
+    expect((await read()).mission.chapters[0]!.steps[0]!.writtenBy).toBeUndefined();
+  });
+
+  it("drops a model-written claim that would lose its source when the step is edited", () => {
+    const mission = upcastMission(LEGACY);
+    const first = mission.chapters[0]!;
+    const claimy = {
+      ...mission,
+      chapters: [
+        {
+          ...first,
+          steps: [
+            {
+              ...first.steps[0]!,
+              guide: {
+                approach: "Do it.",
+                materials: ["Shoes", "You must pay a $50 entry fee."],
+                commonMistakes: ["Going too fast."],
+                whatGoodLooksLike: "You finish.",
+              },
+            },
+            first.steps[1]!,
+          ],
+        },
+        mission.chapters[1]!,
+      ],
+    };
+    const edited = applyPlanEdit(claimy, { op: "editStep", stepId: "0:0", title: "Jog" });
+    expect(edited.chapters[0]!.steps[0]!.guide).toEqual({
+      approach: "Do it.",
+      materials: ["Shoes"],
+      commonMistakes: ["Going too fast."],
+      whatGoodLooksLike: "You finish.",
+    });
+  });
+});

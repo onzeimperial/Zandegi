@@ -8,6 +8,7 @@ import {
   estimateLabel,
   loadGuestMissions,
   stepHref,
+  stepIdParam,
   stepStates,
 } from "@/lib/guest-missions";
 
@@ -23,21 +24,6 @@ type StepParams = {
 
 const single = (value: string | string[] | undefined) =>
   typeof value === "string" ? value : undefined;
-
-/**
- * The step id a link names. Links are `?step=<id>`. A link from before stable
- * ids named a position, `?chapter=c&step=s`, and a position is exactly the id
- * of the step generated there, so old links still open the right step.
- */
-function stepIdParam(params: StepParams): string | undefined {
-  const step = single(params.step);
-  const chapter = single(params.chapter);
-  if (step === undefined) return undefined;
-  if (chapter !== undefined) {
-    return /^\d{1,3}$/.test(chapter) && /^\d{1,3}$/.test(step) ? `${chapter}:${step}` : undefined;
-  }
-  return /^[A-Za-z0-9:_-]{1,64}$/.test(step) ? step : undefined;
-}
 
 function StepUnavailable({ heading, body }: { heading: string; body: string }) {
   return (

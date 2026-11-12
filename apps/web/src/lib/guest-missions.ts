@@ -46,7 +46,9 @@ export async function loadGuestMissions(
     ]);
     const logs: Record<string, MissionLogView[]> = {};
     if (options.withLogs === true) {
-      const lists = await Promise.all(
+      // One mission's logs failing must not take Today down: that mission
+      // shows no logs, and everything else still loads.
+      const lists = await Promise.allSettled(
         missions.map((mission) =>
           listLogs(
             { principal: session.principal, missionId: mission.missionId },
@@ -55,8 +57,12 @@ export async function loadGuestMissions(
         ),
       );
       missions.forEach((mission, index) => {
-        logs[mission.missionId] = lists[index]!;
+        const result = lists[index]!;
+        logs[mission.missionId] = result.status === "fulfilled" ? result.value : [];
       });
+      if (lists.some((result) => result.status === "rejected")) {
+        console.error("[guest-missions]", JSON.stringify({ outcome: "logs-unavailable" }));
+      }
     }
     return { status: "ready", missions, progress, logs };
   } catch (error) {
@@ -161,6 +167,26 @@ export function stepStates(mission: StoredMissionView, progress: ProgressView): 
     finished: current === null,
     doneOnPath,
   };
+}
+
+/**
+ * The step id a link names. Links are `?step=<id>`. A link from before stable
+ * ids named a position, `?chapter=c&step=s`, and a position is exactly the id
+ * of the step generated there, so old links still open the right step.
+ */
+export function stepIdParam(params: {
+  chapter?: string | string[];
+  step?: string | string[];
+}): string | undefined {
+  const single = (value: string | string[] | undefined) =>
+    typeof value === "string" ? value : undefined;
+  const step = single(params.step);
+  const chapter = single(params.chapter);
+  if (step === undefined) return undefined;
+  if (chapter !== undefined) {
+    return /^\d{1,3}$/.test(chapter) && /^\d{1,3}$/.test(step) ? `${chapter}:${step}` : undefined;
+  }
+  return /^[A-Za-z0-9:_-]{1,64}$/.test(step) ? step : undefined;
 }
 
 /** The link to one step's guide. */

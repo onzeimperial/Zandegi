@@ -28,7 +28,8 @@ vi.mock("./session", async () => {
   return { ...actual, resolveRequestSession: () => resolveRequestSession() };
 });
 
-const { loadGuestMissions, stepStates, estimateLabel, stepHref } = await import("./guest-missions");
+const { loadGuestMissions, stepStates, estimateLabel, stepHref, stepIdParam } =
+  await import("./guest-missions");
 const { default: GenerateLayout } = await import("@/app/generate/layout");
 
 beforeEach(() => {
@@ -183,5 +184,88 @@ describe("step states by stable id", () => {
     expect(estimateLabel(0)).toBeNull();
     expect(estimateLabel(75)).toBe("About 1 h 15 min");
     expect(stepHref("m-1", "own-2")).toBe("/step?mission=m-1&step=own-2");
+  });
+});
+
+describe("links to a step", () => {
+  it("reads an old position link as the id of the step generated there", () => {
+    expect(stepIdParam({ chapter: "0", step: "1" })).toBe("0:1");
+  });
+
+  it("reads an id link as the id", () => {
+    expect(stepIdParam({ step: "own-2" })).toBe("own-2");
+    expect(stepIdParam({ step: "1:0" })).toBe("1:0");
+  });
+
+  it("refuses malformed links", () => {
+    expect(stepIdParam({})).toBeUndefined();
+    expect(stepIdParam({ chapter: "x", step: "1" })).toBeUndefined();
+    expect(stepIdParam({ step: "../etc" })).toBeUndefined();
+    expect(stepIdParam({ step: ["a", "b"] })).toBeUndefined();
+  });
+});
+
+describe("Today's logs", () => {
+  const record = (missionId: string) => ({
+    missionId,
+    ownerId: "owner-1",
+    runId: "run",
+    generatedAt: "2026-11-12T00:00:00.000Z",
+    goalText: "goal",
+    pursuitSlug: "goal",
+    safetyClass: "NORMAL" as const,
+    mission: {
+      title: missionId,
+      goalType: "PROJECT" as const,
+      primaryDomain: "Mind" as const,
+      chapters: [],
+    },
+  });
+  const log = {
+    logId: "l-1",
+    ownerId: "owner-1",
+    missionId: "m-ok",
+    chapterId: "0",
+    kind: "note" as const,
+    text: "ran",
+    loggedAt: "2026-11-12T01:00:00.000Z",
+  };
+
+  it("gives a mission whose logs fail an empty list, and still loads Today", async () => {
+    const records = [record("m-ok"), record("m-broken")];
+    resolveRequestSession.mockResolvedValue({
+      principal: { id: "owner-1", createdAt: "2026-11-12T00:00:00.000Z" },
+      ports: {
+        persistence: {
+          record: async () => undefined,
+          listForOwner: async () => records,
+          findForOwner: async (_owner: string, id: string) =>
+            records.find((entry) => entry.missionId === id) ?? null,
+        },
+        ledger: { read: async () => [] },
+        logs: {
+          list: async (_owner: string, missionId: string) => {
+            if (missionId === "m-broken") throw new GenerationError("STORE_UNAVAILABLE");
+            return [log];
+          },
+        },
+      },
+    });
+
+    const loaded = await loadGuestMissions({ withLogs: true });
+    expect(loaded.status).toBe("ready");
+    if (loaded.status !== "ready") return;
+    expect(loaded.missions).toHaveLength(2);
+    expect(loaded.logs["m-ok"]).toEqual([
+      {
+        logId: "l-1",
+        missionId: "m-ok",
+        chapterId: "0",
+        kind: "note",
+        text: "ran",
+        loggedAt: "2026-11-12T01:00:00.000Z",
+      },
+    ]);
+    expect(loaded.logs["m-broken"]).toEqual([]);
   });
 });

@@ -196,6 +196,18 @@ export function describeStoreContract(name: string, store: () => DemoStore): voi
         expect(await store().listLogs(owner, missionId)).toEqual([newer, older, bare]);
       });
 
+      it("breaks a tie on the same instant by log id, newest id first", async () => {
+        const { owner, missionId } = await ownedMission();
+        const at = "2026-11-04T03:00:00.000Z";
+        const entries = ["log-tie-a", "log-tie-c", "log-tie-b"].map((logId) => ({
+          ...note(owner, missionId, at),
+          logId,
+        }));
+        for (const entry of entries) await store().recordLog(entry);
+        const listed = await store().listLogs(owner, missionId);
+        expect(listed.map((entry) => entry.logId)).toEqual(["log-tie-c", "log-tie-b", "log-tie-a"]);
+      });
+
       it("keeps owners and missions apart", async () => {
         const first = await ownedMission();
         const second = await ownedMission();

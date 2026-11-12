@@ -208,6 +208,9 @@ export async function completeStep(
     if (!complete) continue;
     const chapterId = chapters[index]!.id;
     const xp = neutralChapterAward(generatedCount(chapterId));
+    // A chapter finished with no generated step done has no bonus yet. Writing
+    // a 0 XP event would spend its claim, and spec B's reward could never pay.
+    if (xp === 0) continue;
     const paid = await payOnce(ports, ownerId, chapterClaimId(missionId, chapterId), {
       ...event(),
       type: "ChapterCompleted",
@@ -220,12 +223,14 @@ export async function completeStep(
 
   if (chapterDone.length > 0 && chapterDone.every(Boolean)) {
     const xp = neutralMissionAward(chapters.map((entry) => generatedCount(entry.id)));
-    const paid = await payOnce(ports, ownerId, missionClaimId(missionId), {
-      ...event(),
-      type: "MissionCompleted",
-      xp,
-      calculatorVersion: AWARD_CALCULATOR_VERSION,
-    });
+    const paid =
+      xp > 0 &&
+      (await payOnce(ports, ownerId, missionClaimId(missionId), {
+        ...event(),
+        type: "MissionCompleted",
+        xp,
+        calculatorVersion: AWARD_CALCULATOR_VERSION,
+      }));
     if (paid) awards.push({ kind: "mission", xp });
   }
 

@@ -271,9 +271,13 @@ export function withIndexEntry(
   );
 }
 
-/** Newest first by `loggedAt`; ties keep their existing order. */
+/**
+ * Newest first by `loggedAt`, then by `logId` descending, so logs saved in the
+ * same millisecond list in one stable order. Postgres orders the same way.
+ */
 export function newestLogsFirst(logs: readonly StoredMissionLog[]): StoredMissionLog[] {
-  return [...logs].sort((a, b) => b.loggedAt.localeCompare(a.loggedAt));
+  const desc = (a: string, b: string) => (a < b ? 1 : a > b ? -1 : 0);
+  return [...logs].sort((a, b) => desc(a.loggedAt, b.loggedAt) || desc(a.logId, b.logId));
 }
 
 /** Newest first by `generatedAt`; ties keep their existing order. */

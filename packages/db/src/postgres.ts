@@ -219,7 +219,8 @@ export async function createPostgresDemoStore<
       guard("listLogs", async () => {
         const rows = await prisma.missionLog.findMany({
           where: { ownerId, missionId },
-          orderBy: { loggedAt: "desc" },
+          // `id` breaks ties, matching `newestLogsFirst`.
+          orderBy: [{ loggedAt: "desc" }, { id: "desc" }],
           take: MAX_LISTED_LOGS,
         });
         return rows.map(toLog);
