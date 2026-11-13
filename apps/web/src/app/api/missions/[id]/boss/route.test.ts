@@ -230,7 +230,7 @@ describe("POST /api/missions/[id]/boss", () => {
   it("refuses an empty debrief, an unknown field and boss evidence it does not accept", async () => {
     const { missionId, cookie } = await seedMission();
     await finishChapterSteps(missionId, cookie);
-    for (const fields of [
+    for (const fields of <Record<string, string>[]>[
       { didntGoWell: "" },
       { xp: "400" },
       { evidence: "METRIC" },

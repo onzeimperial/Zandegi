@@ -1,8 +1,8 @@
-import { VERIFICATION_METHODS, verificationMult, type VerificationMethod } from "@zandegi/core";
+import { VERIFICATION_METHODS, type VerificationMethod } from "@zandegi/core";
 
-/* Proof tiers are core's verification methods under plain-English labels, so
-   the XP a step shows comes from the published multiplier rather than a
-   number invented in the UI (CLAUDE.md 2.5). */
+/* Proof tiers are core's verification methods under plain-English labels. The
+   builder shows no XP beside a step: XP is earned on a verified completion,
+   never promised before it (law 3). */
 export const PROOF_TIERS = VERIFICATION_METHODS;
 export type ProofTier = VerificationMethod;
 export const PROOF_LABELS: Record<ProofTier, string> = {
@@ -12,11 +12,6 @@ export const PROOF_LABELS: Record<ProofTier, string> = {
   METRIC: "A number moved",
   INTEGRATION: "App confirms",
 };
-/* The baseline a step is worth before evidence is taken into account. */
-export const BASE_STEP_XP = 40;
-export function stepXp(proof: ProofTier): number {
-  return Math.round(BASE_STEP_XP * verificationMult(proof));
-}
 export interface LocalStep {
   id: number;
   title: string;

@@ -12,16 +12,13 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { responseToErrorCode } from "@/app/generate/generation-flow";
+import { preparePhoto } from "@/lib/prepare-photo";
 import {
   MAX_EVIDENCE_PHOTO_BYTES,
   type AwardView,
   type CompleteStepResult,
   type CompletionEvidence,
 } from "@zandegi/api/client";
-
-/** Larger photos are downscaled in the browser before upload. */
-const DOWNSCALE_ABOVE_BYTES = 1024 * 1024;
-const MAX_EDGE_PIXELS = 1600;
 
 type Phase =
   | { kind: "idle" }
@@ -30,32 +27,9 @@ type Phase =
   | { kind: "confirmed"; awards: AwardView[] }
   | { kind: "error"; message: string };
 
-/**
- * Shrink a large photo before it is sent, so phone photos fit the upload
- * limit and arrive quickly. A format the browser cannot decode -- HEIC outside
- * Safari, say -- is sent as it is, and the server's own limit still applies.
- */
-async function preparePhoto(file: File): Promise<Blob> {
-  if (file.size <= DOWNSCALE_ABOVE_BYTES) return file;
-  try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, MAX_EDGE_PIXELS / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", 0.85),
-    );
-    return blob ?? file;
-  } catch {
-    return file;
-  }
-}
-
-function awardLine(award: AwardView): string {
+export function awardLine(award: AwardView): string {
   if (award.kind === "chapter") return `Chapter complete · +${award.xp} XP`;
+  if (award.kind === "boss") return `Test passed · +${award.xp} XP`;
   if (award.kind === "mission") return `Mission complete · +${award.xp} XP`;
   // A step the person added counts toward its chapter but pays nothing yet.
   return award.xp === 0 ? "Your own step · counts toward this chapter" : `+${award.xp} XP`;
@@ -68,16 +42,18 @@ export function CompleteStepPanel({
   state,
   completedWith,
   nextHref,
+  nextLabel = "Next step",
   pathHref,
 }: {
   missionId: string;
   stepId: string;
   /** False for a step the person added: it counts toward the chapter, but pays no XP yet. */
   paysXp: boolean;
-  state: "current" | "done" | "upcoming";
+  state: "current" | "done" | "upcoming" | "skipped";
   completedWith?: { evidence: CompletionEvidence; xp: number };
-  /** The step after this one, or `null` if this is the last. */
+  /** What comes after this step -- the next step, or the chapter's test -- or `null`. */
   nextHref: string | null;
+  nextLabel?: string;
   pathHref: string;
 }) {
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
@@ -143,7 +119,21 @@ export function CompleteStepPanel({
           {completedWith !== undefined && completedWith.xp > 0 && <> · +{completedWith.xp} XP</>}
         </p>
         <Link href={nextHref ?? pathHref} className="d button-start">
-          {nextHref === null ? "Back to your path" : "Next step"}
+          {nextHref === null ? "Back to your path" : nextLabel}
+        </Link>
+      </section>
+    );
+  }
+
+  if (state === "skipped") {
+    return (
+      <section className="confirm-panel" aria-label="Step status">
+        <p className="confirm-title">Skipped</p>
+        <p className="confirm-sub">
+          This chapter closed before this step was done, so it stays as it is.
+        </p>
+        <Link href={pathHref} className="d button-tweak">
+          Back to your path
         </Link>
       </section>
     );
@@ -177,7 +167,7 @@ export function CompleteStepPanel({
         <div className="confirm-actions">
           {nextHref !== null && (
             <Link href={nextHref} className="d button-start">
-              Next step
+              {nextLabel}
             </Link>
           )}
           <Link
@@ -199,7 +189,7 @@ export function CompleteStepPanel({
       <p className="confirm-sub">
         {paysXp
           ? "A photo is stronger evidence than a check. We check that it is a real photo and keep its fingerprint, never the photo itself."
-          : "You added this step, so it earns no XP for now. It still counts toward finishing the chapter."}
+          : "You added this step, so it earns no XP. It still counts toward finishing the chapter."}
       </p>
 
       {phase.kind === "photo" ? (

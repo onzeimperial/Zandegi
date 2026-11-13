@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { AppShell } from "@/components/app-shell";
+import { BossCard } from "@/components/boss-card";
 import { Icon } from "@/components/icons";
 import { QuickLog } from "@/components/quick-log";
 import { GuestStatusRail } from "@/components/status-rail";
@@ -66,11 +67,22 @@ export default async function TodayPage() {
                 <Link href={pathHref}>{mission.mission.title}</Link>
               </div>
 
-              {current === null ? (
+              {states.boss !== null ? (
+                <BossCard
+                  missionId={mission.missionId}
+                  chapter={states.boss.chapter}
+                  chapterNumber={states.boss.chapterNumber}
+                  state="ready"
+                />
+              ) : current === null ? (
                 <div className="today-step">
-                  <h2 className="d">Mission complete</h2>
+                  <h2 className="d">
+                    {states.allBeaten ? "Mission complete" : "Every chapter closed"}
+                  </h2>
                   <p className="today-meta">
-                    All {mission.mission.chapters.length} chapters done. That was real work.
+                    {states.allBeaten
+                      ? `All ${mission.mission.chapters.length} chapters done. That was real work.`
+                      : "Your open tests are on your path whenever you're ready to try again."}
                   </p>
                   <Link href={pathHref} className="d button-tweak today-action">
                     See your path

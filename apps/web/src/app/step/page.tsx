@@ -5,6 +5,7 @@ import { Icon } from "@/components/icons";
 import { CompleteStepPanel } from "@/components/complete-step-panel";
 import {
   VERIFICATION_LABEL,
+  bossHref,
   estimateLabel,
   loadGuestMissions,
   stepHref,
@@ -76,16 +77,27 @@ export default async function StepPage({ searchParams }: { searchParams: Promise
   const backHref = `/path?mission=${encodeURIComponent(mission.missionId)}`;
   const { guide } = step;
   const estimate = estimateLabel(step.estimatedMinutes);
-  const state = stepStates(mission, loaded.progress).state(step.id);
+  const states = stepStates(mission, loaded.progress);
+  const state = states.state(step.id);
   const completion = loaded.progress.completions.find(
     (entry) => entry.missionId === mission.missionId && entry.stepId === step.id,
   );
 
-  // The step after this one in the current order, whatever its state: once
-  // this one is confirmed, it is the one that opens next.
-  const ordered = chapters.flatMap((entry) => entry.steps);
-  const following = ordered[ordered.findIndex((entry) => entry.id === step.id) + 1];
-  const nextHref = following === undefined ? null : stepHref(mission.missionId, following.id);
+  // What opens once this step is confirmed: the next step in its chapter, or,
+  // for the chapter's last step, the chapter's test. A chapter that has
+  // already closed leads on to the next chapter instead.
+  const sameChapterNext = chapter.steps[stepIndex + 1];
+  const bossState = states.bossState(chapter.id);
+  const chapterOpen = bossState === "early" || bossState === "ready";
+  const nextChapterStep = chapters[chapterIndex + 1]?.steps[0];
+  const next =
+    sameChapterNext !== undefined
+      ? { href: stepHref(mission.missionId, sameChapterNext.id), label: "Next step" }
+      : chapterOpen
+        ? { href: bossHref(mission.missionId, chapter.id), label: "Take the test" }
+        : nextChapterStep !== undefined
+          ? { href: stepHref(mission.missionId, nextChapterStep.id), label: "Next step" }
+          : null;
 
   return (
     <main className="step-page">
@@ -216,7 +228,8 @@ export default async function StepPage({ searchParams }: { searchParams: Promise
                   ? undefined
                   : { evidence: completion.evidence, xp: completion.xp }
               }
-              nextHref={nextHref}
+              nextHref={next?.href ?? null}
+              nextLabel={next?.label}
               pathHref={backHref}
             />
           </div>

@@ -2,7 +2,7 @@
 import Link from "next/link";
 import React, { useReducer, useState } from "react";
 import { Icon } from "@/components/icons";
-import { PROOF_LABELS, builderReducer, initialBuilderState, stepXp } from "./builder-state";
+import { PROOF_LABELS, builderReducer, initialBuilderState } from "./builder-state";
 
 export default function BuilderPage() {
   const [state, dispatch] = useReducer(builderReducer, initialBuilderState);
@@ -271,7 +271,6 @@ export default function BuilderPage() {
                                 <Icon name="shield" strokeWidth={2.8} />
                                 <span>{PROOF_LABELS[step.proof]}</span>
                               </button>
-                              <span className="d xp">+{stepXp(step.proof)} XP</span>
                             </div>
                           </div>
                         ))}

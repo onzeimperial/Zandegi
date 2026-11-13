@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import type { ProgressView, StoredMissionView } from "@zandegi/api/client";
 import { AppShell } from "@/components/app-shell";
+import { BossCard } from "@/components/boss-card";
 import { GuestStatusRail } from "@/components/status-rail";
 import { Icon } from "@/components/icons";
 import { PlanEditor } from "@/components/plan-editor";
@@ -155,10 +156,11 @@ function MissionPath({
   const { chapters } = selected.mission;
   const states = stepStates(selected, progress);
 
-  // The chapter holding the current step is the one the hero describes; once
-  // everything is done there is no current step, so it describes completion.
-  const heroChapter = states.current?.chapter;
-  const currentChapterNumber = states.current?.chapterNumber ?? 0;
+  // The open chapter -- its current step or its test -- is the one the hero
+  // describes; once every chapter is closed, it describes the mission.
+  const heroChapter = states.current?.chapter ?? states.boss?.chapter;
+  const currentChapterNumber = states.current?.chapterNumber ?? states.boss?.chapterNumber ?? 0;
+  const finishedTitle = states.allBeaten ? "Mission complete" : "Every chapter closed";
   const doneCount = states.doneOnPath;
   let position = 0;
 
@@ -172,7 +174,7 @@ function MissionPath({
             <div className="eyebrow">Mission · {selected.mission.title}</div>
             <h1 className="hero-title">
               {states.finished || heroChapter === undefined
-                ? "Mission complete"
+                ? finishedTitle
                 : `Chapter ${currentChapterNumber} · ${heroChapter.title}`}
             </h1>
           </div>
@@ -188,12 +190,12 @@ function MissionPath({
             denominator. Steps done is a real count. */}
         <p className="hero-progress">
           {states.finished
-            ? `All ${chapters.length} chapters done`
+            ? `All ${chapters.length} chapters closed`
             : `Chapter ${currentChapterNumber} of ${chapters.length} · ${doneCount} ${
                 doneCount === 1 ? "step" : "steps"
               } done`}
           {heroChapter !== undefined && !states.finished && (
-            <> · Mini-goal: {heroChapter.exitCondition}</>
+            <> · Your test: {heroChapter.exitCondition}</>
           )}
         </p>
       </section>
@@ -238,6 +240,20 @@ function MissionPath({
                 );
               }
 
+              if (state === "skipped") {
+                return (
+                  <Link
+                    key={key}
+                    href={href}
+                    className="path-node locked skipped"
+                    style={{ transform: `translateX(${offset}px)` }}
+                    aria-label={`${step.title}, skipped`}
+                  >
+                    <Icon name="close" strokeWidth={2.5} />
+                  </Link>
+                );
+              }
+
               if (state === "done") {
                 return (
                   <Link
@@ -264,16 +280,27 @@ function MissionPath({
                 </Link>
               );
             })}
+
+            <BossCard
+              missionId={selected.missionId}
+              chapter={chapter}
+              chapterNumber={chapterIndex + 1}
+              state={states.bossState(chapter.id)}
+            />
           </Fragment>
         ))}
 
         <div className="path-guide">
           <p className="bubble">
             {states.finished
-              ? "Mission complete. That was real work."
-              : doneCount === 0
-                ? "Your first step is ready."
-                : "Nice. Your next step is ready."}
+              ? states.allBeaten
+                ? "Mission complete. That was real work."
+                : "Every chapter closed. Your open tests are there whenever you're ready."
+              : states.boss !== null
+                ? "Your test is ready."
+                : doneCount === 0
+                  ? "Your first step is ready."
+                  : "Nice. Your next step is ready."}
           </p>
           <Image
             className="mascot"

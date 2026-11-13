@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { builderReducer, initialBuilderState, stepXp } from "./builder-state";
+import { builderReducer, initialBuilderState } from "./builder-state";
 
 describe("local mission builder", () => {
   it("adds, edits, and removes steps without persistence", () => {
@@ -44,10 +44,5 @@ describe("local mission builder", () => {
     const outcome = builderReducer(metric, { type: "set-goal-type", value: "OUTCOME" });
     const restored = builderReducer(outcome, { type: "set-goal-type", value: "METRIC" });
     expect(restored).toMatchObject({ metricNow: "72.5", metricTarget: "100" });
-  });
-  it("prices a step from core's published verification multipliers", () => {
-    expect(stepXp("SELF")).toBe(40);
-    expect(stepXp("ARTIFACT")).toBe(50);
-    expect(stepXp("INTEGRATION")).toBe(56);
   });
 });

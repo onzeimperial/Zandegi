@@ -38,7 +38,7 @@ describe("designed route contract", () => {
     }
   });
   it("renders the guest's real missions on path and step, with no fixture fabrications", () => {
-    for (const route of ["path", "step", "today"]) {
+    for (const route of ["path", "step", "today", "boss"]) {
       const source = readFileSync(join(appDirectory, route, "page.tsx"), "utf8");
       // Real data, loaded server-side through the ownership-checked use case.
       expect(source, route).toContain("loadGuestMissions");
@@ -71,6 +71,11 @@ describe("designed route contract", () => {
     expect(globalCss).not.toMatch(/min-width:\s*1440px/);
     expect(globalCss).toMatch(/@media\s*\(\s*max-width:\s*440px\s*\)/);
     expect(globalCss).not.toMatch(/font-family:[^;}]*Trebuchet/);
+  });
+  it("promises no XP beside a step in the builder (law 3)", () => {
+    const source = readFileSync(join(appDirectory, "builder", "page.tsx"), "utf8");
+    expect(source).not.toMatch(/XP<\/span>/);
+    expect(source).not.toContain("stepXp");
   });
   it("keeps builder edits in a tested typed local reducer", () => {
     const state = readFileSync(join(appDirectory, "builder", "builder-state.ts"), "utf8");

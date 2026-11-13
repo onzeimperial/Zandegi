@@ -16,7 +16,16 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { GenerationError, foldProgress, listLogs, listMissions, readProgress } from "@zandegi/api";
+import {
+  GenerationError,
+  chapterBoss,
+  closedChapterIds,
+  foldProgress,
+  listLogs,
+  listMissions,
+  missionPosition,
+  readProgress,
+} from "@zandegi/api";
 import type { MissionLogView, ProgressView, StoredMissionView } from "@zandegi/api/client";
 import { isAccessRefusal, resolveRequestSession } from "./session";
 
@@ -121,50 +130,110 @@ export function estimateLabel(minutes: number): string | null {
   return rest === 0 ? `About ${hours} h` : `About ${hours} h ${rest} min`;
 }
 
-/** Where a step stands for this guest. */
-export type StepState = "done" | "current" | "upcoming";
+/**
+ * Where a step stands for this person. `skipped` is a step left undone in a
+ * chapter that has closed: it can never be completed now.
+ */
+export type StepState = "done" | "current" | "upcoming" | "skipped";
+
+/**
+ * Where a chapter's boss stands.
+ *   - `upcoming`: a later chapter, not open yet.
+ *   - `early`: the open chapter, with steps still undone. The person may skip
+ *     them and take the test now.
+ *   - `ready`: the open chapter, every step done.
+ *   - `not-yet`: closed by a "not yet" attempt. The test stays open to try again.
+ *   - `done`: beaten.
+ *   - `legacy`: finished before boss fights existed. It has no test.
+ */
+export type BossState = "upcoming" | "early" | "ready" | "not-yet" | "done" | "legacy";
 
 type Step = StoredMissionView["mission"]["chapters"][number]["steps"][number];
 type Chapter = StoredMissionView["mission"]["chapters"][number];
 
 export interface MissionStepStates {
   state: (stepId: string) => StepState;
-  /** The current step and its chapter, or `null` once every step is done. */
+  bossState: (chapterId: string) => BossState;
+  /** The current step and its chapter, or `null` when a boss is next or every chapter is closed. */
   current: { chapter: Chapter; chapterNumber: number; step: Step } | null;
+  /** The open chapter whose every step is done, so its boss is next. */
+  boss: { chapter: Chapter; chapterNumber: number } | null;
+  /** Every chapter is closed. */
   finished: boolean;
+  /** Every chapter is closed and every test is beaten (or predates tests). */
+  allBeaten: boolean;
   /** Steps on the path that are done. A deleted step is no longer on the path. */
   doneOnPath: number;
 }
 
 /**
- * Each step's state in one mission, by stable id. Steps complete in their
- * current order, so the first one not yet done is current and everything after
- * it is upcoming. A reorder moves the current step; it never undoes a done one.
+ * Each step's and each boss's state in one mission, by stable id. Chapters are
+ * walked in order: a closed chapter is passed over, and the first open chapter
+ * is where the person is -- its first undone step, or its boss once every step
+ * is done. Later chapters wait. A reorder moves the current step; it never
+ * undoes a done one.
  */
 export function stepStates(mission: StoredMissionView, progress: ProgressView): MissionStepStates {
+  const { missionId } = mission;
+  const { chapters } = mission.mission;
   const done = new Set(
     progress.completions
-      .filter((completion) => completion.missionId === mission.missionId)
+      .filter((completion) => completion.missionId === missionId)
       .map((completion) => completion.stepId),
   );
-  let current: MissionStepStates["current"] = null;
+  const closed = closedChapterIds(progress, missionId);
+  const position = missionPosition(chapters, done, closed);
+  const openIndex =
+    position.kind === "finished"
+      ? chapters.length
+      : chapters.findIndex((chapter) => chapter.id === position.chapterId);
+  const chapterOfStep = new Map<string, number>();
+  chapters.forEach((chapter, index) => {
+    for (const step of chapter.steps) chapterOfStep.set(step.id, index);
+  });
+
   let doneOnPath = 0;
-  const { chapters } = mission.mission;
-  for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex++) {
-    const chapter = chapters[chapterIndex]!;
-    for (const step of chapter.steps) {
-      if (done.has(step.id)) doneOnPath += 1;
-      else if (current === null) current = { chapter, chapterNumber: chapterIndex + 1, step };
-    }
+  for (const chapter of chapters) {
+    for (const step of chapter.steps) if (done.has(step.id)) doneOnPath += 1;
   }
-  const currentId = current?.step.id ?? null;
+
+  const open = chapters[openIndex];
+  const current =
+    position.kind === "step" && open !== undefined
+      ? {
+          chapter: open,
+          chapterNumber: openIndex + 1,
+          step: open.steps.find((step) => step.id === position.stepId)!,
+        }
+      : null;
+  const boss =
+    position.kind === "boss" && open !== undefined
+      ? { chapter: open, chapterNumber: openIndex + 1 }
+      : null;
+
+  const bossState = (chapterId: string): BossState => {
+    if (closed.has(chapterId)) {
+      const found = chapterBoss(progress, missionId, chapterId);
+      return found === undefined ? "legacy" : found.outcome;
+    }
+    if (open?.id !== chapterId) return "upcoming";
+    return position.kind === "boss" ? "ready" : "early";
+  };
+
   return {
     state: (stepId) => {
       if (done.has(stepId)) return "done";
-      return stepId === currentId ? "current" : "upcoming";
+      if (position.kind === "step" && stepId === position.stepId) return "current";
+      const index = chapterOfStep.get(stepId);
+      return index !== undefined && closed.has(chapters[index]!.id) ? "skipped" : "upcoming";
     },
+    bossState,
     current,
-    finished: current === null,
+    boss,
+    finished: position.kind === "finished",
+    allBeaten:
+      position.kind === "finished" &&
+      chapters.every((chapter) => bossState(chapter.id) !== "not-yet"),
     doneOnPath,
   };
 }
@@ -187,6 +256,11 @@ export function stepIdParam(params: {
     return /^\d{1,3}$/.test(chapter) && /^\d{1,3}$/.test(step) ? `${chapter}:${step}` : undefined;
   }
   return /^[A-Za-z0-9:_-]{1,64}$/.test(step) ? step : undefined;
+}
+
+/** The link to one chapter's test. */
+export function bossHref(missionId: string, chapterId: string): string {
+  return `/boss?${new URLSearchParams({ mission: missionId, chapter: chapterId }).toString()}`;
 }
 
 /** The link to one step's guide. */

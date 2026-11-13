@@ -28,7 +28,7 @@ vi.mock("./session", async () => {
   return { ...actual, resolveRequestSession: () => resolveRequestSession() };
 });
 
-const { loadGuestMissions, stepStates, estimateLabel, stepHref, stepIdParam } =
+const { loadGuestMissions, stepStates, estimateLabel, stepHref, stepIdParam, bossHref } =
   await import("./guest-missions");
 const { default: GenerateLayout } = await import("@/app/generate/layout");
 
@@ -173,11 +173,93 @@ describe("step states by stable id", () => {
     expect(states.current?.chapterNumber).toBe(1);
   });
 
-  it("counts only steps still on the path, and finishes when they are all done", () => {
-    const states = stepStates(mission([["0:1"], ["1:0"]]), done("0:0", "0:1", "1:0"));
-    expect(states.doneOnPath).toBe(2);
-    expect(states.finished).toBe(true);
+  const boss = (chapterId: string, band: "done" | "not-yet") => ({
+    version: 2 as const,
+    eventId: `boss-${chapterId}-${band}`,
+    missionId: "m-1",
+    recordedAt: "2026-11-12T00:00:00.000Z",
+    type: "BossResolved" as const,
+    attemptId: `a-${chapterId}`,
+    chapterId,
+    band,
+    evidence: "SELF" as const,
+    xp: band === "done" ? 400 : 0,
+    selfDeclared: true as const,
+    calculatorVersion: "progression-v2",
+  });
+  const withEvents = (stepIds: string[], extra: ReturnType<typeof boss>[]) =>
+    foldProgress([...readEventsOf(stepIds), ...extra]);
+  const readEventsOf = (stepIds: string[]) =>
+    stepIds.map((stepId) => ({
+      version: 2 as const,
+      eventId: stepId,
+      missionId: "m-1",
+      recordedAt: "2026-11-12T00:00:00.000Z",
+      type: "StepCompleted" as const,
+      chapterId: stepId.split(":")[0] ?? "0",
+      stepId,
+      evidence: { kind: "SELF" as const },
+      award: { xp: 40, base: 40, verificationMult: 1, calculatorVersion: "neutral-v1" },
+    }));
+
+  it("counts only steps still on the path, and puts the boss next once a chapter's steps are done", () => {
+    const states = stepStates(mission([["0:1"], ["1:0"]]), done("0:0", "0:1"));
+    expect(states.doneOnPath).toBe(1);
     expect(states.current).toBeNull();
+    expect(states.boss?.chapter.id).toBe("0");
+    expect(states.bossState("0")).toBe("ready");
+    expect(states.bossState("1")).toBe("upcoming");
+    expect(states.state("1:0")).toBe("upcoming");
+    expect(states.finished).toBe(false);
+  });
+
+  it("offers the test early while steps remain, and skips them once the chapter closes", () => {
+    const early = stepStates(mission([["0:0", "0:1"], ["1:0"]]), done("0:0"));
+    expect(early.bossState("0")).toBe("early");
+
+    const closed = stepStates(
+      mission([["0:0", "0:1"], ["1:0"]]),
+      withEvents(["0:0"], [boss("0", "not-yet")]),
+    );
+    expect(closed.state("0:1")).toBe("skipped");
+    expect(closed.bossState("0")).toBe("not-yet");
+    expect(closed.current?.step.id).toBe("1:0");
+  });
+
+  it("finishes when every chapter is closed, and is beaten only when no test is not yet", () => {
+    const notYet = stepStates(
+      mission([["0:0"], ["1:0"]]),
+      withEvents(["0:0", "1:0"], [boss("0", "not-yet"), boss("1", "done")]),
+    );
+    expect(notYet.finished).toBe(true);
+    expect(notYet.allBeaten).toBe(false);
+
+    const beaten = stepStates(
+      mission([["0:0"], ["1:0"]]),
+      withEvents(["0:0", "1:0"], [boss("0", "done"), boss("1", "done")]),
+    );
+    expect(beaten.allBeaten).toBe(true);
+    expect(beaten.bossState("1")).toBe("done");
+  });
+
+  it("marks a chapter closed before boss fights as having no test", () => {
+    const legacy = foldProgress([
+      ...readEventsOf(["0:0"]),
+      {
+        version: 2,
+        eventId: "c0",
+        missionId: "m-1",
+        recordedAt: "2026-11-12T00:00:00.000Z",
+        type: "ChapterCompleted",
+        chapterId: "0",
+        xp: 100,
+        calculatorVersion: "neutral-v1",
+      },
+    ]);
+    const states = stepStates(mission([["0:0"], ["1:0"]]), legacy);
+    expect(states.bossState("0")).toBe("legacy");
+    expect(states.current?.step.id).toBe("1:0");
+    expect(bossHref("m-1", "0")).toBe("/boss?mission=m-1&chapter=0");
   });
 
   it("shows no estimate for a step nobody estimated, and links by id", () => {
