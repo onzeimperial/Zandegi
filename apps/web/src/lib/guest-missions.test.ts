@@ -28,8 +28,15 @@ vi.mock("./session", async () => {
   return { ...actual, resolveRequestSession: () => resolveRequestSession() };
 });
 
-const { loadGuestMissions, stepStates, estimateLabel, stepHref, stepIdParam, bossHref } =
-  await import("./guest-missions");
+const {
+  loadGuestMissions,
+  stepStates,
+  estimateLabel,
+  stepHref,
+  stepIdParam,
+  bossHref,
+  nextAfterStep,
+} = await import("./guest-missions");
 const { default: GenerateLayout } = await import("@/app/generate/layout");
 
 beforeEach(() => {
@@ -182,7 +189,7 @@ describe("step states by stable id", () => {
     attemptId: `a-${chapterId}`,
     chapterId,
     band,
-    evidence: "SELF" as const,
+    evidence: { kind: "SELF" as const },
     xp: band === "done" ? 400 : 0,
     selfDeclared: true as const,
     calculatorVersion: "progression-v2",
@@ -240,6 +247,35 @@ describe("step states by stable id", () => {
     );
     expect(beaten.allBeaten).toBe(true);
     expect(beaten.bossState("1")).toBe("done");
+  });
+
+  it("leads from a chapter's last step to its test, and from a closed chapter onward", () => {
+    const plan = mission([["0:0", "0:1"], ["1:0"]]);
+    const open = stepStates(plan, done("0:0", "0:1"));
+    expect(nextAfterStep(plan, open, 0, 0)).toEqual({
+      href: "/step?mission=m-1&step=0%3A1",
+      label: "Next step",
+    });
+    expect(nextAfterStep(plan, open, 0, 1)).toEqual({
+      href: "/boss?mission=m-1&chapter=0",
+      label: "Take the test",
+    });
+    // A chapter not reached yet still ends in its test.
+    expect(nextAfterStep(plan, open, 1, 0)).toEqual({
+      href: "/boss?mission=m-1&chapter=1",
+      label: "Take the test",
+    });
+
+    const closed = stepStates(plan, withEvents(["0:0", "0:1"], [boss("0", "done")]));
+    expect(nextAfterStep(plan, closed, 0, 1)).toEqual({
+      href: "/step?mission=m-1&step=1%3A0",
+      label: "Next step",
+    });
+    const finished = stepStates(
+      plan,
+      withEvents(["0:0", "0:1", "1:0"], [boss("0", "done"), boss("1", "done")]),
+    );
+    expect(nextAfterStep(plan, finished, 1, 0)).toBeNull();
   });
 
   it("marks a chapter closed before boss fights as having no test", () => {

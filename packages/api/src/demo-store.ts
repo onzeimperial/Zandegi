@@ -198,6 +198,8 @@ export function demoPortsFromStore(store: StoredDemoStore): DemoPorts {
     },
     bosses: {
       record: (attempt) => guard("recordBossAttempt", () => store.recordBossAttempt(attempt)),
+      list: (ownerId, missionId) =>
+        guard("listBossAttempts", () => store.listBossAttempts(ownerId, missionId)),
     },
     guests: {
       findByTokenHash: (tokenHash) =>

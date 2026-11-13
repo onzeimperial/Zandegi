@@ -245,7 +245,7 @@ describe("progression-v2 steps", () => {
       attemptId: "attempt-1",
       chapterId: "0",
       band: "done",
-      evidence: "SELF",
+      evidence: { kind: "SELF" },
       xp: 400,
       selfDeclared: true,
       calculatorVersion: "progression-v2",

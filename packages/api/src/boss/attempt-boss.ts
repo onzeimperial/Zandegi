@@ -28,6 +28,7 @@
  */
 
 import { progressionV2BossAward } from "@zandegi/core";
+import { isGeneratedStepId } from "../plan/ids";
 import {
   BOSS_DEBRIEF_FIELDS,
   BOSS_DEBRIEF_LIMITS,
@@ -36,6 +37,7 @@ import {
   type BossDebrief,
   type BossResult,
   type MissionChapter,
+  type ProgressView,
 } from "../client";
 import { GenerationError } from "../errors";
 import type { GuestPrincipal } from "../identity/ports";
@@ -52,11 +54,18 @@ import type {
 } from "../ports";
 import { fingerprintPhoto } from "../progress/evidence";
 import type { CompletionEvidenceInput } from "../progress/complete-step";
-import { chapterBoss, closedChapterIds, completedStepIds, missionPosition } from "../progress/fold";
+import {
+  chapterBoss,
+  closedChapterIds,
+  completedStepIds,
+  missionPosition,
+  readEvents,
+} from "../progress/fold";
 import {
   bossAttemptClaimId,
   bossClaimId,
   bossCloseClaimId,
+  type LedgerEvidence,
   type ProgressLedgerPort,
 } from "../progress/ledger";
 import { currentProgress, eventBase, payOnce, settleMissionReward } from "../progress/settle";
@@ -140,11 +149,39 @@ export function parseBossAttemptRequest(value: unknown): BossAttemptRequest {
 const CARRY_OVER_ATTEMPTS = 3;
 
 /**
+ * The attempt's id, derived from the mission and the form's attempt key. A
+ * resend of the same attempt -- after a failed save, say -- gets the same id,
+ * so the ledger's `BossResolved` and the record it refers to always agree.
+ */
+export async function bossAttemptId(missionId: string, attemptKey: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${missionId}\n${attemptKey}`),
+  );
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0"));
+  return `boss-${hex.join("").slice(0, 40)}`;
+}
+
+const nextChapterOf = (chapters: readonly MissionChapter[], chapterId: string) =>
+  chapters[chapters.findIndex((chapter) => chapter.id === chapterId) + 1];
+
+/** A step the person added to `chapter` with this title, if one is already there. */
+function carriedStep(chapter: MissionChapter | undefined, title: string) {
+  if (chapter === undefined) return null;
+  const wanted = title.trim();
+  const found = chapter.steps.find(
+    (step) => !isGeneratedStepId(step.id) && step.title.trim() === wanted,
+  );
+  return found === undefined ? null : { chapterId: chapter.id, stepId: found.id };
+}
+
+/**
  * Add "what I'll improve" as the first step of the chapter after `chapterId`,
  * through spec A's `addStep`: an `own-N` step that pays nothing and can be
  * removed. Best effort -- the attempt is already recorded, so a failure here
  * answers `null` and the person can add the step from Edit plan. Nothing is
- * added to a chapter that is already closed, where it could never be done.
+ * added to a chapter that is already closed, where it could never be done, and
+ * a step already carried over with the same title is reported, not repeated.
  */
 async function carryOver(
   input: AttemptBossInput,
@@ -159,10 +196,10 @@ async function carryOver(
         { principal: input.principal, missionId: input.missionId },
         { persistence: ports.persistence },
       );
-      const { chapters } = view.mission;
-      const next: MissionChapter | undefined =
-        chapters[chapters.findIndex((chapter) => chapter.id === chapterId) + 1];
+      const next = nextChapterOf(view.mission.chapters, chapterId);
       if (next === undefined || closed.has(next.id)) return null;
+      const existing = carriedStep(next, title);
+      if (existing !== null) return existing;
 
       const added = applyPlanEdit(view.mission, { op: "addStep", chapterId: next.id, title });
       const target = added.chapters.find((chapter) => chapter.id === next.id)!;
@@ -177,8 +214,16 @@ async function carryOver(
       );
       if (outcome === "updated") return { chapterId: next.id, stepId };
       if (outcome === "missing") return null;
-    } catch {
+    } catch (error) {
       // A chapter at its step limit, or a store failure: nothing is added.
+      // The class only: the title is personal content.
+      console.error(
+        "[boss]",
+        JSON.stringify({
+          outcome: "carry-over-failed",
+          error: error instanceof Error ? error.name : "unknown",
+        }),
+      );
       return null;
     }
   }
@@ -222,25 +267,20 @@ export async function attemptBoss(
   }
 
   // Checked before any claim, so a rejected photo never uses up the attempt.
-  if (input.evidence.kind === "ARTIFACT") await fingerprintPhoto(input.evidence.bytes);
-  const award = progressionV2BossAward(request.result, input.evidence.kind);
+  const evidence: LedgerEvidence =
+    input.evidence.kind === "ARTIFACT"
+      ? { kind: "ARTIFACT", ...(await fingerprintPhoto(input.evidence.bytes)) }
+      : { kind: "SELF" };
+  const award = progressionV2BossAward(request.result, evidence.kind);
+  const attemptId = await bossAttemptId(missionId, request.attemptKey);
+  const alreadyBeaten = chapterBoss(progress, missionId, chapterId)?.outcome === "done";
 
   const attemptClaim = bossAttemptClaimId(missionId, request.attemptKey);
   const fresh = await storeCall(() => ports.ledger.claim(ownerId, attemptClaim));
   if (!fresh) {
-    // The same attempt, sent again. Nothing new is recorded or paid, but a
-    // mission reward whose write failed the first time is settled now.
-    const awards = await settleMissionReward(ports, ownerId, missionId, chapters, progress);
-    return {
-      attemptId: null,
-      result: request.result,
-      awards,
-      improveStep: null,
-      progress: await currentProgress(ports, ownerId),
-    };
+    return repeatedAttempt(ports, ownerId, missionId, chapters, chapterId, attemptId, progress);
   }
 
-  const attemptId = ports.ids.newId();
   const awards: AwardView[] = [];
   const resolved = {
     ...eventBase(ports, missionId),
@@ -248,7 +288,7 @@ export async function attemptBoss(
     attemptId,
     chapterId,
     band: award.band,
-    evidence: award.evidence,
+    evidence,
     xp: award.xp,
     selfDeclared: true as const,
     calculatorVersion: award.calculatorVersion,
@@ -287,14 +327,56 @@ export async function attemptBoss(
   const after = await currentProgress(ports, ownerId);
   awards.push(...(await settleMissionReward(ports, ownerId, missionId, chapters, after)));
 
+  // A chapter already beaten gets no further step from a later attempt.
   const improveStep =
-    request.debrief.improve === undefined
+    request.debrief.improve === undefined || alreadyBeaten
       ? null
       : await carryOver(input, ports, chapterId, request.debrief.improve, closed);
 
   return {
     attemptId,
     result: request.result,
+    awards,
+    improveStep,
+    progress: await currentProgress(ports, ownerId),
+  };
+}
+
+/**
+ * The answer to an attempt key that was already claimed: the outcome that was
+ * actually recorded, never the resent form's fields. Nothing new is recorded
+ * or paid, but a mission reward whose write failed the first time is settled
+ * now, and that is the only award reported.
+ */
+async function repeatedAttempt(
+  ports: AttemptBossPorts,
+  ownerId: string,
+  missionId: string,
+  chapters: readonly MissionChapter[],
+  chapterId: string,
+  attemptId: string,
+  progress: ProgressView,
+): Promise<BossAttemptResult> {
+  const records = await storeCall(() => ports.bosses.list(ownerId, missionId));
+  const record = records.find((entry) => entry.attemptId === attemptId);
+  const event = readEvents(await storeCall(() => ports.ledger.read(ownerId))).find(
+    (entry) => entry.type === "BossResolved" && entry.attemptId === attemptId,
+  );
+  const result: BossResult | undefined =
+    record?.result ?? (event?.type === "BossResolved" ? event.band : undefined);
+  if (result === undefined) {
+    // The first send is still being recorded. Its outcome is not known yet, so
+    // none is invented; the same attempt sent again a moment later answers it.
+    throw new GenerationError("STORE_UNAVAILABLE", "repeated attempt still being recorded");
+  }
+  const awards = await settleMissionReward(ports, ownerId, missionId, chapters, progress);
+  const improveStep =
+    record?.improve === undefined
+      ? null
+      : carriedStep(nextChapterOf(chapters, chapterId), record.improve);
+  return {
+    attemptId: null,
+    result,
     awards,
     improveStep,
     progress: await currentProgress(ports, ownerId),

@@ -200,7 +200,7 @@ describe("boss events", () => {
     attemptId: `a-${eventId}`,
     chapterId: "0",
     band,
-    evidence: "SELF",
+    evidence: { kind: "SELF" },
     xp,
     selfDeclared: true,
     calculatorVersion: "progression-v2",
@@ -232,6 +232,13 @@ describe("boss events", () => {
     expect(readEvents([{ ...event, selfDeclared: false }])).toEqual([]);
     expect(readEvents([{ ...event, band: "partly" }])).toEqual([]);
     expect(readEvents([{ ...event, evidence: "METRIC" }])).toEqual([]);
+    // A photo must carry its fingerprint, exactly as a step completion does.
+    expect(readEvents([{ ...event, evidence: { kind: "ARTIFACT" } }])).toEqual([]);
+    const photo = {
+      ...event,
+      evidence: { kind: "ARTIFACT", sha256: "ab", bytes: 10, mediaType: "image/jpeg" },
+    };
+    expect(readEvents([photo])).toEqual([photo]);
   });
 
   it("uses the stored amount, never a recalculated one (law 4)", () => {

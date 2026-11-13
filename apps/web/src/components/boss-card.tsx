@@ -36,7 +36,7 @@ export function BossCard({
     ready: { title: "Your test is ready", sub: "Do it for real, then say how it went." },
     "not-yet": {
       title: "Your test · not yet",
-      sub: "The chapter has moved on and your notes are saved. Try again whenever you're ready.",
+      sub: "The chapter has moved on. Try again whenever you're ready.",
     },
     done: { title: "Test passed", sub: "You did the real thing." },
   };

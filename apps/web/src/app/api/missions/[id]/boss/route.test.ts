@@ -207,13 +207,22 @@ describe("POST /api/missions/[id]/boss", () => {
     const { missionId, cookie } = await seedMission();
     await finishChapterSteps(missionId, cookie);
     const fields = { attemptKey: "same-route-key" };
-    const [first, second] = await Promise.all([
+    const racing = await Promise.all([
       attempt(missionId, fields, { cookie }),
       attempt(missionId, fields, { cookie }),
     ]);
-    const results = [(await body(first)).result!, (await body(second)).result!];
+    // A send racing the first may be asked to try again; it is never paid twice.
+    const results = [];
+    for (const response of racing) {
+      const parsed = await body(response);
+      if (response.status === 200) results.push(parsed.result!);
+      else expect(parsed.error!.code).toBe("STORE_UNAVAILABLE");
+    }
+    const resent = await body(await attempt(missionId, fields, { cookie }));
+    results.push(resent.result!);
     expect(results.flatMap((result) => result.awards)).toEqual([{ kind: "boss", xp: 400 }]);
     expect(results.filter((result) => result.attemptId !== null)).toHaveLength(1);
+    expect(resent.result!.progress.totalXp).toBe(480);
   });
 
   it("refuses an attempt before the steps are done with 409 BOSS_NOT_READY, unless skipped", async () => {

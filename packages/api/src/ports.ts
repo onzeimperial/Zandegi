@@ -211,4 +211,6 @@ export interface BossAttemptRecord extends BossDebrief {
 /** Where boss attempts live. Keyed on the owner, like logs. */
 export interface BossAttemptStorePort {
   record(attempt: BossAttemptRecord): Promise<void>;
+  /** One mission's attempts for the owner, newest first, bounded. */
+  list(ownerId: string, missionId: string): Promise<BossAttemptRecord[]>;
 }

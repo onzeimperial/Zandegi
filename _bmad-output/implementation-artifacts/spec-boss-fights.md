@@ -2,7 +2,7 @@
 title: 'Boss fights, simplified: progression-v2, chapter bosses, attempt and debrief'
 type: 'feature'
 created: '2026-11-12'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: '80a46a929800185f6bfc7b08abbefd3d9a2ec96a'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -101,6 +101,30 @@ context:
 ## Spec Change Log
 
 ## Review Triage Log
+
+Loop 1. B = blind, V = verification gap, E = edge case. Verification-gap gaps arrive pre-verified.
+
+| ID | Finding | Verdict | Route | Evidence |
+|----|---------|---------|-------|----------|
+| B7 (law 3) | Skip, "done" and one debrief character pay 400 per chapter, then the 1,500 reward | real | rejected by the human | 2026-11-13: the human ruled this acceptable for the two-person MVP. |
+| B2, E3 | A resend with the same key repeats the request's result, not the stored one | medium | patch | The `!fresh` branch echoes `request.result`. |
+| B3, B4, E4, E5 | Retries add the improve step again, or lose it | medium | patch | `carryOver` runs on every retry with no check for an existing step. |
+| V3 | Improve step into an already-closed next chapter is untested | medium | patch | Filed evidence. |
+| B5, V-o2 | After a failed record, the ledger's attempt id points at no record | medium | patch | A resend mints a new id. Derive it from the mission and `attemptKey`. |
+| B4b | `carryOver` swallows errors silently | low | patch | Bare `catch`. A direct correction. |
+| B6 | The copy says the photo fingerprint is kept, but it is discarded | medium | patch | `BossResolved` stores only the evidence kind. Keep the fingerprint so the copy is true. |
+| B8 | "Saved in your notes" points at notes that cannot be viewed | low | patch | No read path exists. Copy-only fix. |
+| E6, V4 | The step page's next-link decision is untested and wrong for an upcoming chapter | medium | patch | `chapterOpen` leaves out `upcoming`; no executing test. |
+| V1 | Mixed neutral-v1 and boss mission reward is never asserted | medium | patch | Filed evidence. |
+| V2 | Resending after a failed `MissionCompleted` write is untested | medium | patch | Filed evidence. |
+| E7, E8 | The same photo cannot be re-chosen; a stale "too large" alert stays | low | patch | Direct corrections. |
+| V-o3 | Try again asks again to skip steps already skipped | low | patch | Direct correction. |
+| B1, E1, V-o1 | The Redis store pays, then fails to record | low | rejected | Dormant driver; deployments use Postgres. The id fix above handles the Postgres failure case. |
+| B7b, E9, E10 | A neutral-v1 bonus whose write failed before the deploy is never paid | low | rejected | Needs a failed write before the deploy; two testers. |
+| B9 | No CHECK constraints on result or evidence | low | rejected | The values are validated in the use case. |
+| B10 | Route field list drift; a photo sent with SELF is ignored | low | rejected | No user harm. |
+| B11 | A step can race a "not yet" on the same chapter | low | rejected | One person acting in two places at once. |
+| B12 | Analytics are missing | low | rejected | `docs/ANALYTICS.md` does not exist. |
 
 ## Design Notes
 

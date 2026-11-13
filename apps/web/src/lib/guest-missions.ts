@@ -258,6 +258,35 @@ export function stepIdParam(params: {
   return /^[A-Za-z0-9:_-]{1,64}$/.test(step) ? step : undefined;
 }
 
+/**
+ * What opens once a step is confirmed: the next step in its chapter, or, for
+ * the chapter's last step, the chapter's test -- whenever that chapter is not
+ * closed, including one the person has not reached yet. A closed chapter leads
+ * on to the next chapter's first step. `null` after the very last step.
+ */
+export function nextAfterStep(
+  mission: StoredMissionView,
+  states: MissionStepStates,
+  chapterIndex: number,
+  stepIndex: number,
+): { href: string; label: string } | null {
+  const { chapters } = mission.mission;
+  const chapter = chapters[chapterIndex];
+  if (chapter === undefined) return null;
+  const sameChapterNext = chapter.steps[stepIndex + 1];
+  if (sameChapterNext !== undefined) {
+    return { href: stepHref(mission.missionId, sameChapterNext.id), label: "Next step" };
+  }
+  const bossState = states.bossState(chapter.id);
+  if (bossState === "early" || bossState === "ready" || bossState === "upcoming") {
+    return { href: bossHref(mission.missionId, chapter.id), label: "Take the test" };
+  }
+  const nextChapterStep = chapters[chapterIndex + 1]?.steps[0];
+  return nextChapterStep === undefined
+    ? null
+    : { href: stepHref(mission.missionId, nextChapterStep.id), label: "Next step" };
+}
+
 /** The link to one chapter's test. */
 export function bossHref(missionId: string, chapterId: string): string {
   return `/boss?${new URLSearchParams({ mission: missionId, chapter: chapterId }).toString()}`;

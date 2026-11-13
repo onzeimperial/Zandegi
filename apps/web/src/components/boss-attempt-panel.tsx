@@ -74,6 +74,10 @@ export function BossAttemptPanel({
   const [photo, setPhoto] = useState<{ file: File; preview: string } | null>(null);
   const [debrief, setDebrief] = useState<Required<BossDebrief>>(EMPTY);
   const [phase, setPhase] = useState<Phase>({ kind: "editing" });
+  // Set once an attempt is recorded here: the chapter is closed, so its steps
+  // are already skipped and a try again needs no skip box.
+  const [closedHere, setClosedHere] = useState(false);
+  const askToSkip = undoneSteps > 0 && !retry && !closedHere;
   const heading = useRef<HTMLHeadingElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -90,6 +94,7 @@ export function BossAttemptPanel({
   }, [phase.kind]);
 
   function reset() {
+    setClosedHere(true);
     setAttemptKey(newAttemptKey());
     setResult(null);
     setSkip(false);
@@ -98,13 +103,17 @@ export function BossAttemptPanel({
     setPhase({ kind: "editing" });
   }
 
-  function choosePhoto(file: File | undefined) {
+  function choosePhoto(input: HTMLInputElement) {
+    const file = input.files?.[0];
+    // Cleared so choosing the same photo again, after removing it, still fires.
+    input.value = "";
     if (file === undefined) return;
     if (file.size > MAX_EVIDENCE_PHOTO_BYTES * 4) {
       setPhase({ kind: "editing", error: "That photo is too large. Try a smaller one." });
       return;
     }
     setPhoto({ file, preview: URL.createObjectURL(file) });
+    setPhase({ kind: "editing" });
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -113,7 +122,7 @@ export function BossAttemptPanel({
       setPhase({ kind: "editing", error: "Choose how it went: done, or not yet." });
       return;
     }
-    if (undoneSteps > 0 && !retry && !skip) {
+    if (askToSkip && !skip) {
       setPhase({
         kind: "editing",
         error: "Tick the box to skip the steps left, or finish them first.",
@@ -131,7 +140,7 @@ export function BossAttemptPanel({
     form.set("chapterId", chapterId);
     form.set("result", result);
     form.set("attemptKey", attemptKey);
-    if (undoneSteps > 0 && skip) form.set("skipRest", "true");
+    if (askToSkip && skip) form.set("skipRest", "true");
     for (const [field, text] of answers) form.set(field, text.trim());
     const withPhoto = result === "done" && photo !== null;
     form.set("evidence", withPhoto ? "ARTIFACT" : "SELF");
@@ -187,8 +196,8 @@ export function BossAttemptPanel({
           )
         ) : (
           <p className="confirm-sub">
-            Not yet is part of the path. The chapter has moved on, your notes are saved, and this
-            test stays open. Try again whenever you&#39;re ready.
+            Not yet is part of the path. The chapter has moved on, your answers are saved with this
+            attempt, and this test stays open. Try again whenever you&#39;re ready.
           </p>
         )}
         {recorded.improveStep !== null && (
@@ -196,7 +205,8 @@ export function BossAttemptPanel({
         )}
         {recorded.improveStep === null && askedToImprove && hasNextChapter && (
           <p className="confirm-sub">
-            Your improvement is saved in your notes. You can add it as a step from Edit plan.
+            Your improvement was saved with this attempt, but it could not be added as a step. You
+            can add it from Edit plan.
           </p>
         )}
         <div className="confirm-actions">
@@ -271,12 +281,12 @@ export function BossAttemptPanel({
             accept="image/jpeg,image/png,image/webp,image/heic"
             tabIndex={-1}
             aria-hidden="true"
-            onChange={(event) => choosePhoto(event.target.files?.[0])}
+            onChange={(event) => choosePhoto(event.target)}
           />
         </div>
       )}
 
-      {undoneSteps > 0 && !retry && (
+      {askToSkip && (
         <label className="boss-skip">
           <input
             type="checkbox"
@@ -293,7 +303,9 @@ export function BossAttemptPanel({
 
       <fieldset className="boss-debrief" disabled={saving}>
         <legend className="confirm-title">Debrief</legend>
-        <p className="confirm-sub">Answer at least one. Only you can see these.</p>
+        <p className="confirm-sub">
+          Answer at least one. Your answers are saved with this attempt and never shared.
+        </p>
         {PROMPTS.map(({ field, label, hint }) => {
           const id = `boss-${field}`;
           const improve = field === "improve";

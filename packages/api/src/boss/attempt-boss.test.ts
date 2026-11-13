@@ -12,7 +12,7 @@ import {
   readProgress,
   type CompletionEvidenceInput,
 } from "../progress/complete-step";
-import { attemptBoss, parseBossAttemptRequest } from "./attempt-boss";
+import { attemptBoss, bossAttemptId, parseBossAttemptRequest } from "./attempt-boss";
 
 const OWNER: GuestPrincipal = { id: "owner-1", createdAt: "2026-11-12T00:00:00.000Z" };
 const INTRUDER: GuestPrincipal = { id: "owner-2", createdAt: "2026-11-12T00:00:00.000Z" };
@@ -217,13 +217,22 @@ describe("attempting a boss (the I/O matrix)", () => {
     await complete("0:1");
     const request = { chapterId: "0", result: "done", attemptKey: "same-key-1" };
 
-    const [first, second] = await Promise.all([attempt(request), attempt(request)]);
+    // A send that races the first may be told to try again, never told an outcome
+    // that is not recorded yet.
+    const racing = await Promise.allSettled([attempt(request), attempt(request)]);
+    const answered = racing.flatMap((entry) => (entry.status === "fulfilled" ? [entry.value] : []));
+    for (const entry of racing) {
+      if (entry.status === "rejected") {
+        expect((entry.reason as GenerationError).code).toBe("STORE_UNAVAILABLE");
+      }
+    }
     const third = await attempt(request);
-    const ids = [first.attemptId, second.attemptId, third.attemptId];
+    const ids = [...answered, third].map((entry) => entry.attemptId);
     expect(ids.filter((id) => id !== null)).toHaveLength(1);
-    expect([...first.awards, ...second.awards, ...third.awards]).toEqual([
+    expect([...answered, third].flatMap((entry) => entry.awards)).toEqual([
       { kind: "boss", xp: 400 },
     ]);
+    expect(third.result).toBe("done");
     expect(await xp()).toBe(480);
     expect(await store.listBossAttempts(OWNER.id, "m-1")).toHaveLength(1);
     expect(await ledgerTypes()).toEqual(["StepCompleted", "StepCompleted", "BossResolved"]);
@@ -234,8 +243,83 @@ describe("attempting a boss (the I/O matrix)", () => {
     await complete("0:0");
     await complete("0:1");
     const request = { chapterId: "0", result: "not-yet", attemptKey: "same-key-2" };
-    await Promise.all([attempt(request), attempt(request)]);
+    await Promise.allSettled([attempt(request), attempt(request)]);
     expect(await ledgerTypes()).toEqual(["StepCompleted", "StepCompleted", "BossResolved"]);
+  });
+
+  it("a resent attempt key answers what was recorded, never the changed form", async () => {
+    const { complete, attempt, xp } = await setup();
+    await complete("0:0");
+    await complete("0:1");
+    const first = await attempt({ chapterId: "0", result: "not-yet", attemptKey: "changed-1" });
+    expect(first.result).toBe("not-yet");
+
+    const resent = await attempt({ chapterId: "0", result: "done", attemptKey: "changed-1" });
+    expect(resent).toMatchObject({ attemptId: null, result: "not-yet", awards: [] });
+    expect(await xp()).toBe(80);
+  });
+
+  it("a resend reports the step its improve answer already became", async () => {
+    const { complete, attempt, read } = await setup();
+    await complete("0:0");
+    await complete("0:1");
+    const request = { chapterId: "0", result: "done", attemptKey: "improve-1", improve: "Pace it" };
+    const first = await attempt(request);
+    const resent = await attempt(request);
+    expect(resent.improveStep).toEqual(first.improveStep);
+    expect((await read()).mission.chapters[1]!.steps.map((entry) => entry.id)).toEqual([
+      "own-1",
+      "1:0",
+      "1:1",
+    ]);
+  });
+
+  it("try again adds no second copy of the same improve step, and none once beaten", async () => {
+    const { complete, attempt, read } = await setup();
+    await complete("0:0");
+    await complete("0:1");
+    await attempt({ chapterId: "0", result: "not-yet", improve: "Pace it" });
+    const retry = await attempt({ chapterId: "0", result: "done", improve: " Pace it " });
+    expect(retry.improveStep).toEqual({ chapterId: "1", stepId: "own-1" });
+    const later = await attempt({ chapterId: "0", result: "done", improve: "Something new" });
+    expect(later.improveStep).toBeNull();
+    expect((await read()).mission.chapters[1]!.steps.map((entry) => entry.id)).toEqual([
+      "own-1",
+      "1:0",
+      "1:1",
+    ]);
+  });
+
+  it("adds no improve step to a next chapter that has already closed", async () => {
+    const { complete, attempt, read } = await setup();
+    await complete("0:0");
+    await complete("0:1");
+    await attempt({ chapterId: "0", result: "not-yet" });
+    await complete("1:0");
+    await complete("1:1");
+    await attempt({ chapterId: "1", result: "done" });
+
+    const retry = await attempt({ chapterId: "0", result: "done", improve: "Pace it" });
+    expect(retry.improveStep).toBeNull();
+    expect((await read()).mission.chapters[1]!.steps.map((entry) => entry.id)).toEqual([
+      "1:0",
+      "1:1",
+    ]);
+  });
+
+  it("keeps a photo's fingerprint on the ledger event, never the photo", async () => {
+    const { complete, attempt, store } = await setup();
+    await complete("0:0");
+    await complete("0:1");
+    await attempt({ chapterId: "0", result: "done" }, { kind: "ARTIFACT", bytes: JPEG });
+    const event = (await store.readLedger(OWNER.id)).at(-1) as { evidence: unknown };
+    expect(event.evidence).toEqual({
+      kind: "ARTIFACT",
+      sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+      bytes: JPEG.length,
+      mediaType: "image/jpeg",
+    });
+    expect(JSON.stringify(event)).not.toContain(String(Array.from(JPEG)));
   });
 
   it("skip: undone steps are skipped, unpaid, and can never be completed later", async () => {
@@ -364,7 +448,7 @@ describe("records stay out of the ledger", () => {
       attemptId: result.attemptId,
       chapterId: "0",
       band: "done",
-      evidence: "SELF",
+      evidence: { kind: "SELF" },
       xp: 400,
       selfDeclared: true,
       calculatorVersion: "progression-v2",
@@ -392,6 +476,7 @@ describe("records stay out of the ledger", () => {
     const flaky = {
       ...ports,
       bosses: {
+        ...ports.bosses,
         record: async (record: Parameters<typeof ports.bosses.record>[0]) => {
           if (failNext) {
             failNext = false;
@@ -417,7 +502,13 @@ describe("records stay out of the ledger", () => {
     expect(retry.attemptId).not.toBeNull();
     expect(retry.awards).toEqual([]);
     expect(await xp()).toBe(480);
-    expect(await store.listBossAttempts(OWNER.id, "m-1")).toHaveLength(1);
+    const records = await store.listBossAttempts(OWNER.id, "m-1");
+    expect(records).toHaveLength(1);
+    // The event written by the failed send and the record saved by the resend share one id.
+    const event = (await store.readLedger(OWNER.id)).at(-1) as { attemptId: string };
+    expect(records[0]!.attemptId).toBe(event.attemptId);
+    expect(retry.attemptId).toBe(event.attemptId);
+    expect(event.attemptId).toBe(await bossAttemptId("m-1", "flaky-key-1"));
   });
 });
 
@@ -474,6 +565,71 @@ describe("the mission reward", () => {
     await finishChapter(withAdded, "1", ["1:0", "1:1", "own-2"], "done");
 
     expect(await withAdded.xp()).toBe(await plain.xp());
+  });
+
+  it("pays a mission whose first chapter closed under neutral-v1 once its boss is beaten", async () => {
+    const legacyClosed = async () => {
+      const run = await setup();
+      await run.store.claimCompletion(OWNER.id, "m-1:chapter:0");
+      await run.store.appendLedger(OWNER.id, {
+        version: 1,
+        eventId: "legacy-c0",
+        missionId: "m-1",
+        recordedAt: "2026-10-08T09:00:00.000Z",
+        type: "ChapterCompleted",
+        chapterIndex: 0,
+        xp: 200,
+        calculatorVersion: "neutral-v1",
+      });
+      return run;
+    };
+
+    const run = await legacyClosed();
+    const last = await finishChapter(run, "1", ["1:0", "1:1"], "done");
+    expect(last.awards.filter((award) => award.kind === "mission")).toEqual([
+      { kind: "mission", xp: 1500 },
+    ]);
+
+    // A mission already paid under neutral-v1 is never paid again.
+    const paid = await legacyClosed();
+    await paid.store.claimCompletion(OWNER.id, "m-1:mission");
+    const again = await finishChapter(paid, "1", ["1:0", "1:1"], "done");
+    expect(again.awards).toEqual([{ kind: "boss", xp: 400 }]);
+  });
+
+  it("pays a mission reward whose write failed when the same attempt is resent", async () => {
+    const run = await setup();
+    await finishChapter(run, "0", ["0:0", "0:1"], "done");
+    for (const stepId of ["1:0", "1:1"]) await run.complete(stepId);
+
+    let failMission = true;
+    const flaky = {
+      ...run.ports,
+      ledger: {
+        ...run.ports.ledger,
+        append: async (ownerId: string, event: Parameters<typeof run.ports.ledger.append>[1]) => {
+          if (failMission && event.type === "MissionCompleted") {
+            failMission = false;
+            throw new Error("database write failed");
+          }
+          return run.ports.ledger.append(ownerId, event);
+        },
+      },
+    };
+    const send = () =>
+      attemptBoss(
+        {
+          principal: OWNER,
+          missionId: "m-1",
+          request: { chapterId: "1", result: "done", attemptKey: "mission-key-1", ...DEBRIEF },
+          evidence: SELF,
+        },
+        flaky,
+      );
+    expect((await failure(send)).code).toBe("STORE_UNAVAILABLE");
+    const resent = await send();
+    expect(resent.awards).toEqual([{ kind: "mission", xp: 1500 }]);
+    expect(await run.xp()).toBe(160 + 800 + 1500);
   });
 
   it("adds no improve step after the last chapter", async () => {

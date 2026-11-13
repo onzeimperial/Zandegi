@@ -5,10 +5,9 @@ import { Icon } from "@/components/icons";
 import { CompleteStepPanel } from "@/components/complete-step-panel";
 import {
   VERIFICATION_LABEL,
-  bossHref,
   estimateLabel,
+  nextAfterStep,
   loadGuestMissions,
-  stepHref,
   stepIdParam,
   stepStates,
 } from "@/lib/guest-missions";
@@ -83,21 +82,7 @@ export default async function StepPage({ searchParams }: { searchParams: Promise
     (entry) => entry.missionId === mission.missionId && entry.stepId === step.id,
   );
 
-  // What opens once this step is confirmed: the next step in its chapter, or,
-  // for the chapter's last step, the chapter's test. A chapter that has
-  // already closed leads on to the next chapter instead.
-  const sameChapterNext = chapter.steps[stepIndex + 1];
-  const bossState = states.bossState(chapter.id);
-  const chapterOpen = bossState === "early" || bossState === "ready";
-  const nextChapterStep = chapters[chapterIndex + 1]?.steps[0];
-  const next =
-    sameChapterNext !== undefined
-      ? { href: stepHref(mission.missionId, sameChapterNext.id), label: "Next step" }
-      : chapterOpen
-        ? { href: bossHref(mission.missionId, chapter.id), label: "Take the test" }
-        : nextChapterStep !== undefined
-          ? { href: stepHref(mission.missionId, nextChapterStep.id), label: "Next step" }
-          : null;
+  const next = nextAfterStep(mission, states, chapterIndex, stepIndex);
 
   return (
     <main className="step-page">

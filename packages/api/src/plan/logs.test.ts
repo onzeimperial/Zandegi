@@ -134,7 +134,7 @@ describe("logging progress", () => {
       attemptId: "attempt-1",
       chapterId: "0",
       band: "not-yet",
-      evidence: "SELF",
+      evidence: { kind: "SELF" },
       xp: 0,
       selfDeclared: true,
       calculatorVersion: "progression-v2",

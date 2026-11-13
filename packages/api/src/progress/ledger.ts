@@ -18,7 +18,7 @@
  */
 
 import type { StepAward } from "@zandegi/core";
-import type { BossEvidence, BossResult, CompletionEvidence } from "../client";
+import type { BossResult, CompletionEvidence } from "../client";
 import { positionChapterId, positionStepId } from "../plan/ids";
 
 /** What a photo leaves behind once it has been checked and discarded. */
@@ -78,7 +78,8 @@ export interface BossResolvedEvent extends EventBase {
   attemptId: string;
   chapterId: string;
   band: BossResult;
-  evidence: BossEvidence;
+  /** A check, or a photo's fingerprint -- the same shape a step completion keeps. */
+  evidence: LedgerEvidence;
   xp: number;
   /** A boss result is the person's own word, even with a photo: it is never judged. */
   selfDeclared: true;
@@ -215,7 +216,7 @@ function parseVersion2(value: Record<string, unknown>): LedgerEvent | null {
       return isId(value.attemptId) &&
         isId(value.chapterId) &&
         (value.band === "done" || value.band === "not-yet") &&
-        (value.evidence === "SELF" || value.evidence === "ARTIFACT") &&
+        isEvidence(value.evidence) &&
         isIndex(value.xp) &&
         value.selfDeclared === true &&
         isText(value.calculatorVersion)
