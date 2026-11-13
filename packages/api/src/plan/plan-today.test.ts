@@ -27,7 +27,7 @@ const step = (index: number, minutes = 40) => ({
   toolKinds: [],
 });
 
-const missionWith = (minutes: number[]): StoredMissionDraft => ({
+const missionWith = (minutes: number[], nextChapter: number[] = []): StoredMissionDraft => ({
   title: "Conversational Farsi",
   goalType: "PROJECT",
   primaryDomain: "Mind",
@@ -38,6 +38,16 @@ const missionWith = (minutes: number[]): StoredMissionDraft => ({
       exitCondition: "Read aloud",
       steps: minutes.map((m, i) => step(i, m)),
     },
+    ...(nextChapter.length === 0
+      ? []
+      : [
+          {
+            index: 1,
+            title: "Words",
+            exitCondition: "Order a coffee",
+            steps: nextChapter.map((m, i) => step(i, m)),
+          },
+        ]),
   ],
 });
 
@@ -45,6 +55,7 @@ async function setup(
   options: {
     goalContext?: MissionGoalContext;
     minutes?: number[];
+    nextChapter?: number[];
     generatedAt?: string;
   } = {},
 ) {
@@ -57,7 +68,9 @@ async function setup(
     generatedAt: options.generatedAt ?? "2026-11-01T00:00:00.000Z",
     goalText: "learn farsi",
     pursuitSlug: "learn-farsi",
-    mission: upcastMission(missionWith(options.minutes ?? [40, 40, 40, 40, 40])),
+    mission: upcastMission(
+      missionWith(options.minutes ?? [40, 40, 40, 40, 40], options.nextChapter),
+    ),
     safetyClass: "NORMAL",
     ...(options.goalContext === undefined ? {} : { goalContext: options.goalContext }),
   });
@@ -243,6 +256,23 @@ describe("today's plan", () => {
       finished: true,
       doneForToday: false,
     });
+  });
+
+  it("plans no step of a chapter still locked behind a waiting boss", async () => {
+    const { plan, complete } = await setup({
+      goalContext: WEEK_600,
+      minutes: [40],
+      nextChapter: [40, 40],
+    });
+    await complete("0:0", "2026-11-11T22:00:00.000Z");
+    const today = await plan("2026-11-11T23:00:00.000Z");
+    const planned = [
+      ...(today?.todayStepIds ?? []),
+      ...(today?.upcoming.flatMap((day) => day.stepIds) ?? []),
+    ];
+    expect(planned).not.toContain("1:0");
+    expect(planned).not.toContain("1:1");
+    expect(today?.laterStepCount).toBe(0);
   });
 
   it("leaves one malformed mission without a plan, and plans the rest", async () => {

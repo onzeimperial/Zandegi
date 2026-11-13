@@ -76,9 +76,17 @@ export function buildTodayPlan(input: BuildTodayPlanInput): TodayPlan {
   // towards today and towards recent completion.
   const completedIds = new Set(completions.map((completion) => completion.stepId));
   const closed = closedChapterIds(progress, view.missionId);
-  const steps: ScheduleStep[] = view.mission.chapters.flatMap((chapter) =>
+  // Chapters open in order: a chapter after the first open one stays locked
+  // until that chapter's boss is attempted, so its undone steps are not planned
+  // either. While a boss is waiting, today holds the boss, not locked steps.
+  const openIndex = view.mission.chapters.findIndex((chapter) => !closed.has(chapter.id));
+  const steps: ScheduleStep[] = view.mission.chapters.flatMap((chapter, index) =>
     chapter.steps
-      .filter((step) => !closed.has(chapter.id) || completedIds.has(step.id))
+      .filter(
+        (step) =>
+          completedIds.has(step.id) ||
+          (!closed.has(chapter.id) && (openIndex === -1 || index <= openIndex)),
+      )
       .map((step) => ({ id: step.id, estimatedMinutes: step.estimatedMinutes })),
   );
 
