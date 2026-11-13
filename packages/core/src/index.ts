@@ -16,3 +16,4 @@ export * from "./scoring/award";
 export * from "./scoring/progression";
 export * from "./scoring/levels";
 export * from "./scoring/rarity";
+export * from "./schedule";

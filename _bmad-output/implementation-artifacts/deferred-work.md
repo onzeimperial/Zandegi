@@ -68,3 +68,7 @@
 - source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-own-the-plan.md`
   summary: A chapter or mission finished by deleting its remaining steps pays its completion bonus only on the next completion, and never when the deletion finishes the whole mission.
   evidence: Plan edits may not write ledger events. Spec B replaces chapter bonuses with bosses and gates the mission reward on bosses, which should remove this path; confirm that during spec B's review.
+
+- source_spec: `C:/Users/SIN0119/Zandegi/_bmad-output/implementation-artifacts/spec-daily-loop.md`
+  summary: Add a test for the reminder cron route's 503 path: no address and no provider message in the body or the log.
+  evidence: The route catches failures from `demoPortsFromEnv` and `sendDailyReminders`, but no test drives them; the store guard below it is tested.

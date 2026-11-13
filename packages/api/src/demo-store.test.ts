@@ -209,6 +209,21 @@ describe("the port adapter", () => {
       },
       listBossAttempts: async () => [],
       deleteBossAttempt: async () => false,
+      findReminder: async () => {
+        throw new StoreUnavailableError("findReminder", "[redacted]: connection refused");
+      },
+      enableReminder: async () => {
+        throw new StoreUnavailableError("enableReminder", "[redacted]: connection refused");
+      },
+      disableReminder: async () => {
+        throw new StoreUnavailableError("disableReminder", "[redacted]: connection refused");
+      },
+      listEnabledReminders: async () => {
+        throw new StoreUnavailableError("listEnabledReminders", "[redacted]: connection refused");
+      },
+      claimReminderDay: async () => {
+        throw new StoreUnavailableError("claimReminderDay", "[redacted]: connection refused");
+      },
     };
     const ports = demoPortsFromStore(broken);
 
@@ -234,6 +249,11 @@ describe("the port adapter", () => {
       (error: unknown) => error as GenerationError,
     );
     expect(boss!.code).toBe("STORE_UNAVAILABLE");
+    const reminders = await ports.reminders.listEnabled().then(
+      () => null,
+      (error: unknown) => error as GenerationError,
+    );
+    expect(reminders!.code).toBe("STORE_UNAVAILABLE");
 
     // An unsanitised throw from below is replaced wholesale rather than
     // forwarded, so a provider message cannot smuggle an endpoint into a log.

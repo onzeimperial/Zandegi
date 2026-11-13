@@ -24,7 +24,13 @@ describe("the page guard", () => {
   });
 
   it("never redirects home or the API, which answer for themselves", () => {
-    for (const path of ["/", "/api/generate", "/api/missions/1"]) {
+    for (const path of [
+      "/",
+      "/api/generate",
+      "/api/missions/1",
+      "/api/cron/reminder",
+      "/api/reminders",
+    ]) {
       expect(pageRedirect(path, { ...clerk, signedIn: false }), path).toBeNull();
     }
   });

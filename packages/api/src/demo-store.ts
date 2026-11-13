@@ -37,6 +37,7 @@ import type {
   MissionGoalContext,
   MissionLogStorePort,
   MissionPlanStorePort,
+  ReminderStorePort,
 } from "./ports";
 
 /**
@@ -66,6 +67,7 @@ export interface DemoPorts {
   plans: MissionPlanStorePort;
   logs: MissionLogStorePort;
   bosses: BossAttemptStorePort;
+  reminders: ReminderStorePort;
 }
 
 export type Env = Record<string, string | undefined>;
@@ -200,6 +202,15 @@ export function demoPortsFromStore(store: StoredDemoStore): DemoPorts {
       record: (attempt) => guard("recordBossAttempt", () => store.recordBossAttempt(attempt)),
       list: (ownerId, missionId) =>
         guard("listBossAttempts", () => store.listBossAttempts(ownerId, missionId)),
+    },
+    reminders: {
+      find: (ownerId) => guard("findReminder", () => store.findReminder(ownerId)),
+      enable: (reminder) => guard("enableReminder", () => store.enableReminder(reminder)),
+      disable: (ownerId, updatedAt) =>
+        guard("disableReminder", () => store.disableReminder(ownerId, updatedAt)),
+      listEnabled: () => guard("listEnabledReminders", () => store.listEnabledReminders()),
+      claimDay: (ownerId, day) =>
+        guard("claimReminderDay", () => store.claimReminderDay(ownerId, day)),
     },
     guests: {
       findByTokenHash: (tokenHash) =>

@@ -27,7 +27,7 @@ export interface ListMissionsPorts {
  * `readMission`: `ownerId`, `runId` and `goalText` are server-side record
  * fields, and a field added to the record later must not reach the wire.
  */
-function toView(record: GeneratedMissionRecord): StoredMissionView {
+export function toMissionView(record: GeneratedMissionRecord): StoredMissionView {
   return {
     missionId: record.missionId,
     generatedAt: record.generatedAt,
@@ -51,5 +51,5 @@ export async function listMissions(
     if (isGenerationError(error)) throw error;
     throw new GenerationError("STORE_UNAVAILABLE", describeFailure(error), { cause: error });
   }
-  return records.map(toView);
+  return records.map(toMissionView);
 }

@@ -86,6 +86,27 @@ export const MAX_LISTED_BOSS_ATTEMPTS = 50;
 /** Bounds a log listing. */
 export const MAX_LISTED_LOGS = 50;
 
+/**
+ * One person's daily reminder setting. The address is personal content: it is
+ * only ever used to send the reminder, never logged, and it is cleared when the
+ * person turns reminders off. `lastSentDay` survives that, so turning reminders
+ * off and on again cannot send a second email on the same day.
+ */
+export interface StoredReminder {
+  ownerId: string;
+  /** The verified sign-in address, or `null` once reminders are off. */
+  email: string | null;
+  /** The IANA zone the person's browser reported when they turned reminders on. */
+  timezone?: string;
+  /** ISO-8601 UTC, from the caller's clock port. */
+  updatedAt: string;
+  /** The local day (YYYY-MM-DD) of the last reminder claimed for sending. */
+  lastSentDay?: string;
+}
+
+/** Bounds the daily sweep. Far above an invite-only test. */
+export const MAX_LISTED_REMINDERS = 500;
+
 /** A guest principal. The token itself is never stored, only its hash. */
 export interface StoredGuest {
   id: string;
@@ -150,6 +171,24 @@ export interface DemoStore<
   listBossAttempts(ownerId: string, missionId: string): Promise<StoredBossAttempt[]>;
   /** Delete one attempt. `false` when it is unknown or another owner's. */
   deleteBossAttempt(ownerId: string, attemptId: string): Promise<boolean>;
+  /** The owner's reminder setting, on or off, or `null` if they never set one. */
+  findReminder(ownerId: string): Promise<StoredReminder | null>;
+  /**
+   * Turn reminders on, or update the address and zone. Keeps `lastSentDay`, so
+   * a reminder already sent today is not sent again.
+   */
+  enableReminder(
+    reminder: Pick<StoredReminder, "ownerId" | "timezone" | "updatedAt"> & { email: string },
+  ): Promise<void>;
+  /** Turn reminders off and forget the address. A no-op when there is no setting. */
+  disableReminder(ownerId: string, updatedAt: string): Promise<void>;
+  /** Every setting that is on, at most `MAX_LISTED_REMINDERS`. */
+  listEnabledReminders(): Promise<StoredReminder[]>;
+  /**
+   * Claim the one reminder for `day`. `true` only for the first claim of that
+   * day while reminders are on, so a retried trigger cannot send twice. Atomic.
+   */
+  claimReminderDay(ownerId: string, day: string): Promise<boolean>;
 
   findGuest(tokenHash: string): Promise<StoredGuest | null>;
   saveGuest(tokenHash: string, guest: StoredGuest): Promise<void>;

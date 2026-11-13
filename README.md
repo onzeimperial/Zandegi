@@ -108,6 +108,10 @@ Vercel builds Production only from the production branch, so that branch must ho
    | `CLERK_SECRET_KEY`                  | From Clerk.                                                                                                                                               |
    | `ZANDEGI_ALLOWED_EMAILS`            | The two invited emails, comma-separated. Empty means the app stays off.                                                                                   |
    | `ZANDEGI_DAILY_GENERATION_LIMIT`    | Optional. Builds per person per UTC day. Defaults to 5.                                                                                                   |
+   | `CRON_SECRET`                       | A long random string. Vercel sends it to the daily reminder trigger; with it unset the trigger refuses every call.                                        |
+   | `REMINDER_GMAIL_USER`               | Optional. The Gmail address that sends the daily reminder. With it or the password unset, reminders stay off and nothing else changes.                    |
+   | `REMINDER_GMAIL_APP_PASSWORD`       | Optional. A Google app password for that address (Google Account, Security, 2-Step Verification, App passwords). Never logged.                            |
+   | `ZANDEGI_APP_URL`                   | Optional. The public origin used for links in the reminder, such as `https://zandegi.vercel.app`. Defaults to Vercel's production host.                   |
 
    `ENABLE_UNAUTHENTICATED_GENERATION` no longer does anything. Remove it if it is set.
 
@@ -128,6 +132,30 @@ Plan editing and logs need the Postgres store. The `own_the_plan` migration only
 column (default 0) to `Mission` and a new `MissionLog` table, so it applies to a live database with
 no downtime and leaves existing missions and XP as they were. The dormant Redis store refuses plan
 edits and logs with `STORE_UNAVAILABLE`.
+
+The `daily_reminder` migration only adds a `ReminderPreference` table, so it is additive too.
+
+### The daily reminder
+
+`vercel.json` runs `/api/cron/reminder` once a day at 21:00 UTC, which is 08:00 in Sydney in
+summer and 07:00 in winter. On the Hobby plan Vercel may run it any time within that hour. Each
+opted-in person gets at most one email per local day, and only while today still has steps waiting.
+People opt in and out on Today, under Daily reminder. Turning it off deletes the stored address.
+
+To check the trigger by hand on a running dev server (`http://localhost:3000`):
+
+1. In `apps\web\.env.local`, set `CRON_SECRET` to any value, and set the two `REMINDER_GMAIL_*`
+   variables if you want a real email. Restart the dev server.
+2. In a second PowerShell window, from any directory, run:
+
+   ```powershell
+   try { Invoke-WebRequest http://localhost:3000/api/cron/reminder -UseBasicParsing } catch { $_.Exception.Response.StatusCode.value__ }
+   (Invoke-WebRequest http://localhost:3000/api/cron/reminder -UseBasicParsing -Headers @{ Authorization = "Bearer $env:CRON_SECRET" }).Content
+   ```
+
+   Success: the first prints `401`. The second prints counts such as `{"considered":1,"sent":1,...}`
+   (set `$env:CRON_SECRET` in that window first). Running it again the same day prints
+   `"sent":0,"alreadySent":1`.
 
 To apply migrations to a database by hand:
 

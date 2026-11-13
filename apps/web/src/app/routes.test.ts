@@ -50,6 +50,24 @@ describe("designed route contract", () => {
       }
     }
   });
+  it("keeps the daily loop free of streaks, loss words, countdowns and offers (law 8)", () => {
+    const sources = [
+      join(appDirectory, "today", "page.tsx"),
+      join(appDirectory, "today", "loading.tsx"),
+      join(appDirectory, "..", "components", "reminder-toggle.tsx"),
+    ].map((file) =>
+      readFileSync(file, "utf8")
+        // Comments may name the rules; only what a person can see is checked.
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "")
+        .toLowerCase(),
+    );
+    for (const source of sources) {
+      for (const word of ["streak", "missed", "overdue", "behind", "countdown", "shard", "buy"]) {
+        expect(source, word).not.toContain(word);
+      }
+    }
+  });
   it("promises nothing the product does not do on the generate screen", () => {
     const source = readFileSync(join(appDirectory, "generate", "page.tsx"), "utf8");
     expect(source).not.toContain("time blocks");

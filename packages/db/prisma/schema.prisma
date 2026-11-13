@@ -23,6 +23,7 @@ model Principal {
   usage    GenerationUsage[]
   logs     MissionLog[]
   bosses   BossAttempt[]
+  reminder ReminderPreference?
 }
 
 /// An accepted mission. Personal content lives here, where it can be deleted.
@@ -117,4 +118,15 @@ model GenerationUsage {
   principal Principal @relation(fields: [principalId], references: [id], onDelete: Restrict)
 
   @@id([principalId, day])
+}
+
+/// One person's daily reminder. The address is cleared when they turn it off; the last day stays.
+model ReminderPreference {
+  ownerId     String   @id
+  email       String?
+  timezone    String?
+  updatedAt   DateTime @db.Timestamptz(3)
+  lastSentDay String?
+
+  owner Principal @relation(fields: [ownerId], references: [id], onDelete: Restrict)
 }

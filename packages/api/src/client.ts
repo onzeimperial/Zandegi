@@ -354,6 +354,62 @@ export const MISSION_LOG_LIMITS = {
   maxValue: 1_000_000_000,
 } as const;
 
+// ── Today's plan ───────────────────────────────────────────
+
+/** How many days after today a plan shows. */
+export const TODAY_PLAN_UPCOMING_DAYS = 3;
+
+/** One planned local day: the steps that land on it, in path order. */
+export interface TodayPlanDay {
+  /** Local date, YYYY-MM-DD, in the mission's zone. */
+  date: string;
+  stepIds: string[];
+}
+
+/**
+ * Which of a mission's steps belong to today, and the next few days.
+ *
+ * Derived on every read from the mission, the ledger and the zone, never
+ * stored. It carries no XP, no streak and no count of days missed (laws 3 and
+ * 8): a missed day simply leaves its steps undone, and they lead today.
+ */
+export interface TodayPlan {
+  missionId: string;
+  /** Today's local date, YYYY-MM-DD. */
+  today: string;
+  /** Today's steps in path order, including those already completed today. */
+  todayStepIds: string[];
+  /** The subset of `todayStepIds` completed today. */
+  doneTodayStepIds: string[];
+  /** The next `TODAY_PLAN_UPCOMING_DAYS` days. A day can be empty near the end. */
+  upcoming: TodayPlanDay[];
+  /** Undone steps after the last upcoming day. */
+  laterStepCount: number;
+  /** Every step on today's list is done, and the mission is not finished. */
+  doneForToday: boolean;
+  /** No undone step is left on the path. */
+  finished: boolean;
+  /** Nothing was completed yesterday or yet today: greet the person back, gently. */
+  returningAfterGap: boolean;
+  /** The day's load in whole minutes. A planning number, never a target or a reward. */
+  dailyMinutes: number;
+}
+
+// ── Reminders ──────────────────────────────────────────────
+
+/** What a person sees about their daily reminder. */
+export interface ReminderSettingsView {
+  /** Email is configured on the server and this person has a verified address. */
+  available: boolean;
+  enabled: boolean;
+}
+
+/** Turn the daily reminder on or off. `timezone` is the browser's IANA zone. */
+export interface ReminderSettingsRequest {
+  enabled: boolean;
+  timezone?: string;
+}
+
 // ── Errors ─────────────────────────────────────────────────
 
 /**

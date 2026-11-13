@@ -407,6 +407,89 @@ export function describeStoreContract(name: string, store: () => DemoStore): voi
       });
     });
 
+    describe("reminders", () => {
+      const enable = (ownerId: string, email = "person@example.com") =>
+        store().enableReminder({
+          ownerId,
+          email,
+          timezone: "Australia/Sydney",
+          updatedAt: CREATED_AT,
+        });
+      const enabledFor = async (ownerId: string) =>
+        (await store().listEnabledReminders()).filter((entry) => entry.ownerId === ownerId);
+
+      it("reads null for an owner who never set one", async () => {
+        expect(await store().findReminder(await newOwner())).toBeNull();
+      });
+
+      it("turns on, lists, and turns off, forgetting the address", async () => {
+        const owner = await newOwner();
+        await enable(owner);
+        expect(await store().findReminder(owner)).toEqual({
+          ownerId: owner,
+          email: "person@example.com",
+          timezone: "Australia/Sydney",
+          updatedAt: CREATED_AT,
+        });
+        expect(await enabledFor(owner)).toHaveLength(1);
+
+        await store().disableReminder(owner, "2026-11-05T00:00:00.000Z");
+        const off = await store().findReminder(owner);
+        expect(off?.email).toBeNull();
+        expect(off).not.toHaveProperty("timezone");
+        expect(await enabledFor(owner)).toEqual([]);
+      });
+
+      it("claims each day once, and never while reminders are off", async () => {
+        const owner = await newOwner();
+        expect(await store().claimReminderDay(owner, DAY)).toBe(false);
+        await enable(owner);
+        expect(await store().claimReminderDay(owner, DAY)).toBe(true);
+        expect(await store().claimReminderDay(owner, DAY)).toBe(false);
+        expect(await store().claimReminderDay(owner, "2026-11-05")).toBe(true);
+        await store().disableReminder(owner, CREATED_AT);
+        expect(await store().claimReminderDay(owner, "2026-11-06")).toBe(false);
+      });
+
+      it("keeps the day claimed across turning off and on again", async () => {
+        const owner = await newOwner();
+        await enable(owner);
+        expect(await store().claimReminderDay(owner, DAY)).toBe(true);
+        await store().disableReminder(owner, CREATED_AT);
+        await enable(owner, "new@example.com");
+        expect((await store().findReminder(owner))?.lastSentDay).toBe(DAY);
+        expect(await store().claimReminderDay(owner, DAY)).toBe(false);
+      });
+
+      it("keeps the stored zone when turned on again without one", async () => {
+        const owner = await newOwner();
+        await enable(owner);
+        await store().enableReminder({
+          ownerId: owner,
+          email: "person@example.com",
+          updatedAt: CREATED_AT,
+        });
+        expect((await store().findReminder(owner))?.timezone).toBe("Australia/Sydney");
+      });
+
+      it("lets two claims for one day race to one winner", async () => {
+        const owner = await newOwner();
+        await enable(owner);
+        const results = await Promise.all([
+          store().claimReminderDay(owner, DAY),
+          store().claimReminderDay(owner, DAY),
+        ]);
+        expect(results.filter(Boolean)).toHaveLength(1);
+      });
+
+      it("scopes a setting to its owner", async () => {
+        const [owner, other] = [await newOwner(), await newOwner()];
+        await enable(owner);
+        expect(await store().findReminder(other)).toBeNull();
+        expect(await store().claimReminderDay(other, DAY)).toBe(false);
+      });
+    });
+
     describe("the ledger", () => {
       it("reads back in append order, one owner at a time", async () => {
         const [owner, other] = [await newOwner(), await newOwner()];
