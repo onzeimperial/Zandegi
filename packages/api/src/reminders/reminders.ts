@@ -8,13 +8,13 @@
  * never into a diagnostic, a log line or an incident.
  */
 
-import { localDay } from "@zandegi/core";
 import type { ReminderSettingsView } from "../client";
 import { GenerationError } from "../errors";
 import type { AccountEmail } from "../identity/account";
 import type { GuestPrincipal } from "../identity/ports";
 import { planToday, validTimezone } from "../plan/plan-today";
 import { storeCall } from "../plan/store-call";
+import { safeErrorLabel } from "./gmail";
 import type {
   Clock,
   GenerationPersistencePort,
@@ -143,6 +143,11 @@ export function reminderMessage(to: string, stepsLeft: number, appUrl: string): 
 export interface SendDailyRemindersInput {
   /** The app's public origin, for the link in the email. */
   appUrl: string;
+  /**
+   * The invite list as it is now. A stored address no longer on it gets
+   * nothing, so removing someone from the list stops their email too.
+   */
+  allowed: readonly string[];
 }
 
 export interface SendDailyRemindersPorts {
@@ -162,7 +167,11 @@ export interface SendDailyRemindersResult {
   nothingDue: number;
   /** Today's reminder was already claimed. */
   alreadySent: number;
+  /** The stored address is no longer on the invite list. */
+  notInvited: number;
   failed: number;
+  /** Why sends failed: error class and code only, deduplicated. Never an address. */
+  errors: string[];
   /** `true` when no mailer is configured, so nothing was attempted. */
   disabled: boolean;
 }
@@ -181,9 +190,12 @@ export async function sendDailyReminders(
     sent: 0,
     nothingDue: 0,
     alreadySent: 0,
+    notInvited: 0,
     failed: 0,
+    errors: [],
     disabled: ports.mailer === null,
   };
+  const allowed = new Set(input.allowed.map(normalize));
   const { mailer } = ports;
   if (mailer === null) return result;
 
@@ -192,6 +204,10 @@ export async function sendDailyReminders(
     const email = reminder.email;
     if (email === null) continue;
     result.considered += 1;
+    if (!allowed.has(normalize(email))) {
+      result.notInvited += 1;
+      continue;
+    }
     try {
       const { plans } = await planToday(
         {
@@ -200,16 +216,23 @@ export async function sendDailyReminders(
         },
         { persistence: ports.persistence, ledger: ports.ledger, clock: ports.clock },
       );
-      let stepsLeft = 0;
-      for (const plan of Object.values(plans)) {
-        const done = new Set(plan.doneTodayStepIds);
-        stepsLeft += plan.todayStepIds.filter((id) => !done.has(id)).length;
-      }
-      if (stepsLeft === 0) {
+      // Each plan's "today" is in its mission's own zone. The claimed day is
+      // the first waiting plan's today, and only plans on that same day are
+      // counted, so the email's day and the steps it counts always agree.
+      const waiting = Object.values(plans)
+        .map((plan) => {
+          const done = new Set(plan.doneTodayStepIds);
+          return { day: plan.today, left: plan.todayStepIds.filter((id) => !done.has(id)).length };
+        })
+        .filter((plan) => plan.left > 0);
+      const day = waiting[0]?.day;
+      if (day === undefined) {
         result.nothingDue += 1;
         continue;
       }
-      const day = localDay(ports.clock.now(), validTimezone(reminder.timezone));
+      const stepsLeft = waiting
+        .filter((plan) => plan.day === day)
+        .reduce((sum, plan) => sum + plan.left, 0);
       if (!(await storeCall(() => ports.reminders.claimDay(reminder.ownerId, day)))) {
         result.alreadySent += 1;
         continue;
@@ -218,8 +241,10 @@ export async function sendDailyReminders(
       // today: a missing reminder is better than a repeated one (law 8).
       await mailer.send(reminderMessage(email, stepsLeft, input.appUrl));
       result.sent += 1;
-    } catch {
+    } catch (error) {
       result.failed += 1;
+      const label = safeErrorLabel(error);
+      if (!result.errors.includes(label)) result.errors.push(label);
     }
   }
   return result;

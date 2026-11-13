@@ -261,9 +261,10 @@ export async function createPostgresDemoStore<
 
     enableReminder: (reminder) =>
       guard("enableReminder", async () => {
+        // No zone given keeps the stored one rather than erasing it.
         const fields = {
           email: reminder.email,
-          timezone: reminder.timezone ?? null,
+          ...(reminder.timezone === undefined ? {} : { timezone: reminder.timezone }),
           updatedAt: new Date(reminder.updatedAt),
         };
         // An upsert leaves `lastSentDay` alone, so today's reminder is not resent.

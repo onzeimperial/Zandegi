@@ -7,9 +7,9 @@
  * resized, rewritten or removed, and nothing here touches XP.
  *
  * Today is left out on purpose, so finishing today's steps cannot change
- * today's load in the middle of the day. Days before the mission began are
- * left out too, so a new mission starts at its base load instead of looking
- * like a week of nothing.
+ * today's load in the middle of the day. A mission with fewer than seven whole
+ * days before today runs at its base load, so a new mission is never judged
+ * on a partial week.
  */
 
 import {
@@ -42,8 +42,8 @@ export interface RecentCompletionInput {
 }
 
 /**
- * Completed minutes over capacity minutes in the window, or `null` when the
- * window holds no whole day yet. A completed step that has since been deleted
+ * Completed minutes over capacity minutes in the last seven days, or `null`
+ * until the mission has seven whole days before today. A completed step that has since been deleted
  * has no estimate left, so it is not counted.
  */
 export function recentCompletionRatio(input: RecentCompletionInput): number | null {
@@ -51,12 +51,11 @@ export function recentCompletionRatio(input: RecentCompletionInput): number | nu
   const startDay = Number.isNaN(started.getTime())
     ? input.today
     : localDay(started, input.timezone);
-  const windowStart =
-    daysBetween(startDay, addDays(input.today, -ADAPT_WINDOW_DAYS)) > 0
-      ? addDays(input.today, -ADAPT_WINDOW_DAYS)
-      : startDay;
-  const windowDays = daysBetween(windowStart, input.today);
-  if (windowDays <= 0 || input.base <= 0) return null;
+  // Only a full week counts: a mission with fewer than seven whole days behind
+  // it runs at its base load, so one quiet first day cannot cut day two.
+  if (daysBetween(startDay, input.today) < ADAPT_WINDOW_DAYS || input.base <= 0) return null;
+  const windowStart = addDays(input.today, -ADAPT_WINDOW_DAYS);
+  const windowDays = ADAPT_WINDOW_DAYS;
 
   const minutesById = new Map(
     input.steps.map((step) => [step.id, placementMinutes(step.estimatedMinutes)]),

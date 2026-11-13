@@ -381,6 +381,17 @@ export function describeStoreContract(name: string, store: () => DemoStore): voi
         expect(await store().claimReminderDay(owner, DAY)).toBe(false);
       });
 
+      it("keeps the stored zone when turned on again without one", async () => {
+        const owner = await newOwner();
+        await enable(owner);
+        await store().enableReminder({
+          ownerId: owner,
+          email: "person@example.com",
+          updatedAt: CREATED_AT,
+        });
+        expect((await store().findReminder(owner))?.timezone).toBe("Australia/Sydney");
+      });
+
       it("lets two claims for one day race to one winner", async () => {
         const owner = await newOwner();
         await enable(owner);

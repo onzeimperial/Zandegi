@@ -1,4 +1,10 @@
-import { GenerationError, foldProgress } from "@zandegi/api";
+import {
+  GenerationError,
+  createDemoStore,
+  demoPortsFromStore,
+  foldProgress,
+  upcastMission,
+} from "@zandegi/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const resolveRequestSession = vi.fn();
@@ -21,7 +27,10 @@ vi.mock("@clerk/nextjs/server", () => ({
   }),
 }));
 
-vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
+const request = vi.hoisted(() => ({ cookie: null as string | null }));
+vi.mock("next/headers", () => ({
+  headers: async () => new Headers(request.cookie === null ? {} : { cookie: request.cookie }),
+}));
 vi.mock("next/navigation", () => ({ redirect: (target: string) => redirect(target) }));
 vi.mock("./session", async () => {
   const actual = await vi.importActual<typeof import("./session")>("./session");
@@ -33,6 +42,7 @@ const { loadGuestMissions, stepStates, estimateLabel, stepHref, stepIdParam } =
 const { default: GenerateLayout } = await import("@/app/generate/layout");
 
 beforeEach(() => {
+  request.cookie = null;
   redirect.mockClear();
   resolveRequestSession.mockReset();
   vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -267,5 +277,81 @@ describe("Today's logs", () => {
       },
     ]);
     expect(loaded.logs["m-broken"]).toEqual([]);
+  });
+});
+
+describe("loading Today", () => {
+  const OWNER = { id: "owner-1", createdAt: "2026-11-01T00:00:00.000Z" };
+
+  async function sessionWithMission() {
+    const store = await createDemoStore({ driver: "memory", retentionSeconds: 3600 });
+    const ports = demoPortsFromStore(store);
+    await ports.persistence.record({
+      missionId: "m-1",
+      ownerId: OWNER.id,
+      runId: "run-1",
+      generatedAt: "2026-11-01T00:00:00.000Z",
+      goalText: "learn farsi",
+      pursuitSlug: "learn-farsi",
+      mission: upcastMission({
+        title: "Conversational Farsi",
+        goalType: "PROJECT",
+        primaryDomain: "Mind",
+        chapters: [
+          {
+            index: 0,
+            title: "Sounds",
+            exitCondition: "Read",
+            steps: [
+              {
+                index: 0,
+                title: "Step 1",
+                estimatedMinutes: 20,
+                verification: "SELF",
+                guide: { approach: "", materials: [], commonMistakes: [], whatGoodLooksLike: "" },
+                sources: [],
+                toolKinds: [],
+              },
+            ],
+          },
+        ],
+      }),
+      safetyClass: "NORMAL",
+      // No goal context: no zone of its own.
+    });
+    return { principal: OWNER, ports };
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("uses the browser's zone from the cookie for a mission with none", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-12T13:30:00.000Z")); // 00:30 on the 13th in Sydney
+    request.cookie = "other=1; zandegi_tz=Australia%2FSydney";
+    resolveRequestSession.mockResolvedValue(await sessionWithMission());
+    const loaded = await loadGuestMissions({ withToday: true });
+    expect(loaded.status).toBe("ready");
+    if (loaded.status !== "ready") return;
+    expect(loaded.plans["m-1"]?.today).toBe("2026-11-13");
+  });
+
+  it("stays ready with no reminder setting when reminders cannot be read", async () => {
+    const session = await sessionWithMission();
+    session.ports = {
+      ...session.ports,
+      reminders: {
+        ...session.ports.reminders,
+        find: async () => {
+          throw new GenerationError("STORE_UNAVAILABLE");
+        },
+      },
+    };
+    resolveRequestSession.mockResolvedValue(session);
+    const loaded = await loadGuestMissions({ withToday: true });
+    expect(loaded).toMatchObject({ status: "ready", reminder: null });
+    if (loaded.status !== "ready") return;
+    expect(loaded.plans["m-1"]?.todayStepIds).toEqual(["0:0"]);
   });
 });

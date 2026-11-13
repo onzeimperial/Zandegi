@@ -1,9 +1,14 @@
 import { createInMemoryDemoStore } from "@zandegi/db";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { GenerationSafetyClass, MissionDraft } from "../client";
 import { demoPortsFromStore } from "../demo-store";
 import type { GuestPrincipal } from "../identity/ports";
-import { fixedClock, sequentialIdGenerator, type MissionGoalContext } from "../ports";
+import {
+  fixedClock,
+  sequentialIdGenerator,
+  type GeneratedMissionRecord,
+  type MissionGoalContext,
+} from "../ports";
 import { completeStep } from "../progress/complete-step";
 import { upcastMission, type StoredMissionDraft } from "./ids";
 import { planTimezone, planToday, validTimezone } from "./plan-today";
@@ -109,8 +114,12 @@ describe("today's plan", () => {
     expect(second!.todayStepIds[0]).toBe("0:0");
     expect(second!.today).toBe("2026-11-13");
     expect(first!.returningAfterGap).toBe(false);
-    // The welcome-back line, never a "missed" state.
-    expect(second!.returningAfterGap).toBe(true);
+    // The morning after the mission began is not a gap yet.
+    expect(second!.returningAfterGap).toBe(false);
+    // A day later it is: the welcome-back line, never a "missed" state.
+    const third = await plan("2026-11-13T23:00:00.000Z"); // the 14th
+    expect(third!.todayStepIds[0]).toBe("0:0");
+    expect(third!.returningAfterGap).toBe(true);
     expect(await ledgerSize()).toBe(0);
   });
 
@@ -199,6 +208,55 @@ describe("today's plan", () => {
       doneForToday: false,
       returningAfterGap: false,
     });
+  });
+
+  it("leaves one malformed mission without a plan, and plans the rest", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const good: GeneratedMissionRecord = {
+      missionId: "m-good",
+      ownerId: OWNER.id,
+      runId: "run-1",
+      generatedAt: "2026-11-12T00:00:00.000Z",
+      goalText: "learn farsi",
+      pursuitSlug: "learn-farsi",
+      mission: upcastMission(missionWith([40])),
+      safetyClass: "NORMAL",
+      goalContext: WEEK_600,
+    };
+    // A stored record whose goal context cannot even be read.
+    const broken = {
+      ...good,
+      missionId: "m-broken",
+      goalContext: Object.defineProperty({}, "timezone", {
+        enumerable: true,
+        get() {
+          throw new TypeError("Learn five letters: unreadable");
+        },
+      }) as MissionGoalContext,
+    };
+    const result = await planToday(
+      { principal: OWNER },
+      {
+        persistence: {
+          record: async () => undefined,
+          findForOwner: async () => null,
+          listForOwner: async () => [broken, good],
+        },
+        ledger: {
+          claim: async () => true,
+          release: async () => undefined,
+          append: async () => undefined,
+          read: async () => [],
+        },
+        clock: fixedClock(new Date("2026-11-11T23:00:00.000Z")),
+      },
+    );
+    expect(result.missions.map((mission) => mission.missionId)).toEqual(["m-broken", "m-good"]);
+    expect(result.plans["m-broken"]).toBeUndefined();
+    expect(result.plans["m-good"]?.todayStepIds).toEqual(["0:0"]);
+    // The error class only: no step text in the log.
+    expect(JSON.stringify(errors.mock.calls)).toContain("TypeError");
+    expect(JSON.stringify(errors.mock.calls)).not.toContain("Learn five letters");
   });
 
   it("shows nobody else's missions", async () => {

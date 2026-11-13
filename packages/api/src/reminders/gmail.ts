@@ -38,16 +38,36 @@ async function gmailTransport(credentials: GmailCredentials): Promise<MailTransp
     port: 465,
     secure: true,
     auth: { user: credentials.user, pass: credentials.pass },
+    // A hung connection must fail in seconds, not stall the whole sweep.
+    connectionTimeout: 5_000,
+    greetingTimeout: 5_000,
+    socketTimeout: 10_000,
   });
 }
 
-/** The error's class and code only: an SMTP message can quote the address. */
-function describe(error: unknown): string {
+/**
+ * The error's class and code only, never its message: an SMTP message can
+ * quote the address. Safe to log and to return in a count summary.
+ */
+export function safeErrorLabel(error: unknown): string {
   if (!(error instanceof Error)) return "non-error";
+  const name = /^[A-Za-z0-9_]{1,40}$/.test(error.name) ? error.name : "Error";
   const code = (error as { code?: unknown }).code;
-  return typeof code === "string" && /^[A-Za-z0-9_]{1,24}$/.test(code)
-    ? `${error.name} ${code}`
-    : error.name;
+  return typeof code === "string" && /^[A-Za-z0-9_]{1,24}$/.test(code) ? `${name} ${code}` : name;
+}
+
+/** A failed send. Carries the provider's error class and code, never its message. */
+export class ReminderSendError extends Error {
+  readonly code: string | undefined;
+
+  constructor(cause: unknown) {
+    const code = (cause as { code?: unknown } | null)?.code;
+    const safeCode =
+      typeof code === "string" && /^[A-Za-z0-9_]{1,24}$/.test(code) ? code : undefined;
+    super(`reminder send failed: ${safeErrorLabel(cause)}`);
+    this.name = "ReminderSendError";
+    this.code = safeCode;
+  }
 }
 
 export function createGmailMailer(
@@ -70,7 +90,7 @@ export function createGmailMailer(
       } catch (error) {
         ready = undefined;
         // No cause: it would carry the provider's message past this point.
-        throw new Error(`reminder send failed: ${describe(error)}`);
+        throw new ReminderSendError(error);
       }
     },
   };

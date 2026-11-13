@@ -58,6 +58,7 @@ export function planDays(input: PlanDaysInput): DayPlan {
   const doneToday = input.steps.filter((step) => doneOn.get(step.id) === input.today);
   const undone = input.steps.filter((step) => !doneOn.has(step.id));
 
+  const position = new Map(input.steps.map((step, index) => [step.id, index]));
   const days: PlannedDay[] = [];
   let next = 0;
   for (let offset = 0; offset < Math.max(0, input.horizonDays); offset++) {
@@ -74,7 +75,10 @@ export function planDays(input: PlanDaysInput): DayPlan {
       used += minutes;
       next += 1;
     }
-    days.push({ day: addDays(input.today, offset), stepIds: bucket });
+    // Today mixes done and undone steps; both keep their place on the path.
+    const ordered =
+      offset === 0 ? bucket.sort((a, b) => position.get(a)! - position.get(b)!) : bucket;
+    days.push({ day: addDays(input.today, offset), stepIds: ordered });
   }
 
   return {
@@ -96,17 +100,17 @@ export interface ReturningInput {
 }
 
 /**
- * Whether to greet the person back: the mission was already under way
- * yesterday, nothing was completed yesterday, and nothing has been completed
- * today yet. The greeting goes once they complete a step today. Nothing is
+ * Whether to greet the person back: the mission began before yesterday,
+ * nothing was completed yesterday, and nothing has been completed today yet. The greeting goes once they complete a step today. Nothing is
  * counted or shown about the gap itself (law 8).
  */
 export function isReturningAfterGap(input: ReturningInput): boolean {
   if (!input.hasUndoneSteps) return false;
   const started = new Date(input.startedAt);
   if (Number.isNaN(started.getTime())) return false;
-  if (localDay(started, input.timezone) >= input.today) return false;
   const yesterday = addDays(input.today, -1);
+  // Begun yesterday or today: there is no gap to come back from yet.
+  if (localDay(started, input.timezone) >= yesterday) return false;
   for (const day of completionDays(input.completions, input.timezone).values()) {
     if (day === yesterday || day === input.today) return false;
   }

@@ -7,10 +7,13 @@
  * Vercel Cron sends; it takes no input, and sending is idempotent per person and
  * local day, so a repeated call sends nothing new.
  *
- * The response and the log carry counts only: never an address, an id or step text.
+ * The response and the log carry counts and failure classes only (such as
+ * "ReminderSendError EAUTH" for a wrong app password): never an address, an id
+ * or step text. Anyone no longer on the invite list is skipped.
  */
 
 import {
+  allowedEmailsFromEnv,
   appUrlFromEnv,
   demoPortsFromEnv,
   gmailMailerFromEnv,
@@ -32,7 +35,10 @@ export async function GET(req: Request) {
   try {
     const ports = await demoPortsFromEnv();
     const result = await sendDailyReminders(
-      { appUrl: appUrlFromEnv(process.env, new URL(req.url).origin) },
+      {
+        appUrl: appUrlFromEnv(process.env, new URL(req.url).origin),
+        allowed: allowedEmailsFromEnv(process.env),
+      },
       {
         reminders: ports.reminders,
         persistence: ports.persistence,
@@ -42,6 +48,12 @@ export async function GET(req: Request) {
       },
     );
     console.info("[cron-reminder]", JSON.stringify(result));
+    if (result.failed > 0) {
+      console.error(
+        "[cron-reminder]",
+        JSON.stringify({ outcome: "send-failed", failed: result.failed, errors: result.errors }),
+      );
+    }
     return Response.json(result, { headers: NO_STORE });
   } catch (error) {
     console.error(

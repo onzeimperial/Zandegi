@@ -184,10 +184,12 @@ export function createInMemoryDemoStore<
 
     async enableReminder(reminder) {
       const existing = reminders.get(reminder.ownerId);
+      // No zone given keeps the stored one rather than erasing it.
+      const timezone = reminder.timezone ?? existing?.timezone;
       reminders.set(reminder.ownerId, {
         ownerId: reminder.ownerId,
         email: reminder.email,
-        ...(reminder.timezone === undefined ? {} : { timezone: reminder.timezone }),
+        ...(timezone === undefined ? {} : { timezone }),
         updatedAt: reminder.updatedAt,
         ...(existing?.lastSentDay === undefined ? {} : { lastSentDay: existing.lastSentDay }),
       });

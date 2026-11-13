@@ -39,7 +39,7 @@ const step = (index: number) => ({
   toolKinds: [],
 });
 
-async function setup() {
+async function setup(missionTimezone = SYDNEY) {
   const store = createInMemoryDemoStore<MissionDraft, GenerationSafetyClass, MissionGoalContext>();
   const demo = demoPortsFromStore(store);
   await demo.persistence.record({
@@ -59,13 +59,13 @@ async function setup() {
       ],
     }),
     safetyClass: "NORMAL",
-    goalContext: { timezone: SYDNEY, weeklyTimeBudgetMinutes: 600 },
+    goalContext: { timezone: missionTimezone, weeklyTimeBudgetMinutes: 600 },
   });
   const sent: ReminderMessage[] = [];
   const mailer = { send: vi.fn(async (message: ReminderMessage) => void sent.push(message)) };
-  const sweep = (iso = MORNING, withMailer = true) =>
+  const sweep = (iso = MORNING, withMailer = true, allowed: readonly string[] = [EMAIL]) =>
     sendDailyReminders(
-      { appUrl: "https://zandegi.example/" },
+      { appUrl: "https://zandegi.example/", allowed },
       {
         reminders: demo.reminders,
         persistence: demo.persistence,
@@ -107,7 +107,9 @@ describe("the daily sweep", () => {
       sent: 1,
       nothingDue: 0,
       alreadySent: 0,
+      notInvited: 0,
       failed: 0,
+      errors: [],
       disabled: false,
     });
     expect(sent).toHaveLength(1);
@@ -162,12 +164,40 @@ describe("the daily sweep", () => {
     expect(await demo.reminders.claimDay(OWNER.id, "2026-11-12")).toBe(true);
   });
 
-  it("counts a failed send without retrying it the same day", async () => {
+  it("counts a failed send with its error class and code, without retrying it the same day", async () => {
     const { sweep, optIn, mailer } = await setup();
     await optIn();
-    mailer.send.mockRejectedValueOnce(new Error("reminder send failed: Error EAUTH"));
-    expect((await sweep()).failed).toBe(1);
+    mailer.send.mockRejectedValueOnce(
+      Object.assign(new Error(`535 bad credentials for ${EMAIL}`), { code: "EAUTH" }),
+    );
+    const failed = await sweep();
+    expect(failed).toMatchObject({ failed: 1, errors: ["Error EAUTH"] });
+    expect(JSON.stringify(failed)).not.toContain(EMAIL);
     expect((await sweep()).alreadySent).toBe(1);
+  });
+
+  it("sends nothing to an address taken off the invite list", async () => {
+    const { sweep, optIn, sent } = await setup();
+    await optIn();
+    expect(await sweep(MORNING, true, ["someone-else@example.com"])).toMatchObject({
+      considered: 1,
+      notInvited: 1,
+      sent: 0,
+    });
+    expect(sent).toHaveLength(0);
+  });
+
+  it("claims the mission's own day when its zone differs from the reminder's", async () => {
+    // The reminder was set in Sydney; the mission lives in Los Angeles. At
+    // MORNING it is the 12th in Sydney but still the 11th in Los Angeles.
+    const { sweep, optIn, sent, demo } = await setup("America/Los_Angeles");
+    await optIn();
+    expect((await sweep()).sent).toBe(1);
+    expect((await demo.reminders.find(OWNER.id))?.lastSentDay).toBe("2026-11-11");
+    // 01:00 on the 12th in Los Angeles (20:00 in Sydney, same Sydney day):
+    // a new day for the mission, so it gets its own reminder.
+    expect((await sweep("2026-11-12T09:00:00.000Z")).sent).toBe(1);
+    expect(sent).toHaveLength(2);
   });
 });
 
@@ -305,5 +335,6 @@ describe("the Gmail channel", () => {
     );
     expect(error!.message).toBe("reminder send failed: Error EENVELOPE");
     expect(error!.message).not.toContain(EMAIL);
+    expect(error).toMatchObject({ name: "ReminderSendError", code: "EENVELOPE" });
   });
 });

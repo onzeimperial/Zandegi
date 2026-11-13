@@ -83,6 +83,7 @@ beforeEach(() => {
   vi.stubEnv("ZANDEGI_MISSION_STORE", "memory");
   vi.stubEnv("DATABASE_URL", "");
   vi.stubEnv("CRON_SECRET", SECRET);
+  vi.stubEnv("ZANDEGI_ALLOWED_EMAILS", EMAIL);
   vi.stubEnv("ZANDEGI_APP_URL", "https://zandegi.example");
   vi.stubEnv("REMINDER_GMAIL_USER", "zandegi.test@gmail.com");
   vi.stubEnv("REMINDER_GMAIL_APP_PASSWORD", "abcd efgh ijkl mnop");
@@ -138,6 +139,16 @@ describe("/api/cron/reminder", () => {
     const response = await trigger(`Bearer ${SECRET}`);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ disabled: true, sent: 0 });
+    expect(outbox.sent).toHaveLength(0);
+  });
+
+  it("skips someone taken off the invite list", async () => {
+    await seedOptedIn();
+    vi.stubEnv("ZANDEGI_ALLOWED_EMAILS", "someone-else@example.com");
+    expect(await (await trigger(`Bearer ${SECRET}`)).json()).toMatchObject({
+      notInvited: 1,
+      sent: 0,
+    });
     expect(outbox.sent).toHaveLength(0);
   });
 

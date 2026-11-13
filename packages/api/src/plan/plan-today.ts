@@ -135,7 +135,7 @@ export interface PlanTodayResult {
   /** The principal's missions, newest first, as `listMissions` returns them. */
   missions: StoredMissionView[];
   progress: ProgressView;
-  /** Each mission's plan, by mission id. */
+  /** Each mission's plan, by mission id. Absent for a mission that could not be planned. */
   plans: Record<string, TodayPlan>;
 }
 
@@ -155,13 +155,25 @@ export async function planToday(
   for (const record of records) {
     const view = toMissionView(record);
     missions.push(view);
-    plans[view.missionId] = buildTodayPlan({
-      view,
-      record,
-      progress,
-      now,
-      browserTimezone: input.browserTimezone,
-    });
+    try {
+      plans[view.missionId] = buildTodayPlan({
+        view,
+        record,
+        progress,
+        now,
+        browserTimezone: input.browserTimezone,
+      });
+    } catch (error) {
+      // One malformed mission must not take every plan down: it simply has no
+      // plan. The error class only: a message could quote step text.
+      console.error(
+        "[plan-today]",
+        JSON.stringify({
+          outcome: "plan-failed",
+          error: error instanceof Error ? error.name : "non-error",
+        }),
+      );
+    }
   }
   return { missions, progress, plans };
 }

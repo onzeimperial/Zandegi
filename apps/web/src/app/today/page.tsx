@@ -114,6 +114,14 @@ export default async function TodayPage() {
                       That&#39;s today&#39;s plan finished. Tomorrow&#39;s steps are below.
                     </p>
                   )}
+                  {plan.doneForToday && states.current !== null && (
+                    <p className="today-keep-going">
+                      Want to keep going? It&#39;s up to you.{" "}
+                      <Link href={stepHref(mission.missionId, states.current.step.id)}>
+                        Open the next step
+                      </Link>
+                    </p>
+                  )}
                   <ol className="today-steps">
                     {todaySteps.map(({ step, chapter, chapterNumber }) => {
                       const done = doneToday.has(step.id);

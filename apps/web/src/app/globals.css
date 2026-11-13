@@ -3969,6 +3969,18 @@ h3 {
   line-height: 1.2;
   color: var(--violet-deep);
 }
+.today-keep-going {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.today-keep-going a {
+  display: inline-block;
+  padding: 10px 0;
+  color: var(--violet-dark);
+  font-weight: 800;
+  text-decoration: underline;
+}
 .today-steps {
   margin: 0;
   padding: 0;

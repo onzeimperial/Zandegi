@@ -49,8 +49,8 @@ export function ReminderToggle({ initial }: { initial: ReminderSettingsView }) {
       </h2>
       <p className="today-meta">
         {setting.enabled
-          ? "One email each morning while today has steps waiting. Never more than one a day."
-          : "Get one email each morning while today has steps waiting. Never more than one a day."}
+          ? "One email a day, only while today has steps waiting."
+          : "Get one email a day, only while today has steps waiting."}
       </p>
       {setting.enabled ? (
         <button

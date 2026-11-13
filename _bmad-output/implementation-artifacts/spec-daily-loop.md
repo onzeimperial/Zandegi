@@ -2,7 +2,7 @@
 title: 'Daily loop: steps by day, gentle recovery, daily reminder'
 type: 'feature'
 created: '2026-11-12'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: '80a46a929800185f6bfc7b08abbefd3d9a2ec96a'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -97,6 +97,37 @@ context:
 ## Spec Change Log
 
 ## Review Triage Log
+
+Loop 1. B = blind, V = verification gap, E = edge case. Verification-gap gaps arrive pre-verified.
+
+| ID | Finding | Verdict | Route | Evidence |
+|----|---------|---------|-------|----------|
+| B1, V-o1, E4, E15 | The reminder's claimed day and the plan's day can use different zones | medium | patch | `reminders.ts` claims `localDay(now, reminder.timezone)` while `planToday` uses the mission's zone first. |
+| B2, E5 | The copy promises "each morning" from one fixed UTC cron | low | patch | Hobby allows once a day; the decision was a fixed hour. Copy-only fix. |
+| B3, E3 | An uninvited person, or an old address, keeps getting email | medium | patch | The sweep never re-checks `ZANDEGI_ALLOWED_EMAILS`. |
+| E6 | Opt-in without a zone wipes the stored zone | low | patch | The Postgres upsert writes `timezone: undefined`. A direct correction. |
+| B8 | One malformed mission takes Today down; the fallback branch is unreachable | medium | patch | `planToday` has no try/catch per mission. |
+| B9, E13 | A new mission is cut back after its first quiet day | medium | patch | The adaptation window can be one day; the decision says the last 7 days. |
+| E9 | "Welcome back" shows the morning after a mission is created | low | patch | No guard on the start day. A direct correction. |
+| E12 | After "Done for today", Today has no way to start the next step | medium | patch | The old current-step card was replaced. |
+| V-o2 | Today's steps are not in path order | low | patch | `planDays` puts done steps first, contradicting its own type docs. |
+| B15, V-o3, E10 | `TimezoneSync` can refresh repeatedly | medium | patch | The check is `cookie.includes("zandegi_tz=")`; a stale cookie never matches. |
+| E2 | SMTP has no timeouts inside a time-limited function | low | patch | Set the transport timeouts. A direct correction. |
+| B11 | Failure causes are lost | low | patch | `catch {}` drops the class and code; `describe()` exists. |
+| V1 | The Today page is never rendered in a test | medium | patch | Filed evidence. |
+| V2 | `withToday` loading is never run | medium | patch | Filed evidence. |
+| V3 | The cron route's 503 path is untested | low | defer | Filed disposition; the layers below it are tested. |
+| B4 | The stored zone is never refreshed | low | rejected | Travel is rare for this test; the mission's own zone usually decides. |
+| B5 | No one-click unsubscribe | low | rejected | The spec decision asks for a visible way to stop, which Today provides; two recipients. |
+| B6 | Foreign key restricts deletion | low | rejected | No delete feature yet (Story 4.3). |
+| B7, E7 | Redis offers reminders that fail | low | rejected | Dormant store. |
+| B10, E14 | "Welcome back" repeats on alternate days and all day | low | rejected | Visits are not stored, by decision; a gap is a gap. |
+| B12, E1 | No time budget; the 500 cap is silent | low | rejected | Two people. |
+| B13 | Shown minutes differ from planned minutes | low | rejected | Cosmetic. |
+| B14 | Analytics events are missing | low | rejected | `docs/ANALYTICS.md` does not exist. |
+| B16 | The law-8 word scan is brittle | low | rejected | A test-quality matter with no user harm. |
+| E8 | A junk `ZANDEGI_APP_URL` breaks links | low | rejected | Operator configuration, visible at once. |
+| E11 | A NaN estimate is shown | false | rejected | Estimates are validated integers. |
 
 ## Design Notes
 

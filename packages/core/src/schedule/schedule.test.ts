@@ -198,6 +198,20 @@ describe("placing steps on days", () => {
     expect(written[0]!.estimatedMinutes).toBe(0);
   });
 
+  it("lists today's steps in path order, done or not", () => {
+    // After a reorder, a step done today can sit after an undone one.
+    const plan = planDays({
+      today,
+      timezone: SYDNEY,
+      steps: steps(3),
+      completions: [{ stepId: "0:1", at: "2026-11-11T22:00:00.000Z" }], // 09:00 on the 12th
+      capacity: 200,
+      horizonDays: 1,
+    });
+    expect(plan.days[0]!.stepIds).toEqual(["0:0", "0:1", "0:2"]);
+    expect(plan.doneTodayStepIds).toEqual(["0:1"]);
+  });
+
   it("lists what falls after the horizon", () => {
     const plan = planDays({
       today,
@@ -294,17 +308,25 @@ describe("adapting the daily load", () => {
     expect(adaptCapacity(input)).toBe(base);
   });
 
-  it("only counts the days since the mission began", () => {
-    // Began yesterday and did one 60-minute day: one whole day at full capacity.
-    const input = {
+  it("keeps the base until the mission has seven whole days before today", () => {
+    // Began yesterday and did nothing: day two is not cut.
+    const yesterday = {
       today,
       timezone: SYDNEY,
       startedAt: "2026-11-10T22:00:00.000Z", // 09:00 on the 11th
       base,
       steps: path,
-      completions: [{ stepId: "0:0", at: "2026-11-11T03:00:00.000Z" }],
+      completions: [],
     };
-    expect(recentCompletionRatio(input)).toBe(1);
+    expect(recentCompletionRatio(yesterday)).toBeNull();
+    expect(adaptCapacity(yesterday)).toBe(base);
+    // Six whole days is still not a week.
+    const sixDays = { ...yesterday, startedAt: "2026-11-05T22:00:00.000Z" }; // the 6th
+    expect(recentCompletionRatio(sixDays)).toBeNull();
+    // Seven whole days is: nothing done in them lowers the load.
+    const week = { ...yesterday, startedAt: "2026-11-04T22:00:00.000Z" }; // the 5th
+    expect(recentCompletionRatio(week)).toBe(0);
+    expect(adaptCapacity(week)).toBeCloseTo(base * ADAPT_LOWER_FACTOR);
   });
 
   it("ignores completions older than seven days and of deleted steps", () => {
@@ -351,6 +373,18 @@ describe("returning after a gap", () => {
       isReturningAfterGap({
         ...base,
         completions: [{ stepId: "0:0", at: "2026-11-12T02:00:00.000Z" }],
+      }),
+    ).toBe(false);
+  });
+
+  it("stays quiet the morning after a mission begins", () => {
+    expect(
+      isReturningAfterGap({
+        today,
+        timezone: SYDNEY,
+        startedAt: "2026-11-10T22:00:00.000Z", // 09:00 on the 11th
+        completions: [],
+        hasUndoneSteps: true,
       }),
     ).toBe(false);
   });
