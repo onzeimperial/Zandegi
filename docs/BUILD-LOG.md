@@ -4,6 +4,70 @@ Newest first.
 
 ---
 
+## 2026-11-13 - boss fights: progression-v2, chapter tests, attempt and debrief
+
+**Shipped**
+
+- **`progression-v2` in core** (`packages/core/src/scoring/progression.ts`). One frozen config:
+  step 40 (check) / 50 (photo), per-chapter step-XP cap 450, boss done 400 (+50 photo), not yet 0,
+  fixed mission reward 1,500, level curve unchanged. The functions take only evidence kind, band
+  and amounts already in the ledger. Golden fixtures pin `neutral-v1` amounts and the level curve,
+  and a fold fixture pins a mixed v1/v2 legacy history (1,370 XP, level 5, two closed chapters).
+- **`BossResolved` ledger event** with attempt id, chapter id, band, evidence kind, XP,
+  `selfDeclared: true` and calculator version. Never the debrief. The fold closes a chapter on
+  `ChapterCompleted` or `BossResolved`, keeps each boss's best outcome, and never recalculates a
+  stored amount.
+- **Position.** `missionPosition` walks chapters: closed chapters are passed over (their undone
+  steps are skipped for good), the first open chapter is current, and later chapters wait for its
+  boss. `nextStep`, logs and the web step states all use it.
+- **Awards.** Generated steps pay the capped v2 reward; added steps still pay 0. No new chapter
+  bonuses are written. The mission reward is paid once every boss is "done" (chapters closed under
+  `neutral-v1` are left out), behind the existing mission claim, so a mission paid under
+  `neutral-v1` is never paid again.
+- **`attemptBoss`** (`packages/api/src/boss/attempt-boss.ts`). Done pays once per chapter via
+  `${missionId}:boss:${chapterId}`; not yet closes the chapter at 0 via a separate close claim, so
+  try again can still pay. A form-made `attemptKey` makes a double submit one attempt. Skip is an
+  explicit flag. At least one of four debrief answers is required. "What I'll improve" becomes the
+  next chapter's first step through `addStep` plus a reorder, with up to 3 retries on a version
+  conflict. Legacy chapters offer no boss. `BOSS_NOT_READY` (409) was appended to the error codes.
+- **Storage.** Migration `20261113000000_boss_attempts` adds a `BossAttempt` table only. Store
+  methods record, list and delete, covered by the contract suite on memory and PGlite. Redis
+  refuses to record.
+- **Route.** `POST /api/missions/[id]/boss`, multipart, with the complete route's guards. Unknown
+  fields and METRIC/TIMER/INTEGRATION evidence are refused. Debrief text never reaches a log.
+- **Web.** A boss card under each chapter on Path, and on Today once a chapter's steps are done;
+  `/boss` with the exit condition labelled as the person's test, the result choice, optional photo,
+  skip box and debrief; a result screen with no loss framing and a Try again button; skipped steps
+  shown as skipped; the step page leads to the test. The builder's `+N XP` and `stepXp` are gone.
+
+**Learned**
+
+- One payment claim per chapter, plus a separate close claim for "not yet", handles the cap, double
+  submits and try again together without any read-then-write.
+- Gating later chapters behind the open chapter's boss is what makes "skipped" a real state:
+  without it a closed chapter's undone steps would stay completable.
+
+**Broken or deferred**
+
+- `docs/ANALYTICS.md` still does not exist, so the new screens fire no events (7.7 is out of scope).
+- The improve step is not carried over from the last chapter, or into a next chapter that is
+  already closed. The answer stays on the debrief record and the result screen says so.
+- If saving the debrief fails after the ledger write, a resend keeps the payment single but records
+  a fresh attempt id; the first event's id then points to no record (allowed, since records are
+  deletable).
+- No route or UI deletes a `BossAttempt` yet; the store supports it.
+- `scripts/compare-claude-design.cjs` still lists the builder's step XP as an allowance; the XP
+  pill is gone now.
+- Manual check not yet run: not yet then try again with a photo, the improve step, 375px.
+
+**Next step**
+
+Run the spec's manual check against a real Postgres: finish a chapter, record "not yet" with one
+answer (0 XP, chapter closes), then try again with "done" and a photo (450 once, improve step opens
+the next chapter), at 375px.
+
+---
+
 ## 2026-11-12 - own the plan: Today, plan editing, quick logs
 
 **Shipped**
