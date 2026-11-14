@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { SignInCard, SignOut } from "@/components/account";
+import { LandingScene } from "@/components/landing-scene";
 
 const mascotSrc =
   "/design/mascot-abe2675ee7fc68d644fa0e93dc74b94ffb85b330e5b5e02bcac4b0ab8c569d29.png";
@@ -72,6 +73,7 @@ export function HomeView({ state }: { state: HomeState }) {
         <div className="tagline">Level up your real life.</div>
       </section>
       <section className="auth-panel">
+        <LandingScene />
         <Panel state={state} />
       </section>
     </main>
