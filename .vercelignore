@@ -22,3 +22,9 @@
 /packages/db/src/generated
 apps/web/logs
 legacy
+
+# planning and workflow files the build never reads
+_bmad
+_bmad-output
+design
+.github

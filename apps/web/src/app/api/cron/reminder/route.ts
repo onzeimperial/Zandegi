@@ -1,5 +1,5 @@
 /**
- * The daily reminder trigger, called once a day by Vercel Cron (`vercel.json`).
+ * The daily reminder trigger, called once a day by Vercel Cron (`apps/web/vercel.json`).
  *
  * It accepts only `Authorization: Bearer $CRON_SECRET`, compared in constant
  * time, and refuses everything else with 401 before touching the store. With no

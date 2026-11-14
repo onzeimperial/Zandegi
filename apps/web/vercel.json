@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["syd1"],
+  "framework": "nextjs",
+  "buildCommand": "cd ../.. && pnpm --filter @zandegi/db db:generate && if [ \"$VERCEL_ENV\" = \"production\" ]; then pnpm --filter @zandegi/db db:deploy; fi && pnpm --filter @zandegi/web build",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "crons": [
+    {
+      "path": "/api/cron/reminder",
+      "schedule": "0 21 * * *"
+    }
+  ]
+}

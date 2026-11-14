@@ -81,12 +81,16 @@ platform under the `[generate]` prefix.
 
 ## Deploying the two-person test
 
-The test runs on Vercel, Supabase (Postgres) and Clerk. Any Postgres works; Neon did too. `vercel.json` pins Sydney, and on production
+The test runs on Vercel, Supabase (Postgres) and Clerk. Any Postgres works; Neon did too. `apps/web/vercel.json` pins Sydney, and on production
 builds its build command applies migrations before building, never inside a request.
 Preview builds do not migrate. Nothing below is needed to run `pnpm verify`, which uses no
 network and no credentials.
 
 Vercel builds Production only from the production branch, so that branch must hold this work.
+
+Set the Vercel project's **Root Directory** to `apps/web`, where `vercel.json` lives; its commands step back to the
+repo root for pnpm. Without a Git connection, deploy from the repo root with `npx vercel@latest deploy --prod`;
+`.vercelignore` keeps local secrets and tooling out of the upload.
 
 1. **Create the database.** In Supabase, create a project in Sydney (`ap-southeast-2`) and keep
    the database password. Turn the Data API off (on the create screen, or later in Project
@@ -147,7 +151,7 @@ The `daily_reminder` migration only adds a `ReminderPreference` table, so it is 
 
 ### The daily reminder
 
-`vercel.json` runs `/api/cron/reminder` once a day at 21:00 UTC, which is 08:00 in Sydney in
+`apps/web/vercel.json` runs `/api/cron/reminder` once a day at 21:00 UTC, which is 08:00 in Sydney in
 summer and 07:00 in winter. On the Hobby plan Vercel may run it any time within that hour. Each
 opted-in person gets at most one email per local day, and only while today still has steps waiting.
 People opt in and out on Today, under Daily reminder. Turning it off deletes the stored address.
