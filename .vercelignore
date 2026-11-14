@@ -1,0 +1,24 @@
+# What `vercel deploy` from a laptop must not upload. Git-connected deploys
+# already skip these through .gitignore; the CLI reads this file instead.
+
+# secrets
+.env
+.env*.local
+.env.production
+.mcp.json
+
+# local tooling and leftovers
+.claude
+.omc
+.agents
+.next
+**/.next
+**/node_modules
+**/coverage
+**/out
+**/dist
+*.tsbuildinfo
+**/next-env.d.ts
+/packages/db/src/generated
+apps/web/logs
+legacy
