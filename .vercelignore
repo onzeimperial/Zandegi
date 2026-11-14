@@ -8,9 +8,9 @@
 .mcp.json
 
 # local tooling and leftovers
-.claude
-.omc
-.agents
+/.claude
+/.omc
+/.agents
 .next
 **/.next
 **/node_modules
@@ -21,10 +21,10 @@
 **/next-env.d.ts
 /packages/db/src/generated
 apps/web/logs
-legacy
+/legacy
 
 # planning and workflow files the build never reads
-_bmad
-_bmad-output
-design
-.github
+/_bmad
+/_bmad-output
+/design
+/.github
