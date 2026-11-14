@@ -1,8 +1,8 @@
 import { defineConfig } from "prisma/config";
 
 /**
- * Migrations use a direct connection when one is set, because Neon's pooled
- * endpoint is not suitable for them. `process.env` rather than Prisma's `env()`
+ * Migrations use a direct connection when one is set, because a transaction
+ * pooler (Supabase's port 6543, Neon's pooled endpoint) is not suitable for them. `process.env` rather than Prisma's `env()`
  * helper, which throws when a variable is missing: `prisma generate` runs on
  * every install and has no need for a database.
  */

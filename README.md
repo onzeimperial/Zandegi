@@ -81,16 +81,26 @@ platform under the `[generate]` prefix.
 
 ## Deploying the two-person test
 
-The test runs on Vercel, Neon and Clerk. `vercel.json` pins Sydney, and on production
+The test runs on Vercel, Supabase (Postgres) and Clerk. Any Postgres works; Neon did too. `vercel.json` pins Sydney, and on production
 builds its build command applies migrations before building, never inside a request.
 Preview builds do not migrate. Nothing below is needed to run `pnpm verify`, which uses no
 network and no credentials.
 
 Vercel builds Production only from the production branch, so that branch must hold this work.
 
-1. **Create the database.** In Neon, create a project in AWS Sydney (`ap-southeast-2`).
-   Copy both connection strings: the pooled one and the direct one. Success: both start
-   with `postgresql://`.
+1. **Create the database.** In Supabase, create a project in Sydney (`ap-southeast-2`) and keep
+   the database password. Turn the Data API off (on the create screen, or later in Project
+   Settings, Data API): the app talks to Postgres directly, and with the Data API on, the tables
+   are reachable through Supabase's REST endpoint. Then choose **Connect** and copy two strings:
+   - **Transaction pooler** (port `6543`) for `DATABASE_URL`. Add
+     `?sslmode=require&uselibpqcompat=true` to the end, so the connection is encrypted without
+     checking Supabase's certificate against the system's trusted roots.
+   - **Session pooler** (port `5432`) for `DATABASE_URL_UNPOOLED`. Add `?sslmode=require`. Do not
+     use the direct connection: it is IPv6 only on the free plan, and Vercel builds cannot reach it.
+
+   Put the password in place of `[YOUR-PASSWORD]` in both. Success: both start with
+   `postgresql://postgres.` and end with the `sslmode` you added.
+
 2. **Create the sign-in.** In Clerk, create an application with email sign-in and keep email
    verification on. Use its development instance: a production instance needs a domain you own
    with DNS records, and `*.vercel.app` does not allow them. Expect Clerk's development banner on
@@ -98,20 +108,20 @@ Vercel builds Production only from the production branch, so that branch must ho
    `pk_test_` and `sk_test_`.
 3. **Set these on the Vercel project**, for Production, before the first deploy:
 
-   | Variable                            | Value                                                                                                                                                     |
-   | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-   | `ANTHROPIC_API_KEY`                 | Generation cannot run without it.                                                                                                                         |
-   | `ENABLE_EXPERIMENTAL_COREPACK`      | `1`. Without it Vercel picks pnpm from the lockfile version rather than `packageManager`.                                                                 |
-   | `DATABASE_URL`                      | The pooled Neon string. With neither URL set, the production build fails at migration. If it is lost after a successful build, every request answers 503. |
-   | `DATABASE_URL_UNPOOLED`             | The direct Neon string, used only by migrations.                                                                                                          |
-   | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | From Clerk. Needed at build time as well as at run time.                                                                                                  |
-   | `CLERK_SECRET_KEY`                  | From Clerk.                                                                                                                                               |
-   | `ZANDEGI_ALLOWED_EMAILS`            | The two invited emails, comma-separated. Empty means the app stays off.                                                                                   |
-   | `ZANDEGI_DAILY_GENERATION_LIMIT`    | Optional. Builds per person per UTC day. Defaults to 5.                                                                                                   |
-   | `CRON_SECRET`                       | A long random string. Vercel sends it to the daily reminder trigger; with it unset the trigger refuses every call.                                        |
-   | `REMINDER_GMAIL_USER`               | Optional. The Gmail address that sends the daily reminder. With it or the password unset, reminders stay off and nothing else changes.                    |
-   | `REMINDER_GMAIL_APP_PASSWORD`       | Optional. A Google app password for that address (Google Account, Security, 2-Step Verification, App passwords). Never logged.                            |
-   | `ZANDEGI_APP_URL`                   | Optional. The public origin used for links in the reminder, such as `https://zandegi.vercel.app`. Defaults to Vercel's production host.                   |
+   | Variable                            | Value                                                                                                                                                            |
+   | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `ANTHROPIC_API_KEY`                 | Generation cannot run without it.                                                                                                                                |
+   | `ENABLE_EXPERIMENTAL_COREPACK`      | `1`. Without it Vercel picks pnpm from the lockfile version rather than `packageManager`.                                                                        |
+   | `DATABASE_URL`                      | The transaction pooler string. With neither URL set, the production build fails at migration. If it is lost after a successful build, every request answers 503. |
+   | `DATABASE_URL_UNPOOLED`             | The session pooler string, used only by migrations.                                                                                                              |
+   | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | From Clerk. Needed at build time as well as at run time.                                                                                                         |
+   | `CLERK_SECRET_KEY`                  | From Clerk.                                                                                                                                                      |
+   | `ZANDEGI_ALLOWED_EMAILS`            | The two invited emails, comma-separated. Empty means the app stays off.                                                                                          |
+   | `ZANDEGI_DAILY_GENERATION_LIMIT`    | Optional. Builds per person per UTC day. Defaults to 5.                                                                                                          |
+   | `CRON_SECRET`                       | A long random string. Vercel sends it to the daily reminder trigger; with it unset the trigger refuses every call.                                               |
+   | `REMINDER_GMAIL_USER`               | Optional. The Gmail address that sends the daily reminder. With it or the password unset, reminders stay off and nothing else changes.                           |
+   | `REMINDER_GMAIL_APP_PASSWORD`       | Optional. A Google app password for that address (Google Account, Security, 2-Step Verification, App passwords). Never logged.                                   |
+   | `ZANDEGI_APP_URL`                   | Optional. The public origin used for links in the reminder, such as `https://zandegi.vercel.app`. Defaults to Vercel's production host.                          |
 
    `ENABLE_UNAUTHENTICATED_GENERATION` no longer does anything. Remove it if it is set.
 
