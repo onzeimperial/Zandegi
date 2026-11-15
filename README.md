@@ -92,6 +92,10 @@ Set the Vercel project's **Root Directory** to `apps/web`, where `vercel.json` l
 repo root for pnpm. Without a Git connection, deploy from the repo root with `npx vercel@latest deploy --prod`;
 `.vercelignore` keeps local secrets and tooling out of the upload.
 
+Every push to `bmad-setup` deploys itself: `.github/workflows/deploy.yml` runs `pnpm verify`, then the same
+`vercel deploy --prod`. It needs one repository secret, `VERCEL_TOKEN`, a token from the Vercel account that owns
+the project. A failed verify never deploys.
+
 1. **Create the database.** In Supabase, create a project in Sydney (`ap-southeast-2`) and keep
    the database password. Turn the Data API off (on the create screen, or later in Project
    Settings, Data API): the app talks to Postgres directly, and with the Data API on, the tables

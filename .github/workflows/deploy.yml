@@ -1,0 +1,63 @@
+name: Deploy
+
+# Every push to bmad-setup that passes the canonical gate goes live on
+# https://zandegi.vercel.app. The Vercel project has no Git connection (the repo
+# and the Vercel account belong to different people), so this runs the same
+# `vercel deploy --prod` a person would run from a laptop. .vercelignore decides
+# what is uploaded; the production build applies migrations (apps/web/vercel.json).
+#
+# One repository secret is required: VERCEL_TOKEN, a token from the Vercel
+# account that owns the project (vercel.com/account/settings/tokens). The org and
+# project ids below identify the project and grant nothing on their own.
+
+on:
+  push:
+    branches: [bmad-setup]
+  workflow_dispatch:
+
+# A newer push supersedes a deploy still waiting to start; a running deploy is
+# never cancelled midway through its migrations.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+      - run: npm install --global corepack@0.36.0
+      - run: corepack enable
+      - run: corepack prepare pnpm@12.8.2 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: team_IxSXNcKZ9OQ1dpMYNVdo7yXp
+      VERCEL_PROJECT_ID: prj_ZKFpQtiOkclP2OMZ73JsoGENQXkO
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+      - name: Check the token is set
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::Add the VERCEL_TOKEN repository secret (Settings, Secrets and variables, Actions)."
+            exit 1
+          fi
+      - name: Deploy to production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx --yes vercel@65.16.0 deploy --prod --yes --token "$VERCEL_TOKEN"
