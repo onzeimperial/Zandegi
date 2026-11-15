@@ -4,6 +4,36 @@ Newest first.
 
 ---
 
+## 2026-11-14 - landing: golden-hour beach behind sign-in
+
+**Shipped**
+
+- The sign-in panel's plain white is now a looping, muted 8 s 1080p clip
+  (`apps/web/public/landing/golden-hour-desk.mp4`, 5.3 MB): a beach seen through glass, with a
+  desk showing Zandegi-style screens. Generated with Seedance 2.0 (33.68 credits, seed 7455).
+- `LandingScene` (`apps/web/src/components/landing-scene.tsx`) plays it only when motion is welcome;
+  reduced motion holds the first frame. It is decorative: `aria-hidden`, no tab stop.
+- A peach-to-lavender gradient shows until the video loads. Status cards and the loading line sit on
+  frosted white so copy keeps AA contrast over any frame.
+
+**Learned**
+
+- Seedance 2.0 rejects the `camera_fixed` and `return_last_frame` options; a static camera has to be
+  asked for in the prompt.
+
+**Broken or deferred**
+
+- No poster image: there was no ffmpeg here to pull a frame. Until the video's first frame loads,
+  the gradient stands in.
+- Not yet checked in a browser: the clip's on-screen text may be garbled, and 375px cropping is
+  unreviewed.
+
+**Next step**
+
+Open the deployed sign-in page, check the clip and the 375px crop, then add a poster frame.
+
+---
+
 ## 2026-11-13 - merge: daily loop into thin v1
 
 **Shipped**
