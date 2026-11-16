@@ -316,7 +316,12 @@ describe("an invited person", () => {
   it("gets one principal from two concurrent first requests", async () => {
     signIn("user_a");
     const [first, second] = await Promise.all([postGenerate(), postGenerate()]);
-    await Promise.all([first.text(), second.text()]);
+    const bodies = await Promise.all([first.text(), second.text()]);
+    // Both requests must reach the pipeline; on failure, show what each returned.
+    expect(
+      [first.status, second.status, pipeline.owners.length],
+      bodies.map((body) => body.slice(0, 300)).join(" || "),
+    ).toEqual([200, 200, 2]);
     expect(pipeline.owners).toHaveLength(2);
     expect(new Set(pipeline.owners).size).toBe(1);
   });
