@@ -60,4 +60,12 @@ jobs:
       - name: Deploy to production
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: npx --yes vercel@65.16.0 deploy --prod --yes --token "$VERCEL_TOKEN"
+        # On failure, Vercel's last lines become an annotation on the run page,
+        # so the reason shows without opening the log. The CLI never prints the token.
+        run: |
+          set -o pipefail
+          if ! npx --yes vercel@65.16.0 deploy --prod --yes --token "$VERCEL_TOKEN" 2>&1 | tee deploy.log; then
+            reason=$(grep -v 'npm warn' deploy.log | tail -n 8 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=Vercel deploy failed::${reason}"
+            exit 1
+          fi
