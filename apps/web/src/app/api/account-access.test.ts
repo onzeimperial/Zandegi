@@ -315,17 +315,12 @@ describe("an invited person", () => {
 
   it("gets one principal from two concurrent first requests", async () => {
     signIn("user_a");
-    const logged: string[] = [];
-    const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
-      logged.push(args.map(String).join(" "));
-    });
     const [first, second] = await Promise.all([postGenerate(), postGenerate()]);
     const bodies = await Promise.all([first.text(), second.text()]);
-    spy.mockRestore();
     // Both requests must reach the pipeline; on failure, show what each returned.
     expect(
       [first.status, second.status, pipeline.owners.length],
-      [...logged, ...bodies.map((body) => body.slice(0, 120))].join(" || "),
+      bodies.map((body) => body.slice(0, 200)).join(" || "),
     ).toEqual([200, 200, 2]);
     expect(pipeline.owners).toHaveLength(2);
     expect(new Set(pipeline.owners).size).toBe(1);

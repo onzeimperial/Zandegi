@@ -36,6 +36,23 @@ export type AccountAccess =
   | { kind: "not-invited" }
   | { kind: "allowed"; clerkUserId: string; emails: AccountEmail[] };
 
+type ClerkServer = typeof import("@clerk/nextjs/server");
+let clerkServer: Promise<ClerkServer> | undefined;
+
+/**
+ * One import of Clerk's server SDK, shared by every request. Two first requests
+ * arriving together otherwise each start the import, and the second one can
+ * fail while the first is still loading it. A failed import is not kept, so the
+ * next request tries again.
+ */
+function loadClerkServer(): Promise<ClerkServer> {
+  clerkServer ??= import("@clerk/nextjs/server").catch((error: unknown) => {
+    clerkServer = undefined;
+    throw error;
+  });
+  return clerkServer;
+}
+
 /** Throws `STORE_UNAVAILABLE` when Clerk cannot answer: unknown is not allowed. */
 export async function readAccountAccess(): Promise<AccountAccess> {
   const mode = authModeFromEnv(process.env);
@@ -44,7 +61,7 @@ export async function readAccountAccess(): Promise<AccountAccess> {
 
   let identity: { clerkUserId: string; emails: AccountEmail[] } | null;
   try {
-    const { auth, currentUser } = await import("@clerk/nextjs/server");
+    const { auth, currentUser } = await loadClerkServer();
     const { userId } = await auth();
     const user = userId === null ? null : await currentUser();
     identity =
